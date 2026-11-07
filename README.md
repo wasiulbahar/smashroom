@@ -2,7 +2,7 @@
 
 A rage room in your browser. Two minutes, one room, everything breaks.
 
-**Play:** https://wasiulbahar.github.io/smashroom/
+**Play:** https://wasiulbahar.com/smashroom/
 
 ## What's in it
 
