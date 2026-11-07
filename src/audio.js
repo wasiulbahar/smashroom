@@ -1,5 +1,7 @@
 // All sound is synthesized in the browser: no audio files.
 const rand = (a, b) => a + Math.random() * (b - a);
+let musicStyle = 'heavy';
+export const setMusicStyle = m => { musicStyle = m; };
 let ac, sfx, music, amb, noiseBuf, musicOn = true, playing = false, nextBeat = 0, beat = 0, ambNodes = [], ambTimers = [];
 
 export function initAudio() {
@@ -95,6 +97,19 @@ export const SFX = {
   kick(i = 1) { smp('punch', i, 0.75) || SYN.thud('wood', i); },
   slap(i = 1) { if (!ac) return; smp('slap', i, 1.3) || SYN.thud('plastic', i); nz(now(), 0.05, 'highpass', 2500, 0.7, 0.5 * i); },
   clay(i = 1) { if (!ac) return; smp('soft', i, rand(0.8, 1)); nz(now(), 0.22, 'lowpass', 700, 1, 0.5 * i, sfx, 180); },
+  boom() { if (!ac) return; const t = now(); nz(t, 1.4, 'lowpass', 1400, 0.7, 1.6, sfx, 70); tn(t, 75, 0.9, 1.2, 'sine', sfx, 28); nz(t, 0.12, 'highpass', 1500, 0.6, 0.8);
+    smp('crash', 1, 0.6); smp('stone', 0.8, 0.7, 0.05); smp('debris', 0.6, 0.8, 0.3); },
+  golden() { if (!ac) return; const t = now(); [1047, 1319, 1568, 2093, 2637].forEach((f, k) => { tn(t + k * 0.06, f, 0.35, 0.09, 'triangle'); tn(t + k * 0.06, f * 2, 0.2, 0.03); }); },
+  coin() { if (!ac) return; const t = now(); tn(t, 1319, 0.08, 0.12, 'square'); tn(t + 0.07, 1760, 0.35, 0.12, 'square'); },
+  // cartoon voice for the clay figure: a buzzy source through two vowel formants
+  voice(kind = 'oof') {
+    if (!ac) return; const t = now(), r = rand(0.85, 1.2);
+    const [a, b, dur, f1, f2] = { oof: [170, 105, 0.28, 450, 800], ow: [300, 190, 0.38, 750, 1200], groan: [150, 80, 1.3, 520, 860], boss: [95, 60, 0.6, 400, 700] }[kind];
+    const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(a * r, t); o.frequency.exponentialRampToValueAtTime(b * r, t + dur);
+    const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9, t + 0.03); g.gain.setValueAtTime(0.9, t + dur * 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    for (const f of [f1, f2]) { const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 5; o.connect(bp).connect(g); }
+    g.connect(sfx); o.start(t); o.stop(t + dur + 0.05);
+  },
 };
 
 // heavy loop: kick, snare, hats, grungy bass
@@ -105,6 +120,12 @@ function musicTick() {
   if (nextBeat < ac.currentTime) nextBeat = ac.currentTime + 0.05;
   while (nextBeat < ac.currentTime + 0.15) {
     const t = nextBeat, i = beat % 16;
+    if (musicStyle === 'calm') { // slow pad chords and a soft pluck, no drums
+      const chords = [[220, 277, 330], [196, 247, 294], [175, 220, 262], [196, 247, 330]], ch = chords[Math.floor(beat / 16) % 4];
+      if (i === 0) ch.forEach(f => { tn(t, f, step * 15, 0.05, 'triangle', music); tn(t, f / 2, step * 15, 0.04, 'sine', music); });
+      if (i % 4 === 2 && Math.random() < 0.6) tn(t, ch[Math.floor(Math.random() * 3)] * 2, 0.6, 0.04, 'sine', music);
+      nextBeat += step; beat++; continue;
+    }
     if (i % 4 === 0 || i === 10) tn(t, 150, 0.22, 0.9, 'sine', music, 40);
     if (i % 8 === 4) { nz(t, 0.16, 'bandpass', 1800, 0.8, 0.6, music); tn(t, 190, 0.08, 0.3, 'triangle', music); }
     if (i % 2 === 1) nz(t, 0.04, 'highpass', 7500, 0.7, 0.18, music);

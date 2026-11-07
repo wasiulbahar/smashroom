@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js';
-import { itemModel, fitInto } from './models.js';
+import { canvasTex } from './style.js?v=4';
+import { itemModel, fitInto } from './models.js?v=4';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -27,6 +27,9 @@ const clockTex = lazy('clock', () => canvasTex(256, 256, (g, w) => { g.fillStyle
   g.lineWidth = 7; g.lineCap = 'round'; g.beginPath(); g.moveTo(128, 128); g.lineTo(128 + 50, 128 - 30); g.stroke(); g.lineWidth = 4; g.beginPath(); g.moveTo(128, 128); g.lineTo(128 - 20, 128 - 85); g.stroke(); }));
 const paintingTex = lazy('painting', () => canvasTex(200, 160, (g, w, h) => { const s = g.createLinearGradient(0, 0, 0, h); s.addColorStop(0, '#7fb2e6'); s.addColorStop(0.6, '#f1d29a'); g.fillStyle = s; g.fillRect(0, 0, w, h);
   g.fillStyle = '#3f6b3a'; g.beginPath(); g.moveTo(0, h); g.lineTo(0, h * 0.65); g.quadraticCurveTo(w * 0.4, h * 0.4, w, h * 0.7); g.lineTo(w, h); g.fill(); g.fillStyle = '#fff4c8'; g.beginPath(); g.arc(w * 0.75, h * 0.25, 14, 0, 7); g.fill(); }));
+const targetTex = lazy('target', () => canvasTex(256, 256, (g) => { for (let i = 5; i > 0; i--) { g.fillStyle = i % 2 ? '#e8202c' : '#f4efe2'; g.beginPath(); g.arc(128, 128, i * 25, 0, 7); g.fill(); } }));
+const hazardTex = lazy('hazard', () => canvasTex(128, 128, (g) => { g.fillStyle = '#c0392b'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#ffc531'; g.beginPath(); g.moveTo(64, 22); g.lineTo(108, 100); g.lineTo(20, 100); g.fill();
+  g.fillStyle = '#140d1f'; g.font = 'bold 56px sans-serif'; g.textAlign = 'center'; g.fillText('!', 64, 94); }));
 const portraitTex = lazy('portrait', () => canvasTex(160, 220, (g, w, h) => { g.fillStyle = '#1b1712'; g.fillRect(0, 0, w, h); const r = g.createRadialGradient(w / 2, h * 0.38, 5, w / 2, h * 0.4, 70); r.addColorStop(0, '#c9b49a'); r.addColorStop(1, '#3a2e22');
   g.fillStyle = r; g.beginPath(); g.ellipse(w / 2, h * 0.38, 38, 48, 0, 0, 7); g.fill(); g.fillStyle = '#2a2018'; g.fillRect(w / 2 - 55, h * 0.62, 110, h); g.fillStyle = '#0a0806'; for (const x of [-14, 14]) { g.beginPath(); g.ellipse(w / 2 + x, h * 0.36, 6, 4, 0, 0, 7); g.fill(); }
   g.fillStyle = '#a0141c'; g.beginPath(); g.arc(w / 2 + 14, h * 0.36, 1.8, 0, 7); g.arc(w / 2 - 14, h * 0.36, 1.8, 0, 7); g.fill(); }));
@@ -135,6 +138,13 @@ export const DEFS = {
     make: (M, c, o) => ({ mesh: m(bx(o.w, o.h, 0.04), M(o.glow ? 'emissive' : 'glass', c)), shape: boxS(o.w / 2, o.h / 2, 0.04), halfH: o.h / 2 }) },
   carmirror: { kind: 'plastic', hp: 1, pts: 15, mass: 0, bv: 5, size: 0.2, spots: [], colors: [0x1a1a1a], fixed: true,
     make: (M, c) => ({ mesh: grp(m(bx(0.18, 0.1, 0.06), M('plastic', c)), m(bx(0.15, 0.08, 0.005), M('mirror', 0xffffff), 0, 0, -0.032)), shape: boxS(0.09, 0.05, 0.04), halfH: 0.05 }) },
+  // explodes when it breaks: knocks everything around and sets off other cans
+  gascan: { kind: 'explosive', hp: 1, pts: 25, mass: 3, bv: 7, size: 0.32, spots: ['floor', 'table'], colors: [0xc0392b, 0xd35400],
+    make: (M, c) => ({ mesh: grp(m(bx(0.28, 0.34, 0.15), M('paint', c)), m(new THREE.PlaneGeometry(0.14, 0.14), M('photo', 0xffffff, { map: hazardTex() }), 0, -0.02, 0.076), m(bx(0.1, 0.04, 0.12), M('paint', c), 0.05, 0.19), m(cyl(0.018, 0.018, 0.08, 10), M('metal', 0x222222), -0.09, 0.2)),
+      shape: boxS(0.14, 0.17, 0.075), halfH: 0.17 }) },
+  // bullseye on a wall for target practice; only thrown things break it
+  target: { kind: 'wood', hp: 1, pts: 50, mass: 0, bv: 4.5, size: 0.6, spots: [], colors: [0x8a5a3c], fixed: true,
+    make: (M, c) => ({ mesh: grp(m(cyl(0.3, 0.3, 0.04, 32), M('wood', c), 0, 0, 0, Math.PI / 2), m(new THREE.CircleGeometry(0.28, 32), M('photo', 0xffffff, { map: targetTex() }), 0, 0, 0.021)), shape: boxS(0.3, 0.3, 0.04), halfH: 0.3 }) },
   carbody: { kind: 'metal', hp: Infinity, pts: 5, mass: 0, bv: 99, size: 2, spots: [], colors: [0xb3202a], fixed: true,
     make: (M, c) => { const p = M('paint', c), dark = M('plastic', 0x15151a), g = grp(m(bx(1.8, 0.55, 4.2), p, 0, 0.62), m(bx(0.08, 0.5, 0.08), p, -0.82, 1.15, 0.55), m(bx(0.08, 0.5, 0.08), p, 0.82, 1.15, 0.55), m(bx(0.08, 0.5, 0.08), p, -0.82, 1.15, -1.0), m(bx(0.08, 0.5, 0.08), p, 0.82, 1.15, -1.0), m(bx(1.7, 0.06, 1.65), p, 0, 1.42, -0.22), m(bx(1.84, 0.2, 0.12), dark, 0, 0.42, 2.12), m(bx(1.84, 0.2, 0.12), dark, 0, 0.42, -2.12));
       for (const [x, z] of [[-0.85, 1.35], [0.85, 1.35], [-0.85, -1.35], [0.85, -1.35]]) g.add(m(cyl(0.34, 0.34, 0.24, 20), dark, x, 0.34, z, 0, 0, Math.PI / 2));
@@ -151,6 +161,7 @@ const SHARD = {
   photo: { geo: new THREE.BoxGeometry(1, 1, 0.05), he: s => [s * 0.5, s * 0.5, s * 0.05], n: 14 },
 };
 SHARD.metal = SHARD.electronics;
+SHARD.explosive = SHARD.electronics;
 SHARD.clay = { geo: new THREE.SphereGeometry(1, 8, 6).scale(1, 0.6, 1), he: s => [s * 0.8, s * 0.5, s * 0.8], n: 6 };
 
 export function createItems({ scene, world, S, onBreak, onClink }) {
@@ -197,6 +208,15 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
       count++;
     }
     return count;
+  };
+
+  // a 3-2-1 pyramid of cups on a free table spot: knock the bottom and the lot comes down
+  api.pyramid = slots => {
+    const free = slots.filter(s => s.k === 'table' && s.w >= 0.3 && !api.list.some(i => !i.dead && Math.abs(i.body.position.y - s.y - 0.1) < 0.3 && Math.hypot(i.body.position.x - s.x, i.body.position.z - s.z) < 0.45));
+    if (!free.length) return false;
+    const s = free[Math.floor(Math.random() * free.length)], color = pick(DEFS.cup.colors);
+    [[-0.13, 0], [0, 0], [0.13, 0], [-0.065, 1], [0.065, 1], [0, 2]].forEach(([x, row]) => { const it = add('cup', s.x + x, s.y + row * 0.142, s.z, 0, { color }); it.body.sleep(); });
+    return true;
   };
 
   function remove(it) { it.dead = true; world.removeBody(it.body); scene.remove(it.mesh); }

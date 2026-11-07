@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU } from './style.js';
-import { SCENES } from './scenes.js';
-import { createItems, DEFS } from './items.js';
-import * as A from './audio.js';
-import { preloadItemModels } from './models.js';
-import { createClayFigure } from './clay.js';
+import { makeStyle, detectGPU } from './style.js?v=4';
+import { SCENES } from './scenes.js?v=4';
+import { createItems, DEFS } from './items.js?v=4';
+import * as A from './audio.js?v=4';
+import { preloadItemModels } from './models.js?v=4';
+import { createClayFigure, preloadClayHead } from './clay.js?v=4';
+import { createReplay } from './replay.js?v=4';
 
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -35,9 +36,16 @@ const unlocked = k => { const u = WEAPONS[k].unlock; return !u || (u.pts && save
 const unlockText = u => u.pts ? `${save.points.toLocaleString()} / ${u.pts.toLocaleString()} lifetime points` : `${save.smashed} / ${u.smashed} things smashed`;
 const NAMES = { platestack: 'stack of plates', crt: 'old TV', tv: 'TV', beermug: 'beer mug', wineglass: 'wine glass', fishbowl: 'fish bowl', watercooler: 'water cooler', cinder: 'cinder block', fork: 'cutlery', flowerpot: 'plant pot' };
 const nameOf = k => NAMES[k] || k;
+const GMODES = {
+  classic: { name: 'Classic', desc: 'Two minutes. Score as much as you can.' },
+  zen: { name: 'Zen', desc: 'No timer, calm music. Smash at your own pace.' },
+  attack: { name: 'Time attack', desc: 'Clear the whole room as fast as you can.' },
+  targets: { name: 'Target practice', desc: 'Throw things at targets on the walls. 90 seconds.' },
+};
+const vibrate = ms => { if (isTouch) try { navigator.vibrate?.(ms); } catch (e) {} };
 
 // ---------- world
-let opts = { mode: null, scene: 'classic', weapon: 'bat', quality: 'auto', music: true };
+let opts = { mode: null, scene: 'classic', weapon: 'bat', quality: 'auto', music: true, gm: 'classic', voice: true };
 let S, scene, world, camera, I, room, pivot, weaponMesh, photoTex = null, W = WEAPONS.bat, figure = null;
 const qualityFor = () => opts.mode !== 'realistic' ? 'medium' : opts.quality === 'auto' ? gpu.tier : opts.quality;
 
@@ -61,7 +69,9 @@ function build() {
   S.setup(scene, camera, def);
   pivot = new THREE.Group(); camera.add(pivot); equip(opts.weapon);
   I.batch(room.pool, room.slots, batchSize());
+  if (Math.random() < 0.7) I.pyramid(room.slots);
   spawnPhotos();
+  boomLight = new THREE.PointLight(0xffa040, 0, 12, 2); scene.add(boomLight); fx = [];
   held = null; hlTarget = null; hlMeshes = []; charging = false; swingT = -1; marks = [];
 }
 const batchSize = () => Math.min(24, Math.max(14, Math.ceil(room.slots.length * 0.45)));
@@ -101,6 +111,11 @@ function equip(key) { if (weaponMesh) pivot.remove(weaponMesh); opts.weapon = ke
 // ---------- game state
 let state = 'menu', paused = false, timeLeft = SESSION, score = 0, smashed = 0, combo = 0, bestCombo = 0, comboTimer = 0, throws = 0;
 let rageMeter = 0, rageUntil = 0, slowUntil = 0, shake = 0, restocking = false, byKind = {}, lastClink = 0;
+let freezeUntil = 0, kick = 0, goldenAt = 0, elapsed = 0, figureDowned = false, targetsHit = 0, boomLight = null, fx = [];
+const freeze = ms => { freezeUntil = Math.max(freezeUntil, performance.now() + ms); };
+const FIREBALL = new THREE.SphereGeometry(1, 20, 14);
+const GOLD = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
+const replay = createReplay($('c'));
 const player = { x: 0, z: 2.6, yaw: 0, pitch: -0.18, bob: 0 };
 const keys = {}, joy = { x: 0, y: 0 };
 let mouseHeld = false, swingT = -1, hitDone = false;
@@ -116,15 +131,89 @@ function onBreak(it, fromHit) {
   shake = Math.max(shake, big ? 0.3 : 0.18);
   if ((fromHit && big) || it.thrown) slowUntil = performance.now() + (it.thrown ? 220 : 170);
   flash(big ? 0.2 : 0.1);
+  if (big) freeze(50);
+  vibrate(big ? 40 : 15); kick = Math.min(0.08, kick + (big ? 0.03 : 0.012));
+  if (d.kind === 'explosive') explode(p, it);
   if (state !== 'play') return;
+  if (it.key === 'target') {
+    targetsHit++; bumpCombo();
+    const dist = Math.hypot(p.x - player.x, p.z - player.z), pts = Math.round(50 * (1 + dist / 4));
+    addScore(pts, p, 'big'); popup(dist > 5 ? 'Long shot!' : 'Hit!', { x: p.x, y: p.y + 0.4, z: p.z }, 'small'); A.SFX.coin();
+    setTimeout(() => { if (state === 'play') spawnTarget(); }, 600); return;
+  }
   smashed++; byKind[d.kind] = (byKind[d.kind] || 0) + 1;
-  combo++; comboTimer = 2.5; bestCombo = Math.max(bestCombo, combo);
-  const rage = performance.now() < rageUntil;
-  const mult = Math.min(4, 1 + Math.floor(combo / 4) * 0.5) * (rage ? 2 : 1) * (it.thrown ? 1.5 : 1);
-  addScore(Math.round(d.pts * mult), p, d.pts >= 30 || it.thrown ? 'big' : '');
+  bumpCombo();
+  const rage = performance.now() < rageUntil, gold = it.golden && performance.now() < it.golden;
+  const mult = Math.min(4, 1 + Math.floor(combo / 4) * 0.5) * (rage ? 2 : 1) * (it.thrown ? 1.5 : 1) * (gold ? 10 : 1);
+  addScore(Math.round(d.pts * mult), p, d.pts >= 30 || it.thrown || gold ? 'big' : '');
+  if (gold) { banner('Golden!'); A.SFX.coin(); A.SFX.golden(); freeze(90); vibrate(80); I.sparks_(p, 30, 0xffd23f); }
+  if (it.blasted) popup('Chain!', { x: p.x, y: p.y + 0.35, z: p.z }, 'small');
   if (it.thrown) { popup('Throw!', { x: p.x, y: p.y + 0.35, z: p.z }, 'small'); markNear(p, it.key === 'watercooler' ? 'splat' : 'crack', 0.35, it.key === 'watercooler' ? 0x5aa0d0 : 0xffffff); }
   if (!rage) { rageMeter += 6 + Math.min(combo, 10); if (rageMeter >= 100) startRage(); }
 }
+
+const CALLS = { 3: 'Nice!', 5: 'Combo!', 8: 'Rampage!', 12: 'Unstoppable!', 16: 'Godlike!', 22: 'Legendary!' };
+function bumpCombo() { combo++; comboTimer = 2.5; bestCombo = Math.max(bestCombo, combo); if (CALLS[combo]) announce(CALLS[combo]); }
+function announce(text) {
+  const a = $('announce'); a.textContent = text; a.classList.remove('show'); void a.offsetWidth; a.classList.add('show');
+  if (opts.voice && window.speechSynthesis) try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text.replace(/!/g, '')); u.pitch = 0.4; u.rate = 1.05; speechSynthesis.speak(u); } catch (e) {}
+}
+
+// a gas can went off: fireball, knock everything back, break what's close (which can set off more cans)
+function explode(p, src) {
+  const P = new THREE.Vector3(p.x, p.y, p.z), R = 2.6, now = performance.now();
+  A.SFX.boom(); shake = Math.max(shake, 0.7); flash(0.5); freeze(110); slowUntil = now + 700; vibrate(150); kick = Math.min(0.12, kick + 0.08);
+  for (const [color, grow, max, op] of [[0xffa040, 2.4, 0.5, 1], [0x2a2622, 3, 1.3, 0.55]]) {
+    const ball = new THREE.Mesh(FIREBALL, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, toneMapped: false, depthWrite: false }));
+    ball.position.copy(P); ball.scale.setScalar(0.2); scene.add(ball); fx.push({ mesh: ball, life: 0, max, grow, op });
+  }
+  boomLight.position.copy(P); boomLight.intensity = S.realistic ? 140 : 40;
+  I.sparks_(P, 40, 0xffb347); markNear(P, 'splat', 1.3, 0x161210);
+  if (state === 'play') { popup('BOOM!', { x: P.x, y: P.y + 0.5, z: P.z }, 'big'); addScore(25, P, 'small'); }
+  for (const it of I.list) {
+    if (it.dead || it.held || it === src) continue;
+    const q = it.body.position, d = Math.hypot(q.x - P.x, q.y - P.y, q.z - P.z); if (d > R) continue;
+    const f = 1 - d / R, dir = new THREE.Vector3(q.x - P.x, q.y - P.y + 0.3, q.z - P.z).normalize();
+    if (!it.fixed) { it.body.wakeUp(); it.born = 0; it.body.velocity.set(it.body.velocity.x + dir.x * 14 * f, it.body.velocity.y + dir.y * 10 * f + 4 * f, it.body.velocity.z + dir.z * 14 * f); }
+    if (it.def.hp !== Infinity && d < R * 0.65) { it.blasted = true; setTimeout(() => { if (!it.dead) I.shatter(it, dir, 6 * f + 2, false); }, 50 + d * 120); }
+  }
+  for (const c of I.chunks) { const q = c.body.position, d = Math.hypot(q.x - P.x, q.y - P.y, q.z - P.z); if (d < R) { const f = 1 - d / R; c.body.wakeUp(); c.body.velocity.set((q.x - P.x) / d * 12 * f, 3 + 8 * f, (q.z - P.z) / d * 12 * f); } }
+  if (figure && figure.alive) {
+    const fp = figure.root.position, tc = new THREE.Vector3(fp.x, fp.y + 1, fp.z);
+    if (tc.distanceTo(P) < R) { const dir = tc.clone().sub(P).normalize(), res = figure.hit(P, dir, R + 1, 'heavy', new THREE.Vector3(1, 0, 0)); if (res) clayHit(res, dir); }
+  }
+}
+
+// every so often one item turns gold for a few seconds: 10x points
+function makeGolden() {
+  const list = I.list.filter(i => !i.dead && !i.fixed && !i.held && !i.golden && i.def.hp !== Infinity && i.key !== 'gascan');
+  if (!list.length) return;
+  const it = list[Math.floor(Math.random() * list.length)]; it.golden = performance.now() + 9000; it.goldMeshes = [];
+  const meshes = []; it.mesh.traverse(m => { if (m.isMesh && !m.userData.ol && !m.userData.hl && !m.userData.gold) meshes.push(m); });
+  for (const m of meshes) { const g = new THREE.Mesh(m.geometry, GOLD); g.userData.gold = true; g.scale.setScalar(1.12); m.add(g); it.goldMeshes.push(g); }
+  A.SFX.golden(); toast(`Golden ${nameOf(it.key)}! 10× points, be quick`);
+}
+function updateGolden(now, t) {
+  GOLD.opacity = 0.35 + Math.sin(t * 8) * 0.2;
+  for (const it of I.list) {
+    if (!it.golden) continue;
+    if (now > it.golden) { it.goldMeshes.forEach(g => g.parent?.remove(g)); it.golden = 0; continue; }
+    if (Math.random() < 0.15) I.sparks_(it.body.position, 1, 0xffd23f);
+  }
+}
+
+// target practice: a bullseye on a random wall, away from where you start
+function spawnTarget() {
+  for (let tries = 0; tries < 40; tries++) {
+    const a = rand(0, Math.PI * 2), y = rand(1, 2.3), h = surfaceHit(new THREE.Vector3(0, y, -0.5), new THREE.Vector3(Math.sin(a), 0, Math.cos(a)), 20);
+    if (!h || Math.abs(h.normal.y) > 0.3) continue;
+    const pt = h.point.clone().addScaledVector(h.normal, 0.05);
+    if (Math.hypot(pt.x - room.start.x, pt.z - room.start.z) < 3) continue;
+    if (I.list.some(i => i.key === 'target' && !i.dead && Math.hypot(i.body.position.x - pt.x, i.body.position.y - pt.y, i.body.position.z - pt.z) < 1.2)) continue;
+    I.add('target', pt.x, pt.y, pt.z, Math.atan2(h.normal.x, h.normal.z)); return;
+  }
+}
+const remaining = () => I.list.filter(i => !i.dead && i.def.hp !== Infinity && i.key !== 'cutout' && i.key !== 'target').length + (figure && !figureDowned ? 1 : 0);
 
 let atk = 'swing', side = 1, CW = W, atkCount = 0;
 const ATTACK = { punch: { speed: 0.22, reach: 1.6, power: 1, knock: 5, cone: 0.82 }, slap: { speed: 0.3, reach: 1.5, power: 1, knock: 3, cone: 0.72 }, kick: { speed: 0.45, reach: 1.9, power: 2, knock: 10, cone: 0.72 } };
@@ -164,7 +253,9 @@ function clayHit(res, dir) {
   const p = res.point, hard = atk === 'kick' || W.heavy;
   if (atk === 'punch') A.SFX.punch(1); else if (atk === 'slap') A.SFX.slap(1); else if (atk === 'kick') A.SFX.kick(1); else A.SFX.thud('wood', 1);
   A.SFX.clay(hard ? 1 : 0.7); shake = Math.max(shake, hard ? 0.16 : 0.07);
-  combo++; comboTimer = 2.5; bestCombo = Math.max(bestCombo, combo);
+  if (res.voice) A.SFX.voice(res.voice);
+  kick = Math.min(0.08, kick + (hard ? 0.03 : 0.015)); vibrate(hard ? 35 : 15);
+  bumpCombo();
   addScore(atk === 'slap' ? 2 : 3, p, 'small');
   const names = { head: 'Head off!', arm: 'Arm off!', leg: 'Leg off!', torso: 'Smashed!' };
   for (const part of res.lost) {
@@ -173,11 +264,13 @@ function clayHit(res, dir) {
     addScore(Math.round(part.pts * mult), p, 'big'); if (names[part.name]) popup(names[part.name], { x: p.x, y: p.y + 0.4, z: p.z }, 'small');
     if (performance.now() >= rageUntil) { rageMeter += 10; if (rageMeter >= 100) startRage(); }
   }
-  if (res.lost.length) { A.SFX.clay(1); A.SFX.wood(0.6); slowUntil = performance.now() + 200; flash(0.12); }
-  if (res.collapsed) { banner('Sculpture smashed!'); addScore(80, p, 'big'); }
+  if (res.lost.length) { A.SFX.clay(1); A.SFX.wood(0.6); slowUntil = performance.now() + 200; flash(0.12); freeze(70); vibrate(60); }
+  if (res.collapsed) { banner('Sculpture smashed!'); addScore(80, p, 'big'); figureDowned = true; }
 }
 function hitItem(it, dir) {
   const rage = performance.now() < rageUntil, p = it.body.position;
+  if (it.key === 'target') { toast('Throw something at it!'); return; }
+  kick = Math.min(0.08, kick + (W.heavy ? 0.03 : 0.015)); vibrate(20);
   if (it.def.hp === Infinity) {
     A.SFX.metal(1); if (opts.weapon === 'pan') A.SFX.metal(0.8);
     it.pop = 1; shake = Math.max(shake, 0.12); I.sparks_(p, 8, 0xffd27a); addScore(it.def.pts, p, 'small');
@@ -212,7 +305,7 @@ function setHighlight(it) {
   if (hlTarget === it) return;
   for (const m of hlMeshes) m.parent?.remove(m); hlMeshes = []; hlTarget = it;
   if (!it) return;
-  const list = []; it.mesh.traverse(m => { if (m.isMesh && !m.userData.ol && !m.userData.hl) list.push(m); });
+  const list = []; it.mesh.traverse(m => { if (m.isMesh && !m.userData.ol && !m.userData.hl && !m.userData.gold) list.push(m); });
   for (const m of list) { const h = new THREE.Mesh(m.geometry, HL); h.userData.hl = true; h.scale.setScalar(1.09); m.add(h); hlMeshes.push(h); }
 }
 function grab(it) {
@@ -289,7 +382,7 @@ function markNear(p, type, size, color) {
 
 // ---------- scoring helpers
 function startRage() { rageMeter = 0; rageUntil = performance.now() + 8000; banner('Rage mode'); A.SFX.rage(); slowUntil = performance.now() + 400; document.body.classList.add('rage'); }
-function addScore(n, p, cls) { if (state !== 'play') return; score += n; popup('+' + n, p, cls); }
+function addScore(n, p, cls) { if (state !== 'play') return; score += n; replay.mark(n); popup('+' + n, p, cls); }
 function popup(text, p, cls = '') {
   v1.set(p.x, p.y + 0.15, p.z).project(camera); if (v1.z > 1) return;
   const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = text;
@@ -302,16 +395,24 @@ function flash(a) { const f = $('flash'); f.style.transition = 'none'; f.style.o
 
 // ---------- session flow
 let modelsReady = null;
+const headReady = preloadClayHead().then(() => { if (state === 'menu' && opts.scene === 'studio') build(); });
 async function startSession() {
   A.initAudio();
+  if (opts.scene === 'studio') { $('start').textContent = 'Loading…'; await Promise.race([headReady, new Promise(r => setTimeout(r, 20000))]); $('start').textContent = 'Start smashing'; }
   if (opts.mode === 'realistic' && modelsReady) { $('start').textContent = 'Loading…'; await modelsReady; $('start').textContent = 'Start smashing'; }
   build();
   Object.assign(player, { x: room.start.x, z: room.start.z, yaw: 0, pitch: -0.18 });
-  timeLeft = SESSION; score = 0; smashed = 0; combo = 0; bestCombo = 0; rageMeter = 0; rageUntil = 0; byKind = {}; restocking = false; throws = 0;
+  timeLeft = opts.gm === 'targets' ? 90 : opts.gm === 'classic' ? SESSION : Infinity;
+  score = 0; smashed = 0; combo = 0; bestCombo = 0; rageMeter = 0; rageUntil = 0; byKind = {}; restocking = false; throws = 0;
+  elapsed = 0; figureDowned = false; targetsHit = 0; kick = 0; goldenAt = performance.now() + 8000;
+  if (opts.gm === 'attack') { I.batch(room.pool, room.slots, 8); I.pyramid(room.slots); }
+  if (opts.gm === 'targets') for (let i = 0; i < 4; i++) spawnTarget();
   state = 'play'; paused = false; fpsT = 0; fpsN = 0;
+  replay.start();
   for (const id of ['modeScreen', 'lobby', 'end', 'pause']) $(id).classList.add('hidden');
   $('hud').classList.remove('hidden'); if (isTouch) $('touch').classList.remove('hidden');
-  A.setMusic(opts.music, true); A.startAmbience(room.amb); banner('Go!');
+  A.setMusicStyle(opts.gm === 'zen' ? 'calm' : 'heavy'); A.setMusic(opts.music, true); A.startAmbience(room.amb);
+  banner({ classic: 'Go!', zen: 'Relax', attack: 'Clear the room!', targets: 'Hit the targets!' }[opts.gm]);
   if (!isTouch) lockMouse();
 }
 function endSession() {
@@ -319,19 +420,31 @@ function endSession() {
   document.body.classList.remove('rage'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden');
   const before = Object.keys(WEAPONS).filter(unlocked);
   save.points += score; save.smashed += smashed;
-  const key = `${opts.mode}:${opts.scene}`, list = save.best[key] || [], entry = { score, smashed, w: opts.weapon, d: Date.now() };
-  list.push(entry); list.sort((a, b) => b.score - a.score); save.best[key] = list.slice(0, 5); persist();
+  const attack = opts.gm === 'attack', cleared = attack && remaining() === 0;
+  const key = bestKey(opts.scene), list = save.best[key] || [], entry = { score, smashed, w: opts.weapon, d: Date.now(), time: cleared ? Math.round(elapsed * 10) / 10 : null };
+  if (!attack || cleared) { list.push(entry); list.sort((a, b) => attack ? a.time - b.time : b.score - a.score); save.best[key] = list.slice(0, 5); }
+  persist();
   const fresh = Object.keys(WEAPONS).filter(k => unlocked(k) && !before.includes(k));
-  $('rating').textContent = smashed < 10 ? 'Mildly annoyed' : smashed < 25 ? 'Properly cross' : smashed < 45 ? 'Furious' : 'Absolute menace';
+  $('rating').textContent = attack ? (cleared ? `Cleared in ${fmtTime(elapsed)}` : 'Room not cleared')
+    : opts.gm === 'zen' ? 'Feeling better?' : opts.gm === 'targets' ? `${targetsHit} targets hit`
+    : smashed < 10 ? 'Mildly annoyed' : smashed < 25 ? 'Properly cross' : smashed < 45 ? 'Furious' : 'Absolute menace';
   const stat = (l, v) => `<div class="stat"><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
   $('stats').innerHTML = stat('Score', score) + stat('Smashed', smashed) + stat('Best combo', 'x' + bestCombo) + stat('Throws', throws) +
     ['glass', 'ceramic', 'electronics', 'wood', 'stone', 'plastic'].filter(k => byKind[k]).map(k => stat(k[0].toUpperCase() + k.slice(1), byKind[k])).join('');
-  const rank = save.best[key].indexOf(entry);
-  $('scores').innerHTML = `<div class="lbl">Your top scores: ${SCENES[opts.scene].name} (${opts.mode})</div>` + save.best[key].map((e, i) =>
-    `<div class="score-row${i === rank ? ' me' : ''}"><span>${i + 1}.</span><span>${e.score.toLocaleString()}</span><span>${e.smashed} smashed</span><span>${WEAPONS[e.w]?.name || ''}</span></div>`).join('');
+  const rows = save.best[key] || [], rank = rows.indexOf(entry);
+  $('scores').innerHTML = `<div class="lbl">Your ${attack ? 'fastest clears' : 'top scores'}: ${SCENES[opts.scene].name}, ${GMODES[opts.gm].name} (${opts.mode})</div>` + (rows.length ? rows.map((e, i) =>
+    `<div class="score-row${i === rank ? ' me' : ''}"><span>${i + 1}.</span><span>${attack ? fmtTime(e.time) : e.score.toLocaleString()}</span><span>${e.smashed} smashed</span><span>${WEAPONS[e.w]?.name || ''}</span></div>`).join('') : '<div class="score-row"><span></span><span>No clears yet</span></div>');
+  $('replayBox').classList.add('hidden');
+  replay.stop().then(() => { if (state === 'end' && replay.best) { $('replayBox').classList.remove('hidden'); playReplay(); } });
   $('unlocks').innerHTML = fresh.map(k => `<div class="unlock">Unlocked: ${WEAPONS[k].name}</div>`).join('');
   if (fresh.length) setTimeout(() => A.SFX.unlock(), 900);
   $('end').classList.remove('hidden');
+}
+const fmtTime = t => t == null ? '-' : `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+const bestKey = sc => opts.gm === 'classic' ? `${opts.mode}:${sc}` : `${opts.mode}:${sc}:${opts.gm}`;
+function playReplay() {
+  const c = $('replayCanvas'), b = $('saveClip'); c.width = 640; c.height = 360; b.disabled = true; b.textContent = 'Preparing clip…';
+  replay.play(c, `+${replay.best.peak} in 1.5 seconds`).then(() => { b.disabled = !replay.clip; b.textContent = replay.clip ? 'Save clip' : 'Clip not available'; });
 }
 function lockMouse() { try { const r = $('c').requestPointerLock?.(); r && r.catch && r.catch(() => {}); } catch (e) {} }
 function setPaused(p) {
@@ -352,13 +465,15 @@ function renderMode() {
 function card(sel, inner, data, locked) { return `<button class="card${sel ? ' sel' : ''}${locked ? ' locked' : ''}" ${data}>${inner}</button>`; }
 function renderLobby() {
   $('modeName').textContent = opts.mode === 'realistic' ? 'Realistic' : 'Stylized';
-  $('scenes').innerHTML = Object.entries(SCENES).map(([k, s]) => { const b = save.best[`${opts.mode}:${k}`]?.[0];
-    return card(k === opts.scene, `<b>${s.name}</b><small>${s.desc}</small>${b ? `<small class="best">Best: ${b.score.toLocaleString()}</small>` : ''}`, `data-s="${k}"`); }).join('');
+  $('gmodes').innerHTML = Object.entries(GMODES).map(([k, m]) => card(k === opts.gm, `<b>${m.name}</b><small>${m.desc}</small>`, `data-g="${k}"`)).join('');
+  $('scenes').innerHTML = Object.entries(SCENES).map(([k, s]) => { const b = save.best[bestKey(k)]?.[0];
+    const best = b ? (opts.gm === 'attack' ? `Best: ${fmtTime(b.time)}` : `Best: ${b.score.toLocaleString()}`) : '';
+    return card(k === opts.scene, `<b>${s.name}</b><small>${s.desc}</small>${best ? `<small class="best">${best}</small>` : ''}`, `data-s="${k}"`); }).join('');
   $('weapons').innerHTML = Object.entries(WEAPONS).map(([k, w]) => { const ok = unlocked(k);
     return card(k === opts.weapon, `<b>${ok ? '' : '🔒 '}${w.name}</b><small>${ok ? w.desc : 'Unlock: ' + unlockText(w.unlock)}</small>`, `data-w="${k}"`, !ok); }).join('');
   $('qualityRow').classList.toggle('hidden', opts.mode !== 'realistic');
   $('quality').value = opts.quality;
-  $('music').checked = opts.music;
+  $('music').checked = opts.music; $('voice').checked = opts.voice;
   $('lifetime').textContent = `Lifetime: ${save.points.toLocaleString()} points · ${save.smashed.toLocaleString()} things smashed`;
   $('photoName').textContent = photoTex ? 'Photo added. It shows up on cut-outs and picture frames.' : 'Optional. Stays on your device and is never uploaded.';
   $('photoClear').classList.toggle('hidden', !photoTex);
@@ -369,6 +484,10 @@ document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
 });
 $('scenes').onclick = e => { const b = e.target.closest('.card'); if (!b) return; opts.scene = b.dataset.s; if (opts.scene === 'studio') opts.weapon = 'hands'; renderLobby(); build(); };
 $('weapons').onclick = e => { const b = e.target.closest('.card'); if (!b || b.classList.contains('locked')) return; opts.weapon = b.dataset.w; renderLobby(); equip(opts.weapon); };
+$('gmodes').onclick = e => { const b = e.target.closest('.card'); if (!b) return; opts.gm = b.dataset.g; renderLobby(); };
+$('voice').onchange = e => { opts.voice = e.target.checked; };
+$('watchAgain').onclick = () => replay.best && playReplay();
+$('saveClip').onclick = () => replay.download();
 $('quality').onchange = e => { opts.quality = e.target.value; build(); };
 $('music').onchange = e => { opts.music = e.target.checked; A.setMusic(opts.music, state === 'play'); };
 $('backMode').onclick = () => { $('lobby').classList.add('hidden'); renderMode(); };
@@ -481,7 +600,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   if (!scene) return;
   const rdt = Math.min((now - last) / 1000, 0.05); last = now;
-  const dt = rdt * (now < slowUntil ? 0.25 : 1), t = now / 1000;
+  const dt = now < freezeUntil ? 0 : rdt * (now < slowUntil ? 0.25 : 1), t = now / 1000;
   const playing = state === 'play' && !paused;
 
   if (playing) {
@@ -489,15 +608,19 @@ function frame(now) {
     if (mouseHeld && swingT < 0) startSwing();
     if (swingT >= 0) { swingT += dt / CW.speed; if (!hitDone && swingT >= 0.4) { hitDone = true; doHit(); } if (swingT >= 1) swingT = -1; }
     W.hands ? poseHands() : poseWeapon();
-    if (figure && figure.update()) banner('New sculpture');
+    const fu = figure && figure.update(dt);
+    if (fu) { banner(fu === 'boss' ? 'Boss sculpture!' : 'New sculpture'); if (fu === 'boss') A.SFX.voice('boss'); }
+    if (now > goldenAt) { goldenAt = now + rand(14000, 22000); makeGolden(); }
+    updateGolden(now, t);
+    if (opts.gm === 'attack') { elapsed += rdt; if (remaining() === 0) endSession(); }
     if (charging) chargeT += rdt;
     setHighlight(held ? null : findGrabTarget());
     if (comboTimer > 0 && (comboTimer -= rdt) <= 0) combo = 0;
     if (rageUntil && now > rageUntil) { rageUntil = 0; document.body.classList.remove('rage'); }
     else if (!rageUntil) rageMeter = Math.max(0, rageMeter - rdt * 3);
-    if (!restocking && I.list.filter(i => !i.dead && !i.fixed).length <= 2) {
+    if (opts.gm !== 'attack' && !restocking && I.list.filter(i => !i.dead && !i.fixed).length <= 2) {
       restocking = true; banner('Restock!'); A.SFX.restock();
-      setTimeout(() => { if (state === 'play') { I.batch(room.pool, room.slots, batchSize()); spawnPhotos(); } restocking = false; }, 700);
+      setTimeout(() => { if (state === 'play') { I.batch(room.pool, room.slots, batchSize()); if (Math.random() < 0.5) I.pyramid(room.slots); spawnPhotos(); } restocking = false; }, 700);
     }
     if (timeLeft <= 0) endSession();
     // automatic quality: step down if it runs slow
@@ -511,10 +634,14 @@ function frame(now) {
     world.step(1 / 60, dt, 5);
     I.flush(); I.sync(dt);
     for (const u of room.updates) u(t, dt);
+    fx = fx.filter(f => { f.life += rdt; const k = f.life / f.max; f.mesh.scale.setScalar(0.2 + f.grow * Math.min(1, k * 1.6)); f.mesh.material.opacity = f.op * (1 - k);
+      if (k >= 1) { scene.remove(f.mesh); f.mesh.material.dispose(); return false; } return true; });
+    if (boomLight && boomLight.intensity > 0) boomLight.intensity = Math.max(0, boomLight.intensity * Math.pow(0.002, rdt) - 1);
   }
   if (state === 'play') {
     camera.position.set(player.x, 1.65 + Math.sin(player.bob * 2) * 0.02, player.z);
-    camera.rotation.set(player.pitch, player.yaw, 0); pivot.visible = true;
+    camera.rotation.set(player.pitch + kick, player.yaw, 0); pivot.visible = true;
+    kick *= Math.pow(0.0005, rdt);
   } else {
     orbit += rdt * 0.1; pivot.visible = false;
     const [bx1, bx2, bz1, bz2] = room.bounds, rx = (bx2 - bx1) * 0.32, rz = (bz2 - bz1) * 0.32;
@@ -524,8 +651,11 @@ function frame(now) {
   if (shake > 0.001) { camera.position.x += rand(-1, 1) * shake * 0.3; camera.position.y += rand(-1, 1) * shake * 0.3; camera.rotation.z += rand(-1, 1) * shake * 0.08; }
 
   if (state === 'play') {
-    const tl2 = Math.max(0, Math.ceil(timeLeft)); $('time').textContent = Math.floor(tl2 / 60) + ':' + String(tl2 % 60).padStart(2, '0');
-    $('time').classList.toggle('low', tl2 <= 10);
+    if (opts.gm === 'attack') $('time').textContent = fmtTime(elapsed);
+    else if (!isFinite(timeLeft)) $('time').textContent = '∞';
+    else { const tl2 = Math.max(0, Math.ceil(timeLeft)); $('time').textContent = Math.floor(tl2 / 60) + ':' + String(tl2 % 60).padStart(2, '0'); }
+    $('time').classList.toggle('low', isFinite(timeLeft) && timeLeft <= 10);
+    $('extra').textContent = opts.gm === 'attack' ? `${remaining()} left` : opts.gm === 'targets' ? `${targetsHit} targets` : '';
     $('score').textContent = score; $('smashed').textContent = smashed;
     $('combo').textContent = combo >= 3 ? 'Combo x' + combo : '';
     const rage = now < rageUntil;

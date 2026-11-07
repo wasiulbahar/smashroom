@@ -1,8 +1,8 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js';
-import { loadModel, fitInto } from './models.js';
+import { canvasTex } from './style.js?v=4';
+import { loadModel, fitInto } from './models.js?v=4';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -127,7 +127,7 @@ function sign(lines, bg, fg, w = 512, h = 384) {
     lines.forEach(([t, s, y]) => { g.font = `${s}px Rubik, Arial, sans-serif`; g.fillText(t, w / 2, y); }); });
 }
 
-const MIXED = ['bottle', 'bottle', 'cup', 'wineglass', 'vase', 'plate', 'platestack', 'mug', 'bowl', 'teapot', 'pot', 'keyboard', 'monitor', 'tv', 'printer', 'laptop', 'phone', 'lamp', 'speaker', 'clock', 'frame', 'chair', 'stool', 'pan', 'jar', 'microwave'];
+const MIXED = ['gascan', 'bottle', 'bottle', 'cup', 'wineglass', 'vase', 'plate', 'platestack', 'mug', 'bowl', 'teapot', 'pot', 'keyboard', 'monitor', 'tv', 'printer', 'laptop', 'phone', 'lamp', 'speaker', 'clock', 'frame', 'chair', 'stool', 'pan', 'jar', 'microwave'];
 
 export const SCENES = {
   classic: {
@@ -192,7 +192,7 @@ export const SCENES = {
       K.decal(spray('X', '#e8202c', 160, 300, 260), 1, 0.9, -5.39, 1.6, -2, Math.PI / 2);
       K.decal(spray('WHO WAS HERE', '#2f9bff', 80), 3, 0.8, 5.39, 1.5, 1.5, -Math.PI / 2);
       K.dust(600, K.bounds, 3.6);
-      return { ...K, pool: ['bottle', 'bottle', 'jar', 'crt', 'tv', 'monitor', 'cinder', 'cinder', 'chair', 'stool', 'vase', 'pot', 'flowerpot', 'lamp', 'speaker', 'crate', 'microwave'], start: { x: 0, z: 2.8 }, amb: 'abandoned', photoSpots: [[-1.5, -4.2, 0], [1.6, -4.2, 0]] };
+      return { ...K, pool: ['gascan', 'bottle', 'bottle', 'jar', 'crt', 'tv', 'monitor', 'cinder', 'cinder', 'chair', 'stool', 'vase', 'pot', 'flowerpot', 'lamp', 'speaker', 'crate', 'microwave'], start: { x: 0, z: 2.8 }, amb: 'abandoned', photoSpots: [[-1.5, -4.2, 0], [1.6, -4.2, 0]] };
     },
   },
   haunted: {
@@ -230,7 +230,7 @@ export const SCENES = {
         moon.intensity = Math.random() < 0.0025 ? K.v(9, 4) : Math.max(K.v(0.6, 0.6), moon.intensity * 0.85);
       });
       K.dust(250, K.bounds, 3.2);
-      return { ...K, pool: ['plate', 'platestack', 'teapot', 'cup', 'wineglass', 'bowl', 'jug', 'vase', 'doll', 'doll', 'candlestick', 'clock', 'frame', 'lamp', 'chair', 'stool', 'jar'], start: { x: 0, z: 3 }, amb: 'haunted', photoSpots: [[-2.8, 0.2, 0.4], [2.6, -2.4, -0.4]] };
+      return { ...K, pool: ['gascan', 'plate', 'platestack', 'teapot', 'cup', 'wineglass', 'bowl', 'jug', 'vase', 'doll', 'doll', 'candlestick', 'clock', 'frame', 'lamp', 'chair', 'stool', 'jar'], start: { x: 0, z: 3 }, amb: 'haunted', photoSpots: [[-2.8, 0.2, 0.4], [2.6, -2.4, -0.4]] };
     },
   },
   office: {
@@ -265,7 +265,7 @@ export const SCENES = {
       K.decal(wb, 2.4, 1.4, 2.2, 1.7, -4.98, 0);
       K.model('WetFloorSign_01', 1.2, 0, 0.6, { h: 0.62, w: 0.4, d: 0.4, ry: 0.4 });
       K.updates.push(t => { const p = panels[4]; const on = Math.sin(t * 37) > -0.9 || Math.random() > 0.3; p.visible = on; });
-      return { ...K, pool: ['monitor', 'monitor', 'keyboard', 'keyboard', 'mug', 'mug', 'phone', 'laptop', 'printer', 'lamp', 'flowerpot', 'watercooler', 'speaker', 'frame', 'clock', 'chair', 'crt'], start: { x: 0, z: 3.6 }, amb: 'office', photoSpots: [[-0.8, -4.3, 0], [4.2, -2.6, -0.6]] };
+      return { ...K, pool: ['gascan', 'monitor', 'monitor', 'keyboard', 'keyboard', 'mug', 'mug', 'phone', 'laptop', 'printer', 'lamp', 'flowerpot', 'watercooler', 'speaker', 'frame', 'clock', 'chair', 'crt'], start: { x: 0, z: 3.6 }, amb: 'office', photoSpots: [[-0.8, -4.3, 0], [4.2, -2.6, -0.6]] };
     },
   },
   kitchen: {
@@ -288,7 +288,7 @@ export const SCENES = {
       K.light('spot', 0xfff2e0, K.v(28, 18), 0, 2.95, 1, { target: [0, 0.9, -1.5], angle: 1.1, pen: 0.8, shadow: true });
       K.hemi(0xfff4e0, 0x403830, K.v(0.4, 0.9));
       K.floor([[-2, 2], [2, 2.6], [-3, 3.3], [1.4, 1.2]]);
-      return { ...K, pool: ['plate', 'plate', 'platestack', 'bowl', 'bowl', 'mug', 'cup', 'wineglass', 'beermug', 'teapot', 'jug', 'jar', 'pan', 'saucepan', 'kettle', 'fork', 'microwave', 'fishbowl', 'vase', 'flowerpot', 'bottle'], start: { x: 0, z: 2.8 }, amb: 'kitchen', photoSpots: [[-2.4, 1, 0.3], [2.4, -1.6, -0.3]] };
+      return { ...K, pool: ['gascan', 'plate', 'plate', 'platestack', 'bowl', 'bowl', 'mug', 'cup', 'wineglass', 'beermug', 'teapot', 'jug', 'jar', 'pan', 'saucepan', 'kettle', 'fork', 'microwave', 'fishbowl', 'vase', 'flowerpot', 'bottle'], start: { x: 0, z: 2.8 }, amb: 'kitchen', photoSpots: [[-2.4, 1, 0.3], [2.4, -1.6, -0.3]] };
     },
   },
   caryard: {
@@ -327,7 +327,7 @@ export const SCENES = {
       K.table(4.5, 5.6, 1.4, 1, 0.15, wood, wood, { solid: true });
       K.floor([[-2.8, 1], [2.8, 0.5], [-3, -4.5], [2.8, -5.5], [-7, -1], [7, -2], [0, 4.5], [-2, 6.5], [2.5, 6.8], [-7, 6]]);
       K.decal(spray('JUNK YARD', '#f4e6c8', 110), 4, 1.1, 0, 2, -W / 2 + 0.16, 0);
-      return { ...K, pool: ['tv', 'crt', 'crt', 'monitor', 'bottle', 'bottle', 'cinder', 'crate', 'speaker', 'microwave', 'chair', 'jar', 'vase', 'pot', 'lamp'], start: { x: 0, z: 5 }, amb: 'caryard', photoSpots: [[-3.5, -1.5, 0.4], [3.5, -1.5, -0.4]] };
+      return { ...K, pool: ['gascan', 'gascan', 'tv', 'crt', 'crt', 'monitor', 'bottle', 'bottle', 'cinder', 'crate', 'speaker', 'microwave', 'chair', 'jar', 'vase', 'pot', 'lamp'], start: { x: 0, z: 5 }, amb: 'caryard', photoSpots: [[-3.5, -1.5, 0.4], [3.5, -1.5, -0.4]] };
     },
   },
   studio: {
@@ -337,7 +337,7 @@ export const SCENES = {
       K.room(9, 9, 3.2, 'oldWood', 'plaster', 'plaster', { wallTint: K.v(0xe8dfd0, 0xcfc6e0) });
       scene.background = new THREE.Color(K.v(0x15120f, 0x231a33)); scene.fog = new THREE.Fog(K.v(0x15120f, 0x231a33), 10, 22);
       const stone = S.surface('blockWall', 1, 1, 0xe0d8cc), wood = S.surface('wood', 1, 1), steel = S.surface('steel', 1, 1);
-      K.box(1.1, 0.5, 1.1, stone, 0, 0.25, -1.2, { outline: true }); K.obstacles.push([-0.6, 0.6, -1.8, -0.6]);
+      K.box(1.1, 0.06, 1.1, stone, 0, 0.03, -1.2, { outline: true }); K.obstacles.push([-0.6, 0.6, -1.8, -0.6]);
       K.shelf(-4.2, -0.6, 3.2, 0.45, [0.9, 1.6, 2.3], wood, wood, 'z');
       K.shelf(4.2, -0.6, 3.2, 0.45, [0.9, 1.6, 2.3], wood, wood, 'z');
       K.table(0, -3.9, 3, 0.8, 0.9, wood, steel);
@@ -347,7 +347,7 @@ export const SCENES = {
       K.light('spot', 0xfff2e0, K.v(28, 22), 0.8, 3.1, 0.6, { target: [0, 1.4, -1.2], angle: 0.7, pen: 0.6, shadow: true });
       for (const x of [-2.6, 2.6]) K.bulb(x, 2.7, -0.6, 0xffd9a0, K.v(8, 4), { cage: true, cord: 0.4 });
       K.dust(200, K.bounds, 3);
-      return { ...K, pool: ['vase', 'vase', 'pot', 'bowl', 'jug', 'plate', 'platestack', 'mug', 'flowerpot', 'teapot'], start: { x: 0, z: 2.2 }, clay: { x: 0, y: 0.5, z: -1.2 }, photoSpots: [[-2.4, -3.2, 0.3], [2.4, -3.2, -0.3]] };
+      return { ...K, pool: ['gascan', 'vase', 'vase', 'pot', 'bowl', 'jug', 'plate', 'platestack', 'mug', 'flowerpot', 'teapot'], start: { x: 0, z: 2.2 }, clay: { x: 0, y: 0.06, z: -1.2 }, photoSpots: [[-2.4, -3.2, 0.3], [2.4, -3.2, -0.3]] };
     },
   },
 };

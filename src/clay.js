@@ -1,11 +1,25 @@
 // A clay figure on a pedestal. Hits push the surface in (knuckle marks, hand prints, boot dents),
 // limbs crack off when they take enough damage, and the whole thing collapses when the body gives out.
+// The head is sculpted (brow, eye sockets, nose, lips, chin, ears) so dents distort a real face.
+// It wobbles when hit, and every third figure is a bigger, tougher boss.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeVertices, mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// Real head: "Infinite, 3D Head Scan" by Lee Perry-Smith (CC BY 3.0, see assets/models/head/LICENSE.txt).
+// Loaded once, scaled to about 0.32 m tall (crown to neck), facing +z. Falls back to the sculpted sphere if it fails.
+let scanHead = null;
+export const preloadClayHead = () => scanHead ? Promise.resolve() : new GLTFLoader().loadAsync('assets/models/head/head.glb').then(g => {
+  let geo = null; g.scene.traverse(m => { if (m.isMesh && !geo) geo = m.geometry.clone().applyMatrix4(m.matrixWorld); });
+  for (const k of Object.keys(geo.attributes)) if (k !== 'position') geo.deleteAttribute(k);
+  geo.computeBoundingBox(); const b = geo.boundingBox, size = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3());
+  geo.translate(-c.x, -c.y, -c.z); geo.scale(0.4 / size.y, 0.4 / size.y, 0.4 / size.y);
+  scanHead = geo;
+}).catch(e => console.warn('clay head scan failed, using the sculpted head', e));
 
 const rand = (a, b) => a + Math.random() * (b - a);
-const COLORS = [0xb5653a, 0x9a948c, 0xc98a5c, 0x8a5a4a, 0xd0b490];
+const COLORS = [0xb3ada3, 0xb3ada3, 0xb5653a, 0x9a948c, 0xc98a5c, 0xd0b490];
 
 // capsule with evenly spaced rings along its whole length, so dents have vertices to push
 function capsule(r, len, seg = 32) {
@@ -15,37 +29,99 @@ function capsule(r, len, seg = 32) {
   for (let i = 0; i <= cap; i++) { const a = i / cap * Math.PI / 2; pts.push(new THREE.Vector2(Math.cos(a) * r, len / 2 + Math.sin(a) * r)); }
   return new THREE.LatheGeometry(pts, seg);
 }
+const gauss = (x, y, cx, cy, sx, sy) => Math.exp(-((x - cx) ** 2 / (2 * sx * sx) + (y - cy) ** 2 / (2 * sy * sy)));
+// a human head: egg-shaped skull, narrower jaw, and facial features pushed out along the surface normal
+function sculptHead(geo) {
+  const p = geo.attributes.position, v = new THREE.Vector3(), n = new THREE.Vector3();
+  const pair = (x, y, cx, cy, sx, sy) => gauss(x, y, -cx, cy, sx, sy) + gauss(x, y, cx, cy, sx, sy);
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i); n.copy(v).normalize();
+    // skull: rounder on top, longer front-to-back, jaw and chin narrower
+    let x = v.x * 0.9, y = v.y * 1.1, z = v.z;
+    if (y < 0) { const t = Math.min(1, -y / 0.14); x *= 1 - 0.28 * t * t; z *= 1 - 0.05 * t; }
+    if (z < 0 && y > -0.03) z *= 1.08;
+    let d = 0;
+    if (n.z > 0.1) {
+      const w = Math.min(1, (n.z - 0.1) / 0.35);
+      d += 0.012 * gauss(x, y, 0, 0.048, 0.06, 0.01);                    // brow ridge
+      d -= 0.022 * pair(x, y, 0.04, 0.022, 0.018, 0.012);                 // eye sockets
+      d += 0.014 * pair(x, y, 0.04, 0.02, 0.0095, 0.0075);                // eyeballs
+      d += 0.004 * pair(x, y, 0.04, 0.03, 0.013, 0.003);                  // upper eyelids
+      d -= 0.003 * pair(x, y, 0.04, 0.036, 0.015, 0.0025);                // lid crease
+      d += 0.026 * gauss(x, y, 0, 0.0, 0.0085, 0.022);                    // nose bridge
+      d += 0.016 * gauss(x, y, 0, -0.03, 0.012, 0.01);                    // nose tip
+      d += 0.008 * pair(x, y, 0.016, -0.033, 0.0075, 0.006);              // nostril wings
+      d -= 0.005 * pair(x, y, 0.009, -0.042, 0.004, 0.0025);              // nostrils
+      d -= 0.004 * gauss(x, y, 0, -0.05, 0.004, 0.006);                   // philtrum
+      d -= 0.004 * pair(x, y, 0.03, -0.052, 0.005, 0.014);                // smile lines
+      d += 0.01 * gauss(x, y, 0, -0.06, 0.026, 0.0065);                   // upper lip
+      d -= 0.008 * gauss(x, y, 0, -0.0675, 0.024, 0.0022);                // mouth line
+      d += 0.009 * gauss(x, y, 0, -0.075, 0.021, 0.0065);                 // lower lip
+      d -= 0.004 * gauss(x, y, 0, -0.087, 0.018, 0.005);                  // under the lip
+      d += 0.012 * gauss(x, y, 0, -0.103, 0.022, 0.011);                  // chin
+      d += 0.008 * pair(x, y, 0.052, -0.012, 0.016, 0.014);               // cheekbones
+      d -= 0.004 * pair(x, y, 0.058, -0.065, 0.012, 0.02);                // under the cheekbones
+      d *= w;
+    }
+    const side = Math.abs(n.x);
+    if (side > 0.72) d += 0.018 * gauss(z, y, -0.01, 0.0, 0.014, 0.03) * Math.min(1, (side - 0.72) / 0.15) - 0.004 * gauss(z, y, -0.008, 0.0, 0.005, 0.012);
+    v.set(x, y, z).addScaledVector(n, d); p.setXYZ(i, v.x, v.y, v.z);
+  }
+  return geo;
+}
+// torso: hips, waist, chest and shoulders instead of a plain capsule (y runs -0.37..0.37)
+function sculptTorso(geo) {
+  const p = geo.attributes.position, W = [[0, 1.05], [0.15, 1.12], [0.45, 0.92], [0.72, 1.12], [0.88, 1.3], [1, 1.1]], D = [[0, 0.7], [0.45, 0.66], [0.72, 0.8], [1, 0.7]];
+  const prof = (pts, t) => { for (let k = 1; k < pts.length; k++) if (t <= pts[k][0]) { const [a, b] = [pts[k - 1], pts[k]], f = (t - a[0]) / (b[0] - a[0]), e = f * f * (3 - 2 * f); return a[1] + (b[1] - a[1]) * e; } return pts[pts.length - 1][1]; };
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i), t = Math.max(0, Math.min(1, (y + 0.37) / 0.74)), z = p.getZ(i);
+    p.setX(i, p.getX(i) * prof(W, t)); p.setZ(i, z * prof(D, t) * (z < 0 ? 0.9 : 1));
+  }
+  return geo;
+}
+// limb with a hand or foot on the end, as one mesh so the whole thing dents and breaks together
+function limb(r, len, seg, end) {
+  const c = capsule(r, len, seg), e = new THREE.SphereGeometry(1, 20, 14);
+  if (end === 'hand') e.scale(0.045, 0.06, 0.03).translate(0, -len / 2 - r - 0.035, 0.005);
+  else e.scale(0.06, 0.04, 0.115).translate(0, -len / 2 - r + 0.01, 0.05);
+  return mergeGeometries([c.toNonIndexed(), e.toNonIndexed()]);
+}
 function smoothGeo(geo) {
-  geo.deleteAttribute('uv'); geo.deleteAttribute('normal');
+  for (const k of Object.keys(geo.attributes)) if (k !== 'position') geo.deleteAttribute(k);
   const g = mergeVertices(geo, 1e-4); g.computeVertexNormals(); return g;
 }
 
 // part: name, geometry, local position/rotation/scale, how much damage it takes to come off, points
 const PARTS = [
-  { name: 'leg', side: -1, geo: () => capsule(0.085, 0.62, 28), pos: [-0.11, 0.42, 0], tough: 1.3, pts: 30 },
-  { name: 'leg', side: 1, geo: () => capsule(0.085, 0.62, 28), pos: [0.11, 0.42, 0], tough: 1.3, pts: 30 },
-  { name: 'torso', geo: () => capsule(0.17, 0.4, 44), pos: [0, 1.12, 0], scale: [1.2, 1, 0.75], tough: 3.2, pts: 80 },
-  { name: 'arm', side: -1, geo: () => capsule(0.062, 0.5, 24), pos: [-0.3, 1.08, 0], rot: [0, 0, -0.14], tough: 0.9, pts: 30 },
-  { name: 'arm', side: 1, geo: () => capsule(0.062, 0.5, 24), pos: [0.3, 1.08, 0], rot: [0, 0, 0.14], tough: 0.9, pts: 30 },
-  { name: 'head', geo: () => new THREE.SphereGeometry(0.13, 48, 36), pos: [0, 1.6, 0], scale: [0.95, 1.08, 1], tough: 1.1, pts: 50 },
+  { name: 'leg', side: -1, geo: () => limb(0.08, 0.6, 28, 'foot'), pos: [-0.1, 0.42, 0], tough: 1.3, pts: 30 },
+  { name: 'leg', side: 1, geo: () => limb(0.08, 0.6, 28, 'foot'), pos: [0.1, 0.42, 0], tough: 1.3, pts: 30 },
+  { name: 'torso', geo: () => sculptTorso(capsule(0.17, 0.4, 48)), pos: [0, 1.12, 0], tough: 3.2, pts: 80 },
+  { name: 'arm', side: -1, geo: () => limb(0.058, 0.46, 24, 'hand'), pos: [-0.31, 1.1, 0], rot: [0, 0, -0.12], tough: 0.9, pts: 30 },
+  { name: 'arm', side: 1, geo: () => limb(0.058, 0.46, 24, 'hand'), pos: [0.31, 1.1, 0], rot: [0, 0, 0.12], tough: 0.9, pts: 30 },
+  { name: 'head', geo: () => scanHead ? scanHead.clone() : sculptHead(new THREE.SphereGeometry(0.135, 128, 96)), pos: [0, 1.6, 0.01], scanPos: [0, 1.58, 0.0], tough: 1.1, pts: 50 },
 ];
 
 export function createClayFigure({ scene, world, S, items, x, y, z, onLoose }) {
-  const api = { parts: [], alive: false, respawnAt: 0 };
+  const api = { parts: [], alive: false, respawnAt: 0, count: 0, boss: false };
   const ray = new THREE.Raycaster();
+  const tilt = { x: 0, z: 0, vx: 0, vz: 0 };
+  let lastVoice = 0;
 
   function build() {
-    const color = COLORS[Math.floor(Math.random() * COLORS.length)], mat = S.mat('clay', color);
-    api.color = color; api.parts = []; api.alive = true;
-    const root = new THREE.Group(); root.position.set(x, y, z); root.rotation.y = rand(-0.3, 0.3); scene.add(root); api.root = root;
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.14, 16), mat); neck.position.set(0, 1.47, 0); neck.castShadow = true; root.add(neck); api.neck = neck;
-    for (const P of PARTS) {
+    api.count++; api.boss = api.count % 3 === 0;
+    const color = api.boss ? 0xc9a227 : COLORS[Math.floor(Math.random() * COLORS.length)], mat = S.mat('clay', color);
+    api.color = color; api.parts = []; api.alive = true; Object.assign(tilt, { x: 0, z: 0, vx: 0, vz: 0 });
+    const root = new THREE.Group(); root.position.set(x, y, z); root.rotation.y = rand(-0.3, 0.3); root.scale.setScalar(api.boss ? 1.08 : 0.88); scene.add(root); api.root = root;
+    const wob = new THREE.Group(); root.add(wob); api.wob = wob; // tilts when hit; the pedestal stays put
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.14, 16), mat); neck.position.set(0, 1.47, 0); neck.castShadow = true; wob.add(neck); api.neck = neck; neck.visible = !scanHead; // the scan has its own neck
+    for (const P0 of PARTS) {
+      const P = api.boss ? { ...P0, tough: P0.tough * 2.2, pts: P0.pts * 2 } : P0;
       const geo = smoothGeo(P.geo()); if (P.scale) geo.scale(...P.scale); // bake shape into the geometry so dents stay round
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(...P.pos); if (P.rot) mesh.rotation.set(...P.rot);
-      mesh.castShadow = mesh.receiveShadow = true; root.add(mesh); S.outline(mesh, 1.03);
+      mesh.position.set(...(scanHead && P.scanPos ? P.scanPos : P.pos)); if (P.rot) mesh.rotation.set(...P.rot);
+      mesh.castShadow = mesh.receiveShadow = true; wob.add(mesh); S.outline(mesh, 1.03);
       root.updateMatrixWorld(true);
-      geo.computeBoundingBox(); const half = geo.boundingBox.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+      geo.computeBoundingBox(); const half = geo.boundingBox.getSize(new THREE.Vector3()).multiplyScalar(0.5 * root.scale.x);
       const wp = mesh.getWorldPosition(new THREE.Vector3()), wq = mesh.getWorldQuaternion(new THREE.Quaternion());
       const body = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(half.x, half.y, half.z)), position: new CANNON.Vec3(wp.x, wp.y, wp.z) });
       body.quaternion.set(wq.x, wq.y, wq.z, wq.w); world.addBody(body);
@@ -58,7 +134,7 @@ export function createClayFigure({ scene, world, S, items, x, y, z, onLoose }) {
   function dent(part, point, dir, radius, depth) {
     const m = part.mesh, geo = m.geometry, pos = geo.attributes.position, nor = geo.attributes.normal, orig = part.orig;
     inv.copy(m.matrixWorld).invert(); lp.copy(point).applyMatrix4(inv); ld.copy(dir).transformDirection(inv);
-    const r = radius, dp = depth;
+    const r = radius * (part.name === 'head' ? 0.65 : 1), dp = depth; // tighter dents on the face
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i); const d = v.distanceTo(lp);
       if (d < r) { const f = 1 - d / r, k = f * f * (3 - 2 * f); v.addScaledVector(ld, dp * k); }
@@ -75,7 +151,7 @@ export function createClayFigure({ scene, world, S, items, x, y, z, onLoose }) {
     if (part.off) return; part.off = true; world.removeBody(part.body);
     const m = part.mesh, wp = m.getWorldPosition(new THREE.Vector3()), wq = m.getWorldQuaternion(new THREE.Quaternion()), ws = m.getWorldScale(new THREE.Vector3());
     scene.attach(m); m.position.copy(wp); m.quaternion.copy(wq); m.scale.copy(ws);
-    const body = new CANNON.Body({ mass: part.name === 'torso' ? 6 : 2, shape: new CANNON.Box(new CANNON.Vec3(part.half.x, part.half.y, part.half.z)), position: new CANNON.Vec3(wp.x, wp.y, wp.z) });
+    const body = new CANNON.Body({ mass: part.name === 'torso' ? 6 : 2, shape: new CANNON.Box(new CANNON.Vec3(part.half.x, part.half.y, part.half.z)), position: new CANNON.Vec3(wp.x, wp.y, wp.z) }); // half already includes the boss scale
     body.quaternion.set(wq.x, wq.y, wq.z, wq.w); body.linearDamping = 0.1; body.angularDamping = 0.3;
     body.velocity.set(dir.x * speed + rand(-1, 1), Math.max(1, dir.y * speed) + rand(0.5, 2), dir.z * speed + rand(-1, 1));
     body.angularVelocity.set(rand(-6, 6), rand(-6, 6), rand(-6, 6));
@@ -101,18 +177,29 @@ export function createClayFigure({ scene, world, S, items, x, y, z, onLoose }) {
     else dent(part, P, dir, 0.1, 0.06);
     part.damage += (DMG[type] || 0.4) / part.tough;
     blobs(P, dir, type === 'slap' ? 2 : type === 'punch' ? 3 : 6);
-    const res = { point: P, part: part.name, lost: [], collapsed: false };
+    const push = { punch: 0.9, slap: 0.6, kick: 1.8, weapon: 1.2, heavy: 2.2 }[type] || 1, w = api.boss ? 0.5 : 1; // sway away from the hit
+    tilt.vx += dir.z * push * w; tilt.vz -= dir.x * push * w;
+    const res = { point: P, part: part.name, lost: [], collapsed: false, voice: null };
+    if (performance.now() - lastVoice > 380 && Math.random() < 0.7) { res.voice = api.boss ? 'boss' : 'oof'; lastVoice = performance.now(); }
     if (part.damage >= 1) {
       if (part.name === 'torso') {
         for (const p of api.parts) if (!p.off) { loosen(p, dir, 3); res.lost.push(p); }
         scene.attach(api.neck); api.neck.visible = false;
-        res.collapsed = true; api.alive = false; api.respawnAt = performance.now() + 3000;
-      } else { loosen(part, dir, part.name === 'head' ? 5 : 4); res.lost.push(part); }
+        res.collapsed = true; res.voice = 'groan'; api.alive = false; api.respawnAt = performance.now() + 3000;
+      } else { loosen(part, dir, part.name === 'head' ? 5 : 4); res.lost.push(part); res.voice = 'ow'; lastVoice = performance.now(); }
     }
     return res;
   };
 
-  api.update = () => { if (!api.alive && api.respawnAt && performance.now() > api.respawnAt) { api.respawnAt = 0; scene.remove(api.root); build(); return true; } return false; };
+  // returns 'new' or 'boss' on the frame a fresh figure appears
+  api.update = (dt = 1 / 60) => {
+    const k = 60, c = 5;
+    tilt.vx += (-k * tilt.x - c * tilt.vx) * dt; tilt.vz += (-k * tilt.z - c * tilt.vz) * dt;
+    tilt.x = Math.max(-0.35, Math.min(0.35, tilt.x + tilt.vx * dt)); tilt.z = Math.max(-0.35, Math.min(0.35, tilt.z + tilt.vz * dt));
+    if (api.wob) api.wob.rotation.set(tilt.x, 0, tilt.z);
+    if (!api.alive && api.respawnAt && performance.now() > api.respawnAt) { api.respawnAt = 0; scene.remove(api.root); build(); return api.boss ? 'boss' : 'new'; }
+    return null;
+  };
   build();
   return api;
 }
