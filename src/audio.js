@@ -13,6 +13,7 @@ export function initAudio() {
   noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
   const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   setInterval(musicTick, 50);
+  loadSamples();
 }
 export const suspend = () => ac && ac.suspend();
 export const resume = () => ac && ac.resume();
@@ -30,7 +31,7 @@ function tn(t, f, dur, g, type = 'sine', bus = sfx, f2) {
 }
 const now = () => ac.currentTime;
 
-export const SFX = {
+const SYN = {
   glass(i = 1) { if (!ac) return; const t = now(); nz(t, 0.5, 'highpass', 2500, 0.7, 0.8 * i); nz(t, 0.08, 'bandpass', 5000, 1, i); tn(t, 95, 0.12, 0.6 * i, 'sine', sfx, 45);
     for (let k = 0; k < 9; k++) tn(t + rand(0, 0.4), rand(2600, 7000), rand(0.06, 0.3), 0.08 * i); },
   ceramic(i = 1) { if (!ac) return; const t = now(); nz(t, 0.32, 'bandpass', 1700, 0.8, 0.9 * i); nz(t, 0.06, 'highpass', 3000, 0.5, 0.7 * i); tn(t, 140, 0.13, 0.7 * i, 'sine', sfx, 55);
@@ -45,10 +46,10 @@ export const SFX = {
     for (let k = 0; k < 8; k++) nz(t + rand(0.03, 0.4), 0.05, 'bandpass', rand(900, 2500), 2, 0.3 * i); },
   plastic(i = 1) { if (!ac) return; const t = now(); nz(t, 0.18, 'bandpass', 1300, 1.2, 0.9 * i); tn(t, 160, 0.12, 0.6 * i, 'sine', sfx, 70);
     for (let k = 0; k < 3; k++) nz(t + rand(0.02, 0.15), 0.03, 'highpass', 3000, 1, 0.3 * i); },
-  photo(i = 1) { SFX.wood(i * 0.8); SFX.plastic(i * 0.5); },
+  photo(i = 1) { SYN.wood(i * 0.8); SYN.plastic(i * 0.5); },
   metal(i = 1) { if (!ac) return; const t = now(); nz(t, 0.05, 'highpass', 2000, 0.8, 0.6 * i);
     for (const f of [523, 1187, 1873, 2711, 3402]) tn(t, f * rand(0.97, 1.03), rand(0.5, 1.2), 0.07 * i); tn(t, 180, 0.2, 0.5 * i); },
-  thud(kind, i = 1) { if (!ac) return; if (kind === 'metal') return SFX.metal(i); const t = now();
+  thud(kind, i = 1) { if (!ac) return; if (kind === 'metal') return SYN.metal(i); const t = now();
     tn(t, kind === 'electronics' ? 120 : 200, 0.14, 0.7 * i, 'sine', sfx, 55); nz(t, 0.1, 'bandpass', kind === 'glass' ? 3200 : 900, 1, 0.5 * i);
     if (kind === 'electronics') for (const f of [420, 690, 1100]) tn(t, f, 0.25, 0.03 * i, 'square'); },
   whoosh(heavy) { if (!ac) return; nz(now(), heavy ? 0.35 : 0.22, 'bandpass', 250, 1.4, 0.35, sfx, heavy ? 900 : 1700); },
@@ -62,6 +63,38 @@ export const SFX = {
   restock() { if (!ac) return; const t = now(); tn(t, 440, 0.1, 0.15, 'square'); tn(t + 0.1, 660, 0.15, 0.15, 'square'); },
   unlock() { if (!ac) return; const t = now(); [523, 659, 784, 1047].forEach((f, k) => tn(t + k * 0.09, f, 0.25, 0.15, 'square')); },
   buzzer() { if (!ac) return; const t = now(); tn(t, 110, 0.9, 0.5, 'sawtooth'); tn(t, 116, 0.9, 0.4, 'sawtooth'); },
+};
+
+// recorded CC0 samples (assets/sounds, see CREDITS.txt); generated sounds are the fallback until they load
+const SETS = { glass: 7, glasshit: 7, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 11, thud: 5, punch: 5, slap: 5, soft: 5, clink: 10, debris: 4, plastic: 5 };
+const bufs = {};
+function loadSamples() {
+  for (const [set, n] of Object.entries(SETS)) for (let i = 0; i < n; i++)
+    fetch(`assets/sounds/${set}_${i}.mp3`).then(r => r.arrayBuffer()).then(b => ac.decodeAudioData(b)).then(d => (bufs[set] ??= []).push(d)).catch(() => {});
+}
+const has = k => bufs[k] && bufs[k].length;
+function smp(set, gain = 1, rate = 1, delay = 0) {
+  if (!ac || !has(set)) return false;
+  const s = ac.createBufferSource(), l = bufs[set]; s.buffer = l[Math.floor(Math.random() * l.length)]; s.playbackRate.value = rate * rand(0.92, 1.08);
+  const g = ac.createGain(); g.gain.value = gain; s.connect(g).connect(sfx); s.start(ac.currentTime + delay); return true;
+}
+function tinkle(n, i) { const t = now(); for (let k = 0; k < n; k++) tn(t + rand(0.05, 0.45), rand(3000, 7000), rand(0.05, 0.2), 0.035 * i); }
+export const SFX = {
+  ...SYN,
+  glass(i = 1) { if (!smp('glass', i)) return SYN.glass(i); smp('debris', 0.45 * i, 1, 0.12); tinkle(4, i); },
+  ceramic(i = 1) { if (!smp('ceramic', i)) return SYN.ceramic(i); smp('crash', 0.35 * i, 1.3); tinkle(3, i * 0.7); },
+  electronics(i = 1) { if (!smp('crash', i, 0.85)) return SYN.electronics(i); smp('metal', 0.35 * i, 0.8); const t = now(); for (let k = 0; k < 4; k++) nz(t + rand(0.05, 0.35), 0.04, 'highpass', 4000, 1, 0.25 * i); },
+  wood(i = 1) { smp('wood', i) || SYN.wood(i); },
+  stone(i = 1) { smp('stone', i) || SYN.stone(i); },
+  plastic(i = 1) { smp('plastic', i) || SYN.plastic(i); },
+  photo(i = 1) { if (!smp('wood', 0.7 * i, 1.2)) return SYN.photo(i); smp('slap', 0.4 * i, 1.3); },
+  metal(i = 1) { smp('metal', i) || SYN.metal(i); },
+  thud(kind, i = 1) { const k = kind === 'metal' ? 'metal' : kind === 'glass' || kind === 'ceramic' ? 'glasshit' : 'thud'; smp(k, i) || SYN.thud(kind, i); },
+  clink(kind, i = 1) { const ok = kind === 'glass' || kind === 'ceramic' ? smp('clink', 0.5 * i) : kind === 'metal' ? smp('metal', 0.25 * i, 1.4) : smp('thud', 0.25 * i, 1.3); if (!ok) SYN.clink(kind, i); },
+  punch(i = 1) { smp('punch', i) || SYN.thud('wood', i); },
+  kick(i = 1) { smp('punch', i, 0.75) || SYN.thud('wood', i); },
+  slap(i = 1) { if (!ac) return; smp('slap', i, 1.3) || SYN.thud('plastic', i); nz(now(), 0.05, 'highpass', 2500, 0.7, 0.5 * i); },
+  clay(i = 1) { if (!ac) return; smp('soft', i, rand(0.8, 1)); nz(now(), 0.22, 'lowpass', 700, 1, 0.5 * i, sfx, 180); },
 };
 
 // heavy loop: kick, snare, hats, grungy bass

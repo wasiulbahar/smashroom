@@ -2,25 +2,27 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { canvasTex } from './style.js';
+import { loadModel, fitInto } from './models.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
 
 function kit({ scene, world, S, items }) {
-  const K = { slots: [], obstacles: [], updates: [] };
+  const K = { slots: [], obstacles: [], updates: [], statics: [] };
   const R = S.realistic;
   K.v = (realistic, stylized) => R ? realistic : stylized;
   K.box = (w, h, d, mat, x, y, z, o = {}) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); mesh.position.set(x, y, z); mesh.rotation.set(o.rx || 0, o.ry || 0, 0);
     mesh.castShadow = o.cast ?? true; mesh.receiveShadow = true; scene.add(mesh);
     if (o.outline) S.outline(mesh, 1.02);
+    if (o.phys !== false) K.statics.push(mesh);
     if (o.phys !== false) { const b = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2)), position: new CANNON.Vec3(x, y, z) });
       b.quaternion.setFromEuler(o.rx || 0, o.ry || 0, 0); world.addBody(b); }
     return mesh;
   };
   K.cyl = (r, h, mat, x, y, z, o = {}) => {
     const mesh = new THREE.Mesh(new THREE.CylinderGeometry(o.rt ?? r, r, h, o.seg || 20), mat); mesh.position.set(x, y, z); mesh.rotation.set(o.rx || 0, 0, o.rz || 0);
-    mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh); if (o.outline !== false) S.outline(mesh, 1.03);
+    mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh); if (o.outline !== false) S.outline(mesh, 1.03); if (o.phys !== false) K.statics.push(mesh);
     if (o.phys !== false) { const b = new CANNON.Body({ mass: 0, shape: new CANNON.Cylinder(o.rt ?? r, r, h, 12), position: new CANNON.Vec3(x, y, z) }); b.quaternion.setFromEuler(o.rx || 0, 0, o.rz || 0); world.addBody(b); }
     return mesh;
   };
@@ -95,6 +97,15 @@ function kit({ scene, world, S, items }) {
     m.geometry.translate(0, -len / 2, 0); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); scene.add(m);
   };
   K.fixed = (key, x, y, z, ry = 0, o = {}) => items.add(key, x, y, z, ry, o);
+  // realistic only: drop in a CC0 model of height h standing at (x, y, z); optionally hide the simple stand-ins it replaces
+  K.model = (id, x, y, z, o = {}) => {
+    if (!R) return;
+    loadModel(id).then(src => {
+      if (!src) return;
+      const w = o.w || 1, d = o.d || 1, box = new THREE.Box3(new THREE.Vector3(x - w / 2, y, z - d / 2), new THREE.Vector3(x + w / 2, y + o.h, z + d / 2));
+      scene.add(fitInto(src, box, o.mode || 'height', o.ry || 0)); (o.hide || []).forEach(m => { m.visible = false; m.children.forEach(c => c.visible = false); });
+    });
+  };
   return K;
 }
 
@@ -130,8 +141,9 @@ export const SCENES = {
       K.table(-3.4, -1.6, 1.3, 1.3, 0.75, wood, rust);
       K.table(3.3, -2.4, 1.2, 1, 0.8, steel, rust);
       K.shelf(0, -4.68, 3.7, 0.55, [1.25, 2.05], rust, rust, 'x');
-      K.cyl(0.32, 1, rust, 3.6, 0.5, 1.6); K.obstacles.push([3.2, 4, 1.2, 2]); K.slots.push({ x: 3.6, y: 1, z: 1.6, k: 'shelf', max: 0.35 });
-      K.cyl(0.32, 1, rust, -3.9, 0.5, 2.2); K.obstacles.push([-4.3, -3.5, 1.8, 2.6]);
+      const dr1 = K.cyl(0.32, 1, rust, 3.6, 0.5, 1.6); K.obstacles.push([3.2, 4, 1.2, 2]); K.slots.push({ x: 3.6, y: 1, z: 1.6, k: 'shelf', max: 0.35 });
+      const dr2 = K.cyl(0.32, 1, rust, -3.9, 0.5, 2.2); K.obstacles.push([-4.3, -3.5, 1.8, 2.6]);
+      K.model('Barrel_01', 3.6, 0, 1.6, { h: 1, w: 0.7, d: 0.7, hide: [dr1] }); K.model('Barrel_01', -3.9, 0, 2.2, { h: 1, w: 0.7, d: 0.7, hide: [dr2] });
       K.floor([[-3.6, 0.4], [3.4, -0.3], [-2.3, -3.7], [2.4, -3.8], [-3.8, 3.4], [1.9, 0.3], [-1.6, 0.2], [3.6, 3.4], [0.2, -3.6]]);
       K.decal(spray('SMASH', '#e8202c', 170), 4.4, 1.3, -0.3, 3, -4.88, 0);
       K.decal(spray('RAGE', '#2f9bff', 150), 3.2, 1, -4.88, 2.5, 0.8, Math.PI / 2);
@@ -175,6 +187,7 @@ export const SCENES = {
       K.table(3.9, -2.6, 1.2, 1.2, 0.15, wood, wood, { solid: true });
       K.table(3.8, 3.2, 1.4, 1, 0.75, wood, rust);
       K.floor([[-1.5, 0.3], [1.5, 0], [-4, 1.5], [4.2, -0.5], [0.5, -4.4], [-4, 3.8], [1, 3.6], [-1.2, -4.3]]);
+      for (const [x, z, ry] of [[-4.6, -4.4, 0.3], [-4.0, -4.6, -0.2], [4.6, 1.8, 0.5]]) { const b = K.box(0.5, 0.4, 0.4, S.mat('wood', 0xb08a5a), x, 0.2, z, { ry, outline: true }); K.model('cardboard_box_01', x, 0, z, { h: 0.4, w: 0.55, d: 0.45, ry, mode: 'inside', hide: [b] }); }
       K.decal(spray('KEEP OUT', '#d8d0c0', 110), 3.6, 1, 0, 2.9, 5.39, Math.PI);
       K.decal(spray('X', '#e8202c', 160, 300, 260), 1, 0.9, -5.39, 1.6, -2, Math.PI / 2);
       K.decal(spray('WHO WAS HERE', '#2f9bff', 80), 3, 0.8, 5.39, 1.5, 1.5, -Math.PI / 2);
@@ -199,7 +212,9 @@ export const SCENES = {
       K.table(3.9, 1.5, 1, 1.6, 0.85, wood, dark, { solid: true });
       K.fixed('mirror', 4.42, 1.8, -1.6, -Math.PI / 2, { w: 0.7, h: 1 });
       K.fixed('portrait', -4.42, 1.9, 2.4, Math.PI / 2); K.fixed('portrait', 4.42, 1.9, 1.3, -Math.PI / 2); K.fixed('portrait', -2.4, 2.2, -4.43, 0); K.fixed('portrait', 2.4, 2.2, -4.43, 0);
-      K.floor([[-2.2, 1.8], [2.2, 2.6], [-3, -3.4], [3, -3.3], [1.8, 0.8], [-1.6, 3.4]]);
+      K.floor([[-2.2, 1.8], [2.2, 2.6], [-3, -3.4], [1.8, 0.8], [-1.6, 3.4]]);
+      const gc = K.box(0.5, 2.1, 0.4, dark, -3.95, 1.05, 3.7, { outline: true }); K.obstacles.push([-4.3, -3.6, 3.4, 4]); K.model('vintage_grandfather_clock_01', -3.95, 0, 3.7, { h: 2.1, w: 0.6, d: 0.5, ry: Math.PI / 2, mode: 'inside', hide: [gc] });
+      const cb = K.box(0.55, 1.8, 1.1, dark, 4.15, 0.9, -3.2, { outline: true }); K.obstacles.push([3.8, 4.5, -3.8, -2.6]); K.model('GothicCabinet_01', 4.15, 0, -3.2, { h: 1.8, w: 0.6, d: 1.2, ry: -Math.PI / 2, mode: 'inside', hide: [cb] });
       const flames = [];
       for (const [x, y, z] of [[-1, 1.75, -4.1], [1, 1.75, -4.1], [0, 1.1, -0.8], [3.9, 1.15, 1.5]]) {
         const c = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.16, 8), S.mat('plastic', 0xf3ead8)); c.position.set(x, y - 0.12, z); scene.add(c);
@@ -248,6 +263,7 @@ export const SCENES = {
       const wb = canvasTex(512, 300, (g) => { g.fillStyle = '#fbfbf8'; g.fillRect(0, 0, 512, 300); g.strokeStyle = '#2050c0'; g.lineWidth = 4; g.beginPath(); g.moveTo(40, 240); g.lineTo(140, 180); g.lineTo(240, 200); g.lineTo(340, 90); g.lineTo(460, 50); g.stroke();
         g.fillStyle = '#c03030'; g.font = '34px Rubik, Arial'; g.fillText('GROWTH!!', 300, 260); g.fillStyle = '#222'; g.font = '22px Rubik, Arial'; g.fillText('Action items: ???', 40, 50); });
       K.decal(wb, 2.4, 1.4, 2.2, 1.7, -4.98, 0);
+      K.model('WetFloorSign_01', 1.2, 0, 0.6, { h: 0.62, w: 0.4, d: 0.4, ry: 0.4 });
       K.updates.push(t => { const p = panels[4]; const on = Math.sin(t * 37) > -0.9 || Math.random() > 0.3; p.visible = on; });
       return { ...K, pool: ['monitor', 'monitor', 'keyboard', 'keyboard', 'mug', 'mug', 'phone', 'laptop', 'printer', 'lamp', 'flowerpot', 'watercooler', 'speaker', 'frame', 'clock', 'chair', 'crt'], start: { x: 0, z: 3.6 }, amb: 'office', photoSpots: [[-0.8, -4.3, 0], [4.2, -2.6, -0.6]] };
     },
@@ -299,9 +315,11 @@ export const SCENES = {
         K.fixed('carlight', cx + s * 0.65, 0.72, cz - 2.12, 0, { w: 0.3, h: 0.12, glow: true, color: 0xff2a2a });
         K.fixed('carmirror', cx + s * 1.0, 0.95, cz + 0.55, 0); }
       const rust = S.surface('rust', 1, 1), wood = S.surface('wood', 1, 1);
-      for (const [x, z] of [[-6, -6], [-5.2, -6.2], [-6.3, -5.1]]) for (let i = 0; i < 3; i++) { const t = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.13, 10, 20), S.mat('plastic', 0x151518)); t.rotation.x = Math.PI / 2; t.position.set(x, 0.13 + i * 0.25, z); t.castShadow = true; scene.add(t); }
+      for (const [x, z] of [[-6, -6], [-5.2, -6.2], [-6.3, -5.1]]) for (let i = 0; i < 3; i++) { const t = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.13, 10, 20), S.mat('plastic', 0x151518)); t.rotation.x = Math.PI / 2; t.position.set(x, 0.13 + i * 0.25, z); t.castShadow = true; scene.add(t);
+        K.model('old_tyre', x, i * 0.25, z, { h: 0.26, w: 0.92, d: 0.92, mode: 'inside', ry: Math.random() * 3, hide: [t] }); }
       K.obstacles.push([-6.8, -4.7, -6.7, -4.6]);
-      for (const [x, z] of [[6.5, 2], [6.5, 2.8], [5.8, 2.4]]) K.cyl(0.3, 0.95, rust, x, 0.475, z);
+      for (const [x, z] of [[6.5, 2], [6.5, 2.8], [5.8, 2.4]]) { const b = K.cyl(0.3, 0.95, rust, x, 0.475, z); K.model('Barrel_01', x, 0, z, { h: 0.95, w: 0.65, d: 0.65, hide: [b] }); }
+      if (S.realistic) { K.box(2, 1.5, 4.3, S.mat('fabric', 0x555555), 6.3, 0.75, 6, { cast: false }).visible = false; K.obstacles.push([5.2, 7.4, 3.8, 8.2]); K.model('covered_car', 6.3, 0, 6, { h: 1.5, w: 2.1, d: 4.4, mode: 'inside', ry: Math.PI / 2 }); }
       K.obstacles.push([5.4, 7, 1.6, 3.2]);
       K.table(-5, 1, 1.2, 1, 0.15, wood, wood, { solid: true });
       K.table(-5, 3.5, 1.2, 1, 0.15, wood, wood, { solid: true });
@@ -310,6 +328,26 @@ export const SCENES = {
       K.floor([[-2.8, 1], [2.8, 0.5], [-3, -4.5], [2.8, -5.5], [-7, -1], [7, -2], [0, 4.5], [-2, 6.5], [2.5, 6.8], [-7, 6]]);
       K.decal(spray('JUNK YARD', '#f4e6c8', 110), 4, 1.1, 0, 2, -W / 2 + 0.16, 0);
       return { ...K, pool: ['tv', 'crt', 'crt', 'monitor', 'bottle', 'bottle', 'cinder', 'crate', 'speaker', 'microwave', 'chair', 'jar', 'vase', 'pot', 'lamp'], start: { x: 0, z: 5 }, amb: 'caryard', photoSpots: [[-3.5, -1.5, 0.4], [3.5, -1.5, -0.4]] };
+    },
+  },
+  studio: {
+    name: 'Clay studio', desc: 'A life-size clay figure to punch, slap and kick. Dents stay, limbs come off.', exposure: 1, env: 0.5,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx);
+      K.room(9, 9, 3.2, 'oldWood', 'plaster', 'plaster', { wallTint: K.v(0xe8dfd0, 0xcfc6e0) });
+      scene.background = new THREE.Color(K.v(0x15120f, 0x231a33)); scene.fog = new THREE.Fog(K.v(0x15120f, 0x231a33), 10, 22);
+      const stone = S.surface('blockWall', 1, 1, 0xe0d8cc), wood = S.surface('wood', 1, 1), steel = S.surface('steel', 1, 1);
+      K.box(1.1, 0.5, 1.1, stone, 0, 0.25, -1.2, { outline: true }); K.obstacles.push([-0.6, 0.6, -1.8, -0.6]);
+      K.shelf(-4.2, -0.6, 3.2, 0.45, [0.9, 1.6, 2.3], wood, wood, 'z');
+      K.shelf(4.2, -0.6, 3.2, 0.45, [0.9, 1.6, 2.3], wood, wood, 'z');
+      K.table(0, -3.9, 3, 0.8, 0.9, wood, steel);
+      K.floor([[-2.6, 1.6], [2.6, 1.6], [-2.8, -3], [2.8, -3]]);
+      K.decal(spray('HANDS ONLY', '#c96f3b', 110), 3.6, 1, 0, 2.5, -4.48, 0, 0.9);
+      K.hemi(0xfff0e0, 0x302820, K.v(0.35, 0.9));
+      K.light('spot', 0xfff2e0, K.v(28, 22), 0.8, 3.1, 0.6, { target: [0, 1.4, -1.2], angle: 0.7, pen: 0.6, shadow: true });
+      for (const x of [-2.6, 2.6]) K.bulb(x, 2.7, -0.6, 0xffd9a0, K.v(8, 4), { cage: true, cord: 0.4 });
+      K.dust(200, K.bounds, 3);
+      return { ...K, pool: ['vase', 'vase', 'pot', 'bowl', 'jug', 'plate', 'platestack', 'mug', 'flowerpot', 'teapot'], start: { x: 0, z: 2.2 }, clay: { x: 0, y: 0.5, z: -1.2 }, photoSpots: [[-2.4, -3.2, 0.3], [2.4, -3.2, -0.3]] };
     },
   },
 };

@@ -94,6 +94,7 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
 .tbtn{position:absolute;right:22px;border-radius:50%;font-family:Bungee,Impact,sans-serif;color:var(--text);border:4px solid var(--ink);box-shadow:4px 4px 0 var(--ink)}
 #smashBtn{bottom:56px;width:96px;height:96px;font-size:16px;background:var(--pink)}
 #grabBtn{bottom:166px;width:74px;height:74px;font-size:13px;background:var(--teal);color:var(--ink)}
+#kickBtn{bottom:66px;right:130px;width:70px;height:70px;font-size:13px;background:var(--yellow);color:var(--ink)}
 #touchHint{position:absolute;left:16px;bottom:90px;color:var(--muted);font-size:12px;max-width:40vw}
 </style>
 <script type="importmap">{"imports":{
@@ -119,6 +120,7 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
   <div id="joy" class="hidden"><div id="knob"></div></div>
   <div id="touchHint">Left side: move · Right side: look</div>
   <button class="tbtn" id="grabBtn">Grab</button>
+  <button class="tbtn hidden" id="kickBtn">Kick</button>
   <button class="tbtn" id="smashBtn">Smash</button>
 </div>
 
@@ -129,7 +131,7 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
     <div class="modes">
       <button class="card mode" data-mode="stylized">
         <b>Stylized</b>
-        <ul><li>Bright cartoon look with bold outlines</li><li>All six rooms, every weapon</li><li>Smooth and light</li></ul>
+        <ul><li>Bright cartoon look with bold outlines</li><li>All seven rooms, every weapon</li><li>Smooth and light</li></ul>
         <div class="req">Runs well on almost anything, including phones and older laptops.</div>
       </button>
       <button class="card mode real" data-mode="realistic">
@@ -168,7 +170,8 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
     </div>
     <p class="keys" id="keysDesk">
       <kbd>WASD</kbd> move · <kbd>Mouse</kbd> look · <kbd>Click</kbd> swing (hold to keep swinging)<br>
-      <kbd>E</kbd> or <kbd>Right-click</kbd> grab what's highlighted · press again to throw · or <kbd>Click</kbd> to throw (hold for power) · <kbd>Q</kbd> drop · <kbd>Esc</kbd> pause
+      <kbd>E</kbd> or <kbd>Right-click</kbd> grab what's highlighted · press again to throw · or <kbd>Click</kbd> to throw (hold for power) · <kbd>Q</kbd> drop · <kbd>Esc</kbd> pause<br>
+      Bare hands: <kbd>Click</kbd> punch · <kbd>F</kbd> slap · <kbd>Space</kbd> kick
     </p>
     <p class="note" id="lifetime"></p>
   </div>

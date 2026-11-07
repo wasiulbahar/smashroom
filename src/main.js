@@ -4,6 +4,8 @@ import { makeStyle, detectGPU } from './style.js';
 import { SCENES } from './scenes.js';
 import { createItems, DEFS } from './items.js';
 import * as A from './audio.js';
+import { preloadItemModels } from './models.js';
+import { createClayFigure } from './clay.js';
 
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -21,6 +23,7 @@ save.points ??= 0; save.smashed ??= 0; save.best ??= {};
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
 
 const WEAPONS = {
+  hands: { name: 'Bare hands', desc: 'Punch (click), slap (F), kick (Space). Made for the clay figure.', power: 1, reach: 1.6, cone: 0.82, speed: 0.22, knock: 5, hands: true },
   bat: { name: 'Baseball bat', desc: 'Balanced, quick. Sends things flying.', power: 1, reach: 2.2, cone: 0.8, speed: 0.34, knock: 9 },
   hammer: { name: 'Sledgehammer', desc: 'Slow but brutal. Hits everything in front.', power: 2, reach: 2.0, cone: 0.7, speed: 0.6, knock: 7, area: true, heavy: true },
   crowbar: { name: 'Crowbar', desc: 'Fastest swing. Extra damage to electronics.', power: 1, reach: 2.4, cone: 0.86, speed: 0.26, knock: 8, bonus: 'electronics' },
@@ -35,7 +38,7 @@ const nameOf = k => NAMES[k] || k;
 
 // ---------- world
 let opts = { mode: null, scene: 'classic', weapon: 'bat', quality: 'auto', music: true };
-let S, scene, world, camera, I, room, pivot, weaponMesh, photoTex = null, W = WEAPONS.bat;
+let S, scene, world, camera, I, room, pivot, weaponMesh, photoTex = null, W = WEAPONS.bat, figure = null;
 const qualityFor = () => opts.mode !== 'realistic' ? 'medium' : opts.quality === 'auto' ? gpu.tier : opts.quality;
 
 function disposeScene(sc) {
@@ -54,11 +57,12 @@ function build() {
   I = createItems({ scene, world, S, onBreak, onClink });
   I.photo = photoTex;
   room = def.build({ scene, world, S, items: I });
+  figure = room.clay ? createClayFigure({ scene, world, S, items: I, ...room.clay, onLoose: c => I.chunks.push(c) }) : null;
   S.setup(scene, camera, def);
   pivot = new THREE.Group(); camera.add(pivot); equip(opts.weapon);
   I.batch(room.pool, room.slots, batchSize());
   spawnPhotos();
-  held = null; hlTarget = null; hlMeshes = []; charging = false; swingT = -1;
+  held = null; hlTarget = null; hlMeshes = []; charging = false; swingT = -1; marks = [];
 }
 const batchSize = () => Math.min(24, Math.max(14, Math.ceil(room.slots.length * 0.45)));
 function spawnPhotos() {
@@ -77,8 +81,20 @@ function buildWeapon(key) {
   if (key === 'pan') { add(C(0.018, 0.018, 0.4), 'plastic', 0x1a1a1a, 0.2); const p = add(C(0.17, 0.15, 0.04, 24), 'metal', 0x2b2b30, 0.55); p.rotation.x = Math.PI / 2; }
   if (key === 'golf') { add(C(0.008, 0.012, 0.95, 8), 'metal', 0xb8bcc4, 0.47); add(C(0.016, 0.016, 0.24), 'plastic', 0x222222, 0.12); add(B(0.1, 0.04, 0.03), 'metal', 0xd0d4dc, 0.95, 0.04); }
   if (key === 'wrench') { add(B(0.05, 0.6, 0.03), 'metal', 0xc0392b, 0.3); add(B(0.15, 0.12, 0.04), 'metal', 0x8a9099, 0.64); add(B(0.05, 0.08, 0.04), 'metal', 0x8a9099, 0.73, -0.05); }
+  if (key === 'hands') {
+    const skin = S.mat('clay', 0xe0ac8a), sleeve = S.mat('fabric', 0x2b2b3a);
+    const fist = side => { const f = new THREE.Group(), k = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 12), skin); k.scale.set(1, 0.85, 1.2); f.add(k);
+      const th = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), skin); th.position.set(-side * 0.045, -0.01, -0.02); f.add(th);
+      const sl = new THREE.Mesh(C(0.05, 0.06, 0.4), sleeve); sl.rotation.x = Math.PI / 2; sl.position.z = 0.24; f.add(sl); return f; };
+    const L = fist(-1), R = fist(1), palm = new THREE.Group(), leg = new THREE.Group();
+    palm.add(new THREE.Mesh(B(0.1, 0.17, 0.025), skin)); for (let i = 0; i < 4; i++) { const fg = new THREE.Mesh(B(0.02, 0.08, 0.022), skin); fg.position.set((i - 1.5) * 0.024, 0.12, 0); palm.add(fg); }
+    const ps = new THREE.Mesh(C(0.05, 0.06, 0.4), sleeve); ps.position.set(0, -0.28, 0.02); palm.add(ps);
+    const shin = new THREE.Mesh(C(0.07, 0.08, 0.7), S.mat('fabric', 0x2a4a7a)); shin.position.y = -0.35; leg.add(shin);
+    const shoe = new THREE.Mesh(B(0.12, 0.1, 0.28), S.mat('plastic', 0x1a1a1a)); shoe.position.set(0, -0.72, -0.07); leg.add(shoe);
+    palm.visible = leg.visible = false; g.add(L, R, palm, leg); g.userData = { L, R, palm, leg };
+  }
   g.traverse(m => { if (m.isMesh) m.castShadow = false; });
-  return S.outline(g, 1.08);
+  return S.outline(g, key === 'hands' ? 1.04 : 1.08);
 }
 function equip(key) { if (weaponMesh) pivot.remove(weaponMesh); opts.weapon = key; W = WEAPONS[key]; weaponMesh = buildWeapon(key); pivot.add(weaponMesh); }
 
@@ -106,39 +122,75 @@ function onBreak(it, fromHit) {
   const rage = performance.now() < rageUntil;
   const mult = Math.min(4, 1 + Math.floor(combo / 4) * 0.5) * (rage ? 2 : 1) * (it.thrown ? 1.5 : 1);
   addScore(Math.round(d.pts * mult), p, d.pts >= 30 || it.thrown ? 'big' : '');
-  if (it.thrown) popup('Throw!', { x: p.x, y: p.y + 0.35, z: p.z }, 'small');
+  if (it.thrown) { popup('Throw!', { x: p.x, y: p.y + 0.35, z: p.z }, 'small'); markNear(p, it.key === 'watercooler' ? 'splat' : 'crack', 0.35, it.key === 'watercooler' ? 0x5aa0d0 : 0xffffff); }
   if (!rage) { rageMeter += 6 + Math.min(combo, 10); if (rageMeter >= 100) startRage(); }
 }
 
-function startSwing() { if (swingT >= 0 || state !== 'play' || paused || held) return; swingT = 0; hitDone = false; A.SFX.whoosh(W.heavy); }
+let atk = 'swing', side = 1, CW = W, atkCount = 0;
+const ATTACK = { punch: { speed: 0.22, reach: 1.6, power: 1, knock: 5, cone: 0.82 }, slap: { speed: 0.3, reach: 1.5, power: 1, knock: 3, cone: 0.72 }, kick: { speed: 0.45, reach: 1.9, power: 2, knock: 10, cone: 0.72 } };
+const defaultAttack = () => W.hands ? (isTouch && ++atkCount % 3 === 0 ? 'slap' : 'punch') : 'swing';
+function startSwing(type = defaultAttack()) {
+  if (swingT >= 0 || state !== 'play' || paused || held) return;
+  if (type !== 'swing' && !W.hands) type = 'swing';
+  atk = type; CW = type === 'swing' ? W : { ...W, ...ATTACK[type] }; if (type === 'punch') side = -side;
+  swingT = 0; hitDone = false; A.SFX.whoosh(W.heavy || type === 'kick');
+}
 function doHit() {
   const origin = camera.getWorldPosition(v1), fwd = camera.getWorldDirection(v2), hits = [];
+  if (atk === 'kick') { fwd.y -= 0.5; fwd.normalize(); }
+  if (figure) {
+    const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+    const res = figure.hit(origin, fwd, CW.reach, atk === 'swing' ? (W.heavy ? 'heavy' : 'weapon') : atk, right);
+    if (res) return clayHit(res, fwd);
+  }
   for (const it of I.list) {
     if (it.dead || it.held) continue;
     const p = it.body.position; v3.set(p.x - origin.x, p.y - origin.y, p.z - origin.z);
-    const reach = W.reach + (it.key === 'carbody' ? 1.6 : it.def.size * 0.5), dist = v3.length(); if (dist > reach) continue;
-    v3.normalize(); if (v3.dot(fwd) > W.cone - (dist < 1 ? 0.35 : 0) - (it.key === 'carbody' ? 0.4 : 0)) hits.push({ it, dist: it.key === 'carbody' ? dist + 1 : dist });
+    const reach = CW.reach + (it.key === 'carbody' ? 1.6 : it.def.size * 0.5), dist = v3.length(); if (dist > reach) continue;
+    v3.normalize(); if (v3.dot(fwd) > CW.cone - (dist < 1 ? 0.35 : 0) - (it.key === 'carbody' ? 0.4 : 0)) hits.push({ it, dist: it.key === 'carbody' ? dist + 1 : dist });
   }
   hits.sort((a, b) => a.dist - b.dist);
   const dir = new THREE.Vector3(fwd.x, Math.max(fwd.y, 0) + 0.3, fwd.z).normalize();
-  for (const { it } of W.area ? hits.slice(0, 4) : hits.slice(0, 1)) hitItem(it, dir);
+  for (const { it } of CW.area ? hits.slice(0, 4) : hits.slice(0, 1)) hitItem(it, dir);
   for (const c of I.chunks) { const p = c.body.position; v3.set(p.x - origin.x, p.y - origin.y, p.z - origin.z);
-    if (v3.length() < W.reach && v3.normalize().dot(fwd) > W.cone - 0.15) { c.body.wakeUp(); c.body.velocity.set(dir.x * 6 + rand(-1, 1), 2 + rand(0, 2), dir.z * 6 + rand(-1, 1)); } }
-  if (!hits.length) shake = Math.max(shake, 0.02);
+    if (v3.length() < CW.reach && v3.normalize().dot(fwd) > CW.cone - 0.15) { c.body.wakeUp(); c.body.velocity.set(dir.x * 6 + rand(-1, 1), 2 + rand(0, 2), dir.z * 6 + rand(-1, 1)); } }
+  if (!hits.length) {
+    const h = surfaceHit(origin, fwd, CW.reach + 0.3);
+    if (h && !W.hands) { addMark(h.point, h.normal, 'crack', W.heavy ? 0.55 : 0.34); A.SFX.thud('wood', 0.8); I.sparks_(h.point, 6, 0xbbb4aa); shake = Math.max(shake, 0.08); }
+    else shake = Math.max(shake, 0.02);
+  }
+}
+function clayHit(res, dir) {
+  const p = res.point, hard = atk === 'kick' || W.heavy;
+  if (atk === 'punch') A.SFX.punch(1); else if (atk === 'slap') A.SFX.slap(1); else if (atk === 'kick') A.SFX.kick(1); else A.SFX.thud('wood', 1);
+  A.SFX.clay(hard ? 1 : 0.7); shake = Math.max(shake, hard ? 0.16 : 0.07);
+  combo++; comboTimer = 2.5; bestCombo = Math.max(bestCombo, combo);
+  addScore(atk === 'slap' ? 2 : 3, p, 'small');
+  const names = { head: 'Head off!', arm: 'Arm off!', leg: 'Leg off!', torso: 'Smashed!' };
+  for (const part of res.lost) {
+    smashed++; byKind.clay = (byKind.clay || 0) + 1;
+    const mult = Math.min(4, 1 + Math.floor(combo / 4) * 0.5) * (performance.now() < rageUntil ? 2 : 1);
+    addScore(Math.round(part.pts * mult), p, 'big'); if (names[part.name]) popup(names[part.name], { x: p.x, y: p.y + 0.4, z: p.z }, 'small');
+    if (performance.now() >= rageUntil) { rageMeter += 10; if (rageMeter >= 100) startRage(); }
+  }
+  if (res.lost.length) { A.SFX.clay(1); A.SFX.wood(0.6); slowUntil = performance.now() + 200; flash(0.12); }
+  if (res.collapsed) { banner('Sculpture smashed!'); addScore(80, p, 'big'); }
 }
 function hitItem(it, dir) {
   const rage = performance.now() < rageUntil, p = it.body.position;
   if (it.def.hp === Infinity) {
     A.SFX.metal(1); if (opts.weapon === 'pan') A.SFX.metal(0.8);
     it.pop = 1; shake = Math.max(shake, 0.12); I.sparks_(p, 8, 0xffd27a); addScore(it.def.pts, p, 'small');
-    if (!it.fixed) { it.body.wakeUp(); it.body.velocity.set(dir.x * W.knock, dir.y * W.knock * 0.5 + 2, dir.z * W.knock); it.body.angularVelocity.set(rand(-12, 12), rand(-12, 12), rand(-12, 12)); }
+    if (!it.fixed) { it.body.wakeUp(); it.body.velocity.set(dir.x * CW.knock, dir.y * CW.knock * 0.5 + 2, dir.z * CW.knock); it.body.angularVelocity.set(rand(-12, 12), rand(-12, 12), rand(-12, 12)); }
+    else { const h = surfaceHit(camera.getWorldPosition(v1), camera.getWorldDirection(v2), CW.reach + 2.5, it.mesh.children); if (h) addMark(h.point, h.normal, 'dent', W.heavy ? 0.45 : 0.3); }
     return;
   }
-  it.hp -= W.power + (W.bonus === it.def.kind ? 1 : 0) + (rage ? 1 : 0);
-  if (it.hp <= 0) return I.shatter(it, dir, W.knock * 0.7, true);
+  it.hp -= CW.power + (CW.bonus === it.def.kind ? 1 : 0) + (rage ? 1 : 0);
+  if (it.hp <= 0) return I.shatter(it, dir, CW.knock * 0.7, true);
   it.pop = 1;
-  if (!it.fixed) { it.body.wakeUp(); it.born = 0; it.body.velocity.set(dir.x * W.knock, dir.y * W.knock * 0.5 + 2, dir.z * W.knock); it.body.angularVelocity.set(rand(-10, 10), rand(-10, 10), rand(-10, 10)); }
+  if (!it.fixed) { it.body.wakeUp(); it.born = 0; it.body.velocity.set(dir.x * CW.knock, dir.y * CW.knock * 0.5 + 2, dir.z * CW.knock); it.body.angularVelocity.set(rand(-10, 10), rand(-10, 10), rand(-10, 10)); }
   for (let i = 0; i < 3; i++) I.shard(it.def.kind, Math.min(0.3, it.def.size) * rand(0.08, 0.14), it.color, p, it.fixed ? new CANNON.Vec3() : it.body.velocity, dir, 2, Math.min(1, it.def.size), I.photo);
+  if (W.hands) A.SFX[atk === 'slap' ? 'slap' : atk === 'kick' ? 'kick' : 'punch'](0.8);
   A.SFX.thud(it.def.kind, 1); shake = Math.max(shake, W.heavy ? 0.14 : 0.08); flash(0.06);
   addScore(2, p, 'small');
 }
@@ -196,6 +248,45 @@ function updateHeld(dt) {
   held.body.quaternion.setFromEuler(0, player.yaw, 0);
 }
 
+
+// ---------- damage marks that stay put (walls, tables, the car)
+const MARK_TEX = {};
+function markTex(type) {
+  if (MARK_TEX[type]) return MARK_TEX[type];
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  if (type === 'crack') {
+    const r = g.createRadialGradient(64, 64, 2, 64, 64, 34); r.addColorStop(0, 'rgba(15,10,8,.75)'); r.addColorStop(1, 'rgba(15,10,8,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = 'rgba(15,10,8,.9)'; g.lineCap = 'round';
+    for (let k = 0; k < 9; k++) { let a = k / 9 * Math.PI * 2 + rand(-0.3, 0.3), x = 64, y = 64, len = rand(28, 60); g.lineWidth = rand(1.2, 3); g.beginPath(); g.moveTo(x, y);
+      for (let d = 0; d < len; d += 8) { a += rand(-0.35, 0.35); x += Math.cos(a) * 8; y += Math.sin(a) * 8; g.lineTo(x, y); } g.stroke(); }
+  } else if (type === 'dent') {
+    const r = g.createRadialGradient(58, 58, 4, 64, 64, 58); r.addColorStop(0, 'rgba(0,0,0,.55)'); r.addColorStop(0.6, 'rgba(0,0,0,.25)'); r.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 4; g.beginPath(); g.arc(64, 64, 40, 3.6, 5.4); g.stroke();
+  } else {
+    g.fillStyle = 'rgba(255,255,255,.95)';
+    for (let k = 0; k < 14; k++) { g.beginPath(); g.arc(64 + rand(-30, 30) * (k ? 1 : 0), 64 + rand(-30, 30) * (k ? 1 : 0), k ? rand(4, 12) : 34, 0, 7); g.fill(); }
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return (MARK_TEX[type] = t);
+}
+let marks = [];
+function addMark(point, normal, type, size, color = 0xffffff) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: markTex(type), color, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }));
+  m.position.copy(point).addScaledVector(normal, 0.004); m.lookAt(v4.copy(point).add(normal)); m.rotateZ(rand(0, 6.28)); scene.add(m); marks.push(m);
+  if (marks.length > 90) { const o = marks.shift(); scene.remove(o); o.geometry.dispose(); o.material.dispose(); }
+}
+const ray = new THREE.Raycaster();
+function surfaceHit(origin, dir, far, targets = room.statics) {
+  ray.set(origin, dir); ray.far = far; const h = ray.intersectObjects(targets, false)[0];
+  if (!h || !h.face) return null;
+  return { point: h.point.clone(), normal: h.face.normal.clone().transformDirection(h.object.matrixWorld), object: h.object };
+}
+const AXES = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0], [0, 1, 0]].map(a => new THREE.Vector3(...a));
+function markNear(p, type, size, color) {
+  let best = null; const o = new THREE.Vector3(p.x, p.y, p.z);
+  for (const a of AXES) { const h = surfaceHit(o, a, 0.7); if (h && (!best || h.point.distanceTo(o) < best.point.distanceTo(o))) best = h; }
+  if (best) addMark(best.point, best.normal, type, size, color);
+}
+
 // ---------- scoring helpers
 function startRage() { rageMeter = 0; rageUntil = performance.now() + 8000; banner('Rage mode'); A.SFX.rage(); slowUntil = performance.now() + 400; document.body.classList.add('rage'); }
 function addScore(n, p, cls) { if (state !== 'play') return; score += n; popup('+' + n, p, cls); }
@@ -210,8 +301,11 @@ function toast(text) { const t = $('toast'); t.textContent = text; t.classList.r
 function flash(a) { const f = $('flash'); f.style.transition = 'none'; f.style.opacity = a; requestAnimationFrame(() => { f.style.transition = 'opacity .18s'; f.style.opacity = 0; }); }
 
 // ---------- session flow
-function startSession() {
-  A.initAudio(); build();
+let modelsReady = null;
+async function startSession() {
+  A.initAudio();
+  if (opts.mode === 'realistic' && modelsReady) { $('start').textContent = 'Loading…'; await modelsReady; $('start').textContent = 'Start smashing'; }
+  build();
   Object.assign(player, { x: room.start.x, z: room.start.z, yaw: 0, pitch: -0.18 });
   timeLeft = SESSION; score = 0; smashed = 0; combo = 0; bestCombo = 0; rageMeter = 0; rageUntil = 0; byKind = {}; restocking = false; throws = 0;
   state = 'play'; paused = false; fpsT = 0; fpsN = 0;
@@ -271,8 +365,9 @@ function renderLobby() {
 }
 document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
   opts.mode = b.dataset.mode; $('modeScreen').classList.add('hidden'); renderLobby(); $('lobby').classList.remove('hidden'); build();
+  if (opts.mode === 'realistic') modelsReady = modelsReady || preloadItemModels().then(() => { if (state === 'menu' && opts.mode === 'realistic') build(); });
 });
-$('scenes').onclick = e => { const b = e.target.closest('.card'); if (!b) return; opts.scene = b.dataset.s; renderLobby(); build(); };
+$('scenes').onclick = e => { const b = e.target.closest('.card'); if (!b) return; opts.scene = b.dataset.s; if (opts.scene === 'studio') opts.weapon = 'hands'; renderLobby(); build(); };
 $('weapons').onclick = e => { const b = e.target.closest('.card'); if (!b || b.classList.contains('locked')) return; opts.weapon = b.dataset.w; renderLobby(); equip(opts.weapon); };
 $('quality').onchange = e => { opts.quality = e.target.value; build(); };
 $('music').onchange = e => { opts.music = e.target.checked; A.setMusic(opts.music, state === 'play'); };
@@ -312,8 +407,9 @@ addEventListener('mouseup', e => { if (e.button === 0) { mouseHeld = false; if (
 function grabOrThrow() { if (held) throwHeld(0.65); else grab(hlTarget || findGrabTarget()); }
 addEventListener('keydown', e => {
   keys[e.code] = true; if (state !== 'play' || paused || e.repeat) return;
-  if (e.code === 'Space') startSwing();
-  if (e.code === 'KeyE' || e.code === 'KeyF') grabOrThrow();
+  if (e.code === 'Space') startSwing(W.hands ? 'kick' : 'swing');
+  if (e.code === 'KeyF') W.hands ? startSwing('slap') : grabOrThrow();
+  if (e.code === 'KeyE') grabOrThrow();
   if (e.code === 'KeyQ') dropHeld();
 });
 addEventListener('keyup', e => keys[e.code] = false);
@@ -323,6 +419,7 @@ const tl = $('touch');
 tl.addEventListener('pointerdown', e => {
   if (e.target.id === 'smashBtn') { mouseHeld = true; startSwing(); return; }
   if (e.target.id === 'grabBtn') { grabOrThrow(); return; }
+  if (e.target.id === 'kickBtn') { startSwing('kick'); return; }
   if (e.clientX < innerWidth * 0.45 && joyId === null) { joyId = e.pointerId; joyO = { x: e.clientX, y: e.clientY }; const j = $('joy'); j.style.left = e.clientX + 'px'; j.style.top = e.clientY + 'px'; j.classList.remove('hidden'); }
   else if (lookId === null) { lookId = e.pointerId; lookLast = { x: e.clientX, y: e.clientY }; }
 });
@@ -357,6 +454,18 @@ function updatePlayer(dt) {
   }
   if (len > 0.1) player.bob += dt * 9;
 }
+function poseHands() {
+  const { L, R, palm, leg } = weaponMesh.userData, t = swingT < 0 ? 0 : swingT, b = Math.sin(player.bob) * 0.012;
+  const jab = k => k < 0.45 ? Math.sin(k / 0.45 * Math.PI / 2) : Math.cos((k - 0.45) / 0.55 * Math.PI / 2);
+  pivot.position.set(0, 0, 0); pivot.rotation.set(0, 0, 0); pivot.scale.setScalar(1);
+  const nx = camera.aspect < 1 ? 0.13 : 0.24, low = held ? 0.3 : 0;
+  L.position.set(-nx, -0.27 + b - low, -0.48); R.position.set(nx, -0.27 - b - low, -0.48); R.visible = true; palm.visible = false; leg.visible = false;
+  if (swingT < 0) return;
+  const j = jab(t);
+  if (atk === 'punch') { const F = side < 0 ? L : R; F.position.set(side * (nx - 0.2 * j), -0.27 + 0.12 * j, -0.48 - 0.42 * j); }
+  if (atk === 'slap') { R.visible = false; palm.visible = true; palm.position.set(0.42 - 0.75 * j, -0.12 + 0.04 * j, -0.55 - 0.15 * j); palm.rotation.set(0, -0.5 + 0.9 * j, 0.25); }
+  if (atk === 'kick') { leg.visible = true; leg.position.set(0.1, -0.55 + 0.3 * j, 0.25); leg.rotation.set(1.25 * j, 0, 0); }
+}
 function poseWeapon() {
   const t = swingT < 0 ? 0 : swingT, ease = k => 1 - Math.pow(1 - k, 3);
   let rx = 0.15, rz = -0.3, px = 0, pz = 0;
@@ -378,8 +487,9 @@ function frame(now) {
   if (playing) {
     timeLeft -= rdt; updatePlayer(rdt);
     if (mouseHeld && swingT < 0) startSwing();
-    if (swingT >= 0) { swingT += dt / W.speed; if (!hitDone && swingT >= 0.4) { hitDone = true; doHit(); } if (swingT >= 1) swingT = -1; }
-    poseWeapon();
+    if (swingT >= 0) { swingT += dt / CW.speed; if (!hitDone && swingT >= 0.4) { hitDone = true; doHit(); } if (swingT >= 1) swingT = -1; }
+    W.hands ? poseHands() : poseWeapon();
+    if (figure && figure.update()) banner('New sculpture');
     if (charging) chargeT += rdt;
     setHighlight(held ? null : findGrabTarget());
     if (comboTimer > 0 && (comboTimer -= rdt) <= 0) combo = 0;
@@ -422,7 +532,9 @@ function frame(now) {
     $('rageFill').style.width = (rage ? (rageUntil - now) / 80 : rageMeter) + '%';
     $('rageTxt').textContent = rage ? 'Rage mode x2' : 'Rage';
     const hint = held ? (isTouch ? 'Tap Grab to throw' : 'Click to throw (hold for power) · E quick throw · Q drop')
-      : hlTarget ? (isTouch ? `Grab the ${nameOf(hlTarget.key)}` : `E or right-click: grab the ${nameOf(hlTarget.key)}`) : '';
+      : hlTarget ? (isTouch ? `Grab the ${nameOf(hlTarget.key)}` : `E or right-click: grab the ${nameOf(hlTarget.key)}`)
+      : W.hands && !isTouch ? 'Click punch · F slap · Space kick' : '';
+    $('kickBtn').classList.toggle('hidden', !W.hands);
     $('hint').textContent = hint;
     $('charge').style.opacity = charging ? 1 : 0; $('chargeFill').style.width = Math.min(100, chargeT / 0.8 * 100) + '%';
     $('grabBtn').textContent = held ? 'Throw' : 'Grab';
@@ -434,4 +546,4 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, fal
 renderMode();
 opts.mode = 'stylized'; build(); opts.mode = null; // background behind the first screen
 requestAnimationFrame(frame);
-window.__smash = { get I() { return I; }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts };
+window.__smash = { get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { const t = last + ms; frame(t); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts };

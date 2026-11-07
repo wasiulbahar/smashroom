@@ -87,6 +87,7 @@ export function makeStyle(name, renderer, quality) {
       else if (kind === 'paint') m = new THREE.MeshPhysicalMaterial({ color, metalness: 0.4, roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.1, envMapIntensity: env * 1.2 });
       else if (kind === 'wood') m = new THREE.MeshStandardMaterial({ color, map: o.map || tex('kitchen_wood', 'diff', 1, 1), roughness: 0.7, envMapIntensity: env * 0.6 });
       else if (kind === 'stone') m = new THREE.MeshStandardMaterial({ color, map: tex('concrete_floor_damaged_01', 'diff', 0.5, 0.5), roughness: 0.95, envMapIntensity: env * 0.4 });
+      else if (kind === 'clay') m = new THREE.MeshStandardMaterial({ color, roughness: 0.82, metalness: 0, envMapIntensity: env * 0.5 });
       else if (kind === 'fabric') m = new THREE.MeshStandardMaterial({ color, roughness: 1, envMapIntensity: env * 0.3 });
       else m = new THREE.MeshStandardMaterial({ color, roughness: kind === 'electronics' ? 0.45 : 0.5, metalness: 0, envMapIntensity: env, map: o.map || null });
     }

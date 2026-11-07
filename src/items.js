@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { canvasTex } from './style.js';
+import { itemModel, fitInto } from './models.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -150,6 +151,7 @@ const SHARD = {
   photo: { geo: new THREE.BoxGeometry(1, 1, 0.05), he: s => [s * 0.5, s * 0.5, s * 0.05], n: 14 },
 };
 SHARD.metal = SHARD.electronics;
+SHARD.clay = { geo: new THREE.SphereGeometry(1, 8, 6).scale(1, 0.6, 1), he: s => [s * 0.8, s * 0.5, s * 0.8], n: 6 };
 
 export function createItems({ scene, world, S, onBreak, onClink }) {
   const api = { list: [], chunks: [], sparks: [], queue: [], photo: null };
@@ -157,6 +159,8 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
 
   function add(key, x, y, z, ry = 0, o = {}) {
     const def = DEFS[key], color = o.color ?? pick(def.colors), r = def.make(M, color, { photo: api.photo, ...o });
+    const src = S.realistic && itemModel(key); // realistic look: swap in a real model, sized to the simple shape
+    if (src) { const g = new THREE.Group(); g.add(fitInto(src, new THREE.Box3().setFromObject(r.mesh), 'item')); r.mesh = g; }
     r.mesh.traverse(n => { if (n.isMesh) { n.castShadow = !def.fixed || key === 'carbody'; n.receiveShadow = true; } });
     S.outline(r.mesh, def.kind === 'glass' ? 1.04 : 1.05); scene.add(r.mesh);
     const body = new CANNON.Body({ mass: def.mass, position: V(x, def.fixed ? y : y + r.halfH + 0.01, z) }); // fixed things: y is their centre
