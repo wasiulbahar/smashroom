@@ -1,8 +1,8 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=11';
-import { loadModel, fitInto } from './models.js?v=11';
+import { canvasTex } from './style.js?v=12';
+import { loadModel, fitInto } from './models.js?v=12';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];

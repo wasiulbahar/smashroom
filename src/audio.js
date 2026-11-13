@@ -116,7 +116,7 @@ const SYN = {
 };
 
 // recorded CC0 samples (assets/sounds, see CREDITS.txt); generated sounds are the fallback until they load
-const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6 };
+const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6, type: 1, door: 2, keys: 2 };
 const bufs = {};
 function loadSamples() {
   for (const [set, n] of Object.entries(SETS)) for (let i = 0; i < n; i++)
@@ -215,6 +215,18 @@ function loopNoise(type, f, q, g) {
   const gn = ac.createGain(); gn.gain.value = g; s.connect(fl).connect(gn).connect(amb); s.start(); ambNodes.push(s); return fl;
 }
 function loopTone(f, g, type = 'sine') { const o = ac.createOscillator(); o.type = type; o.frequency.value = f; const gn = ac.createGain(); gn.gain.value = g; o.connect(gn).connect(amb); o.start(); ambNodes.push(o); }
+// a recording heard from somewhere else in the room: softened, off to one side, optionally just a slice of it
+function far(set, g, o = {}) {
+  if (!has(set)) return; const l = bufs[set], b = l[Math.floor(Math.random() * l.length)], t = now();
+  const s = ac.createBufferSource(); s.buffer = b; s.playbackRate.value = o.rate || rand(0.95, 1.05);
+  const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = o.lp || 2800;
+  const pan = ac.createStereoPanner(); pan.pan.value = rand(-0.8, 0.8);
+  const gn = ac.createGain(); gn.gain.value = g;
+  s.connect(lp).connect(pan).connect(gn).connect(amb);
+  const off = o.dur ? rand(0, Math.max(0, b.duration - o.dur)) : 0;
+  if (o.dur) { gn.gain.setValueAtTime(g, t + o.dur - 0.15); gn.gain.linearRampToValueAtTime(0, t + o.dur); }
+  s.start(t, off, o.dur || undefined); ambNodes.push(s);
+}
 export function startAmbience(kind) {
   stopAmbience(); if (!ac || !kind) return;
   const every = (ms, fn) => ambTimers.push(setInterval(() => { if (Math.random() < 0.5) fn(now()); }, ms));
@@ -223,8 +235,13 @@ export function startAmbience(kind) {
     every(4000, t => { if (Math.random() < 0.5) nz(t, 1.2, 'bandpass', rand(300, 600), 8, 0.25, amb, rand(200, 900)); else tn(t, rand(180, 260), 1.5, 0.05, 'sawtooth', amb, rand(90, 140)); }); }
   if (kind === 'abandoned') { const w = loopNoise('bandpass', 500, 0.8, 0.22); every(1800, t => tn(t, rand(1800, 2600), 0.08, 0.05, 'sine', amb));
     tick(2500, () => w.frequency.setTargetAtTime(rand(300, 800), now(), 1.5)); }
-  if (kind === 'office') { loopTone(120, 0.02, 'sawtooth'); loopNoise('lowpass', 400, 0.5, 0.06);
-    every(9000, t => { for (let k = 0; k < 4; k++) { tn(t + k * 0.12, 1300, 0.08, 0.04, 'square', amb); tn(t + k * 0.12, 1600, 0.08, 0.03, 'square', amb); } }); }
+  if (kind === 'office') { // soft air, someone typing a few desks over, doors, keys, mugs set down, footsteps on carpet
+    loopNoise('lowpass', 700, 0.3, 0.025);
+    every(3500, () => far('type', rand(0.25, 0.4), { dur: rand(1.2, 3), lp: 3500 }));
+    every(14000, () => far('door', 0.3, { lp: 1500, rate: rand(0.85, 1) }));
+    every(11000, () => far('keys', 0.14, { lp: 4000 }));
+    every(8000, () => far('clink', 0.12, { lp: 3000 }));
+    every(12000, () => { const n = 3 + Math.floor(rand(0, 4)); for (let k = 0; k < n; k++) setTimeout(() => far('stepwood', 0.12, { lp: 900, rate: rand(0.6, 0.7) }), k * 520); }); }
   if (kind === 'kitchen') { loopTone(60, 0.025, 'sawtooth'); loopNoise('lowpass', 250, 0.5, 0.05); every(3000, t => tn(t, rand(500, 900), 0.06, 0.03, 'sine', amb)); }
   if (kind === 'apartment') { loopTone(50, 0.02, 'sawtooth'); loopNoise('lowpass', 220, 0.5, 0.08); // fridge hum and traffic outside
     every(7000, t => nz(t, 2.5, 'bandpass', rand(250, 450), 0.8, 0.08, amb, rand(150, 250))); }

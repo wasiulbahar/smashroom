@@ -7,6 +7,8 @@ Sounds in this folder are CC0 (public domain).
 - bag_0-1: 'Punch' by qubodup, opengameart.org, CC0
 - bag_2-3: 'Thwack Sounds' by AntumDeluge, opengameart.org, CC0
 - bag_4-5: '37 hits/punches' by Independent.nu, opengameart.org, CC0
+- type_0: 'typing soundeffect', opengameart.org, CC0
+- door, keys: '100 CC0 metal and wood SFX' by rubberduck, opengameart.org, CC0
 - crack_4: '100 CC0 metal and wood SFX' by rubberduck, opengameart.org, CC0
 - zap: 'Electricity Game Sound Pack' (crackleelectricityloop), opengameart.org, CC0
 - splash: '6 short water splashes' by ezwa, opengameart.org, CC0
