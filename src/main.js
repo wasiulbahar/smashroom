@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU } from './style.js?v=7';
-import { SCENES } from './scenes.js?v=7';
-import { createItems, DEFS } from './items.js?v=7';
-import * as A from './audio.js?v=7';
-import { preloadItemModels } from './models.js?v=7';
-import { createClayFigure, preloadClayBody } from './clay.js?v=7';
-import { createReplay } from './replay.js?v=7';
+import { makeStyle, detectGPU } from './style.js?v=8';
+import { SCENES } from './scenes.js?v=8';
+import { createItems, DEFS } from './items.js?v=8';
+import * as A from './audio.js?v=8';
+import { preloadItemModels } from './models.js?v=8';
+import { createClayFigure, preloadClayBody } from './clay.js?v=8';
+import { createReplay } from './replay.js?v=8';
 
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);

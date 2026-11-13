@@ -73,11 +73,12 @@ export function makeStyle(name, renderer, quality) {
     if (kind === 'screen' || kind === 'photo' || kind === 'emissive') {
       m = new THREE.MeshBasicMaterial({ color, map: o.map || null, toneMapped: kind !== 'emissive' });
     } else if (!realistic) {
-      const glass = kind === 'glass' || kind === 'mirror';
+      const glass = kind === 'glass' || kind === 'mirror' || kind === 'liquid';
       m = new THREE.MeshToonMaterial({ color: kind === 'mirror' ? 0xbfe6ff : color, gradientMap: grad, transparent: glass, opacity: glass ? 0.72 : 1, map: o.map || null });
     } else {
       const env = S.envI;
-      if (kind === 'glass') {
+      if (kind === 'liquid') m = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.55, roughness: 0.05, depthWrite: false, envMapIntensity: env });
+      else if (kind === 'glass') {
         m = S.Q.transmission
           ? new THREE.MeshPhysicalMaterial({ color, transmission: 0.92, roughness: 0.06, metalness: 0, ior: 1.5, thickness: 0.02, envMapIntensity: env * 1.6, transparent: true, side: THREE.DoubleSide })
           : new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.4, roughness: 0.05, envMapIntensity: env * 1.6, side: THREE.DoubleSide });

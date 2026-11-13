@@ -1,8 +1,9 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=7';
-import { itemModel, fitInto } from './models.js?v=7';
+import { canvasTex } from './style.js?v=8';
+import { itemModel, fitInto } from './models.js?v=8';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -14,6 +15,25 @@ const cyl = (rt, rb, h, s = 18) => new THREE.CylinderGeometry(rt, rb, h, s);
 const bx = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 function m(geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); return o; }
 function grp(...parts) { const g = new THREE.Group(); parts.forEach(p => g.add(p)); return g; }
+// a vessel with real wall thickness: the outer profile from the foot centre up to the rim, then back down the inside
+function vessel(outer, t, base = t, seg = 36) {
+  const y0 = outer[0][1], rim = outer[outer.length - 1], pts = outer.map(q => [q[0], q[1]]);
+  pts.push([Math.max(0.001, rim[0] - t * 0.5), rim[1] + t * 0.4]);
+  for (let i = outer.length - 1; i >= 1; i--) { const [r, y] = outer[i]; if (y > y0 + base + 0.002) pts.push([Math.max(0.001, r - t), y]); }
+  pts.push([Math.max(0.001, outer[1][0] - t * 1.5), y0 + base], [0, y0 + base]);
+  return lathe(pts, seg);
+}
+function rrect(w, h, r) { // rounded rectangle centred on the origin
+  const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s;
+}
+// a slab with softened edges: w x h facing +z, d deep (or lying flat when flat = true: w x d footprint, h thick)
+function slab(w, h, d, r, bevel = 0.003, flat = false) {
+  const g = new THREE.ExtrudeGeometry(rrect(w, flat ? d : h, r), { depth: Math.max(0.0005, (flat ? h : d) - bevel * 2), bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 6 });
+  g.translate(0, 0, -((flat ? h : d) - bevel * 2) / 2); if (flat) g.rotateX(-Math.PI / 2); return g;
+}
+const PLATE = [[0, -0.0175], [0.058, -0.0175], [0.064, -0.012], [0.11, -0.007], [0.15, 0.005], [0.17, 0.0165], [0.168, 0.0185], [0.147, 0.0095], [0.108, 0.0005], [0.06, -0.004], [0, -0.004]];
 
 // ---- generated pictures
 const TX = {};
@@ -41,21 +61,28 @@ export const DEFS = {
   bottle: { kind: 'glass', hp: 1, pts: 10, mass: 0.4, bv: 3.4, size: 0.15, spots: ANY, colors: GLASS,
     make: (M, c) => { const h = 0.34, r = 0.07; return { mesh: m(lathe([[0, -h / 2], [r, -h / 2], [r, 0.03], [r * 0.4, 0.11], [r * 0.38, h / 2], [0, h / 2]], 14), M('glass', c)), shape: cylS(r, r, h, 8), halfH: h / 2 }; } },
   cup: { kind: 'glass', hp: 1, pts: 8, mass: 0.25, bv: 3.2, size: 0.13, spots: SMALL, colors: CLEAR,
-    make: (M, c) => ({ mesh: m(cyl(0.06, 0.048, 0.14, 16), M('glass', c)), shape: cylS(0.06, 0.048, 0.14, 8), halfH: 0.07 }) },
+    make: (M, c) => ({ mesh: m(vessel([[0, -0.07], [0.046, -0.07], [0.048, -0.066], [0.06, 0.07]], 0.004, 0.016), M('glass', c)), shape: cylS(0.06, 0.048, 0.14, 8), halfH: 0.07 }) },
   wineglass: { kind: 'glass', hp: 1, pts: 12, mass: 0.2, bv: 3, size: 0.11, spots: SMALL, colors: CLEAR,
-    make: (M, c) => ({ mesh: m(lathe([[0, -0.1], [0.045, -0.1], [0.045, -0.094], [0.006, -0.088], [0.006, -0.02], [0.04, 0.01], [0.05, 0.06], [0.046, 0.1]]), M('glass', c)), shape: cylS(0.05, 0.045, 0.2, 8), halfH: 0.1 }) },
+    make: (M, c) => ({ mesh: m(lathe([[0, -0.1], [0.045, -0.1], [0.045, -0.096], [0.012, -0.09], [0.005, -0.08], [0.005, -0.025], [0.012, -0.015], [0.035, 0.005], [0.048, 0.04], [0.05, 0.07], [0.046, 0.1],
+      [0.044, 0.1015], [0.047, 0.07], [0.045, 0.04], [0.032, 0.009], [0.008, -0.009], [0, -0.011]], 36), M('glass', c)), shape: cylS(0.05, 0.045, 0.2, 8), halfH: 0.1 }) },
   beermug: { kind: 'glass', hp: 1, pts: 12, mass: 0.6, bv: 3.6, size: 0.15, spots: SMALL, colors: [0xfff1c4, 0xffffff],
-    make: (M, c) => ({ mesh: grp(m(cyl(0.055, 0.05, 0.15), M('glass', c)), m(new THREE.TorusGeometry(0.04, 0.012, 8, 14), M('glass', c), 0.07)), shape: cylS(0.065, 0.065, 0.15, 8), halfH: 0.075 }) },
+    make: (M, c) => ({ mesh: grp(m(vessel([[0, -0.075], [0.05, -0.075], [0.053, -0.07], [0.056, 0.075]], 0.006, 0.022), M('glass', c)),
+      m(cyl(0.049, 0.046, 0.104, 28), M('liquid', 0xe8a530), 0, -0.002), m(cyl(0.05, 0.05, 0.02, 28), M('plastic', 0xfaf4e0), 0, 0.058),
+      m(new THREE.TorusGeometry(0.04, 0.011, 10, 20, Math.PI), M('glass', c), 0.056, 0, 0, 0, 0, -Math.PI / 2)), shape: cylS(0.065, 0.065, 0.15, 8), halfH: 0.075 }) },
   jar: { kind: 'glass', hp: 1, pts: 10, mass: 0.5, bv: 3.4, size: 0.15, spots: SMALL, colors: CLEAR,
-    make: (M, c) => ({ mesh: grp(m(cyl(0.07, 0.07, 0.16), M('glass', c)), m(cyl(0.072, 0.072, 0.02), M('metal', 0xc9a227), 0, 0.09)), shape: cylS(0.072, 0.072, 0.18, 8), halfH: 0.09 }) },
+    make: (M, c) => ({ mesh: grp(m(vessel([[0, -0.09], [0.064, -0.09], [0.07, -0.082], [0.07, 0.05], [0.06, 0.066], [0.06, 0.082]], 0.004, 0.01), M('glass', c)),
+      m(cyl(0.064, 0.066, 0.1, 28), M('plastic', pick([0x8b1e2a, 0xc98a1a, 0x4a7a2a])), 0, -0.032),
+      m(lathe([[0, 0.096], [0.061, 0.096], [0.064, 0.091], [0.064, 0.076], [0.06, 0.076], [0.06, 0.08], [0, 0.08]], 32), M('metal', 0xc9a227))), shape: cylS(0.072, 0.072, 0.18, 8), halfH: 0.09 }) },
   fishbowl: { kind: 'glass', hp: 1, pts: 20, mass: 1, bv: 3.2, size: 0.34, spots: SMALL, colors: [0xdff8ff],
-    make: (M, c) => ({ mesh: m(new THREE.SphereGeometry(0.17, 24, 16, 0, Math.PI * 2, 0.5, 2.4), M('glass', c), 0, 0.02), shape: cylS(0.15, 0.1, 0.3, 10), halfH: 0.15 }) },
+    make: (M, c) => { const fish = grp(m(new THREE.SphereGeometry(0.02, 14, 10), M('plastic', 0xff7a1a)), m(new THREE.ConeGeometry(0.016, 0.022, 10), M('plastic', 0xff9a3a), -0.03, 0, 0, 0, 0, Math.PI / 2)); fish.children[0].scale.set(1.6, 1, 0.65); fish.position.set(0.03, -0.05, 0.02); fish.rotation.y = 0.6;
+      return { mesh: grp(m(vessel([[0, -0.15], [0.08, -0.15], [0.14, -0.11], [0.17, -0.03], [0.16, 0.06], [0.11, 0.12], [0.095, 0.14], [0.105, 0.15]], 0.005, 0.01), M('glass', c)),
+        m(lathe([[0, -0.138], [0.078, -0.138], [0.133, -0.104], [0.158, -0.03], [0.15, 0.05], [0, 0.05]], 32), M('liquid', 0x7fd0ff)), m(cyl(0.075, 0.08, 0.016, 24), M('stone', 0xc8a878), 0, -0.132), fish), shape: cylS(0.15, 0.1, 0.3, 10), halfH: 0.15 }; } },
   plate: { kind: 'ceramic', hp: 1, pts: 8, mass: 0.5, bv: 3.6, size: 0.34, spots: SMALL, colors: CHINA,
-    make: (M, c) => ({ mesh: m(cyl(0.17, 0.12, 0.035, 26), M('ceramic', c)), shape: cylS(0.17, 0.12, 0.035, 12), halfH: 0.0175 }) },
+    make: (M, c) => ({ mesh: grp(m(lathe(PLATE, 48), M('ceramic', c)), m(new THREE.TorusGeometry(0.162, 0.0016, 4, 64), M('metal', 0xc9a227), 0, 0.0145, 0, Math.PI / 2)), shape: cylS(0.17, 0.12, 0.035, 12), halfH: 0.0175 }) },
   platestack: { kind: 'ceramic', hp: 1, pts: 40, mass: 3, bv: 3.6, size: 0.34, spots: SMALL, colors: CHINA, shards: 2.5,
-    make: (M, c) => { const g = new THREE.Group(); for (let i = 0; i < 6; i++) g.add(m(cyl(0.17, 0.12, 0.03, 26), M('ceramic', c), 0, -0.05 + i * 0.022)); return { mesh: g, shape: cylS(0.17, 0.17, 0.13, 12), halfH: 0.065 }; } },
+    make: (M, c) => { const g = new THREE.Group(), geo = lathe(PLATE, 48); for (let i = 0; i < 6; i++) g.add(m(geo, M('ceramic', c), 0, -0.0475 + i * 0.019, 0, 0, i * 0.7)); return { mesh: g, shape: cylS(0.17, 0.17, 0.13, 12), halfH: 0.065 }; } },
   bowl: { kind: 'ceramic', hp: 1, pts: 8, mass: 0.4, bv: 3.6, size: 0.26, spots: SMALL, colors: [...CHINA, 0x9ec7e8],
-    make: (M, c) => ({ mesh: m(lathe([[0, -0.05], [0.06, -0.05], [0.11, 0], [0.13, 0.05]]), M('ceramic', c)), shape: cylS(0.13, 0.06, 0.1, 10), halfH: 0.05 }) },
+    make: (M, c) => ({ mesh: m(vessel([[0, -0.05], [0.045, -0.05], [0.047, -0.043], [0.05, -0.042], [0.09, -0.024], [0.12, 0.01], [0.13, 0.05]], 0.005, 0.009), M('ceramic', c)), shape: cylS(0.13, 0.06, 0.1, 10), halfH: 0.05 }) },
   mug: { kind: 'ceramic', hp: 1, pts: 10, mass: 0.35, bv: 3.8, size: 0.16, spots: SMALL, colors: [0xff9f43, 0xff7eb6, 0xf4f1e8, 0x2fd1c0, 0x2b2b3a],
     make: (M, c) => ({ mesh: grp(m(cyl(0.06, 0.055, 0.12), M('ceramic', c)), m(new THREE.TorusGeometry(0.035, 0.012, 8, 12), M('ceramic', c), 0.065)), shape: cylS(0.065, 0.065, 0.12, 8), halfH: 0.06 }) },
   teapot: { kind: 'ceramic', hp: 1, pts: 25, mass: 0.9, bv: 3.6, size: 0.3, spots: SMALL, colors: [0xf4f1e8, 0x9ec7e8, 0xe8b4b8],
@@ -70,10 +97,16 @@ export const DEFS = {
   flowerpot: { kind: 'ceramic', hp: 1, pts: 12, mass: 1, bv: 3.6, size: 0.22, spots: ANY, colors: [0xc96f3b],
     make: (M, c) => ({ mesh: grp(m(cyl(0.1, 0.07, 0.16), M('ceramic', c)), m(new THREE.IcosahedronGeometry(0.11, 1), M('plastic', 0x3f8f3a), 0, 0.13)), shape: cylS(0.1, 0.07, 0.16, 8), halfH: 0.08 }) },
   doll: { kind: 'ceramic', hp: 1, pts: 25, mass: 0.6, bv: 3.4, size: 0.16, spots: SMALL, colors: [0x6b2a3a, 0x2a3a6b, 0xe8e0d0],
-    make: (M, c) => ({ mesh: grp(m(new THREE.ConeGeometry(0.07, 0.18, 14), M('fabric', c), 0, -0.06), m(new THREE.SphereGeometry(0.055, 16, 12), M('ceramic', 0xf3e6dc), 0, 0.08),
-      m(new THREE.SphereGeometry(0.008, 6, 6), M('emissive', 0x111111), -0.02, 0.09, 0.05), m(new THREE.SphereGeometry(0.008, 6, 6), M('emissive', 0x111111), 0.02, 0.09, 0.05)), shape: cylS(0.07, 0.07, 0.29, 8), halfH: 0.15 }) },
+    make: (M, c) => { const skin = M('ceramic', 0xf3e6dc), lace = M('fabric', 0xf4efe6), dark = M('emissive', 0x1a1010), arm = new THREE.CapsuleGeometry(0.011, 0.05, 4, 8);
+      return { mesh: grp(m(lathe([[0, -0.15], [0.075, -0.15], [0.07, -0.12], [0.05, -0.04], [0.03, 0.02], [0.022, 0.04], [0, 0.045]], 28), M('fabric', c)),
+        m(new THREE.TorusGeometry(0.073, 0.006, 6, 28), lace, 0, -0.146, 0, Math.PI / 2), m(new THREE.TorusGeometry(0.025, 0.006, 6, 20), lace, 0, 0.036, 0, Math.PI / 2),
+        m(new THREE.SphereGeometry(0.045, 24, 18), skin, 0, 0.085), m(new THREE.SphereGeometry(0.048, 24, 16, 0, Math.PI * 2, 0, 1.75), M('fabric', 0x3a2414), 0, 0.09, -0.004, -0.25),
+        m(new THREE.SphereGeometry(0.006, 8, 6), dark, -0.016, 0.088, 0.041), m(new THREE.SphereGeometry(0.006, 8, 6), dark, 0.016, 0.088, 0.041), m(new THREE.SphereGeometry(0.004, 8, 6), M('emissive', 0xa0141c), 0, 0.068, 0.043),
+        m(arm, skin, -0.034, 0.0, 0.004, 0, 0, -0.35), m(arm, skin, 0.034, 0.0, 0.004, 0, 0, 0.35), m(new THREE.TorusGeometry(0.012, 0.005, 6, 12), M('fabric', 0xd06080), 0.03, 0.125, -0.01)), shape: cylS(0.07, 0.07, 0.29, 8), halfH: 0.15 }; } },
   candlestick: { kind: 'metal', hp: Infinity, pts: 3, mass: 0.6, bv: 99, size: 0.14, spots: SMALL, colors: [0xc9a227, 0xb8bcc4],
-    make: (M, c) => ({ mesh: grp(m(cyl(0.06, 0.07, 0.02), M('metal', c), 0, -0.14), m(cyl(0.012, 0.016, 0.24), M('metal', c), 0, -0.02), m(cyl(0.03, 0.02, 0.03), M('metal', c), 0, 0.1), m(cyl(0.014, 0.014, 0.08), M('plastic', 0xf3ead8), 0, 0.15)), shape: cylS(0.06, 0.06, 0.3, 8), halfH: 0.15 }) },
+    make: (M, c) => ({ mesh: grp(m(lathe([[0, -0.15], [0.065, -0.15], [0.065, -0.142], [0.05, -0.136], [0.02, -0.125], [0.014, -0.11], [0.022, -0.095], [0.013, -0.08], [0.011, 0.02], [0.02, 0.03], [0.012, 0.04], [0.012, 0.06], [0.03, 0.07], [0.032, 0.08], [0.014, 0.082], [0, 0.082]], 32), M('metal', c)),
+      m(cyl(0.012, 0.0125, 0.1, 16), M('plastic', 0xf3ead8), 0, 0.132), m(new THREE.CapsuleGeometry(0.003, 0.025, 3, 6), M('plastic', 0xf3ead8), 0.012, 0.155),
+      m(cyl(0.0015, 0.0015, 0.012, 6), M('emissive', 0x1a1010), 0, 0.188), m(new THREE.SphereGeometry(0.007, 10, 8), M('emissive', 0xffb347), 0, 0.2)), shape: cylS(0.06, 0.06, 0.3, 8), halfH: 0.15 }) },
   pan: { kind: 'metal', hp: Infinity, pts: 3, mass: 1.2, bv: 99, size: 0.3, spots: SMALL, colors: [0x2b2b30, 0x9aa0aa],
     make: (M, c) => ({ mesh: grp(m(cyl(0.14, 0.12, 0.04, 24), M('metal', c)), m(bx(0.22, 0.02, 0.03), M('plastic', 0x1a1a1a), 0.25, 0.01)), shape: cylS(0.14, 0.12, 0.04, 10), halfH: 0.02 }) },
   saucepan: { kind: 'metal', hp: Infinity, pts: 3, mass: 1, bv: 99, size: 0.22, spots: SMALL, colors: [0xb8bcc4, 0xb5653a],
@@ -81,24 +114,37 @@ export const DEFS = {
   kettle: { kind: 'metal', hp: Infinity, pts: 3, mass: 1, bv: 99, size: 0.22, spots: SMALL, colors: [0xb8bcc4, 0xd04030],
     make: (M, c) => ({ mesh: grp(m(lathe([[0, -0.1], [0.1, -0.1], [0.11, -0.02], [0.08, 0.08], [0.03, 0.1], [0, 0.1]]), M('metal', c)), m(new THREE.TorusGeometry(0.06, 0.01, 6, 14, Math.PI), M('plastic', 0x1a1a1a), 0, 0.1), m(cyl(0.01, 0.02, 0.1, 8), M('metal', c), 0.11, 0.01, 0, 0, 0, -0.9)), shape: cylS(0.1, 0.1, 0.2, 10), halfH: 0.1 }) },
   fork: { kind: 'metal', hp: Infinity, pts: 2, mass: 0.05, bv: 99, size: 0.16, spots: SMALL, colors: [0xc8ccd4],
-    make: (M, c) => ({ mesh: m(bx(0.17, 0.008, 0.022), M('metal', c)), shape: boxS(0.085, 0.004, 0.011), halfH: 0.004 }) },
-  keyboard: { kind: 'electronics', hp: 2, pts: 20, mass: 0.8, bv: 8, size: 0.46, spots: SMALL, colors: [0x2b2b3a],
-    make: (M, c) => ({ mesh: grp(m(bx(0.44, 0.03, 0.15), M('electronics', c)), m(new THREE.PlaneGeometry(0.42, 0.13), M('screen', 0xffffff, { map: keysTex() }), 0, 0.0155, 0, -Math.PI / 2)), shape: boxS(0.22, 0.015, 0.075), halfH: 0.015 }) },
+    make: (M, c) => { const sh = new THREE.Shape(); sh.moveTo(-0.085, -0.006); sh.lineTo(0.02, -0.004); sh.lineTo(0.035, -0.012); sh.lineTo(0.085, -0.012); sh.lineTo(0.085, 0.012); sh.lineTo(0.035, 0.012); sh.lineTo(0.02, 0.004); sh.lineTo(-0.085, 0.006); sh.lineTo(-0.085, -0.006);
+      for (const y of [-0.0055, 0, 0.0055]) { const h = new THREE.Path(); h.moveTo(0.05, y - 0.0012); h.lineTo(0.086, y - 0.0012); h.lineTo(0.086, y + 0.0012); h.lineTo(0.05, y + 0.0012); h.lineTo(0.05, y - 0.0012); sh.holes.push(h); }
+      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.003, bevelEnabled: false }); g.translate(0, 0, -0.0015); g.rotateX(-Math.PI / 2);
+      return { mesh: m(g, M('metal', c)), shape: boxS(0.085, 0.004, 0.011), halfH: 0.004 }; } },
+  keyboard: { kind: 'electronics', hp: 2, pts: 20, mass: 0.8, bv: 8, size: 0.46, spots: SMALL, colors: [0x2b2b3a, 0xc8c8d0],
+    make: (M, c) => { const keys = [], dark = c === 0x2b2b3a, key = (w, x, z) => keys.push(new THREE.BoxGeometry(w - 0.003, 0.008, 0.0155).translate(x, 0.0085, z));
+      for (let r = 0; r < 4; r++) for (let k = 0; k < 14; k++) key(0.0175, -0.205 + 0.019 * k + (r % 2) * 0.006, -0.055 + r * 0.021);
+      key(0.03, -0.19, 0.029); key(0.03, -0.155, 0.029); key(0.13, -0.05, 0.029); key(0.03, 0.055, 0.029); key(0.03, 0.09, 0.029); for (let k = 0; k < 3; k++) key(0.0175, 0.14 + k * 0.019, 0.029);
+      return { mesh: grp(m(slab(0.44, 0.022, 0.15, 0.01, 0.003, true), M('electronics', c), 0, -0.004), m(mergeGeometries(keys), M('plastic', dark ? 0x1c1c24 : 0xf0f0f4))), shape: boxS(0.22, 0.015, 0.075), halfH: 0.015 }; } },
   monitor: { kind: 'electronics', hp: 3, pts: 40, mass: 4, bv: 7.5, size: 0.72, spots: BIG, colors: [0x2b2b3a, 0xd9d6e6],
-    make: (M, c) => { const mt = M('electronics', c), tx = Math.random() < 0.5 ? screenTex() : spreadsheetTex();
-      return { mesh: grp(m(bx(0.72, 0.46, 0.06), mt, 0, 0.06), m(new THREE.PlaneGeometry(0.66, 0.4), M('screen', 0xffffff, { map: tx }), 0, 0.06, 0.031), m(bx(0.06, 0.12, 0.04), mt, 0, -0.22), m(bx(0.28, 0.025, 0.18), mt, 0, -0.275)), shape: boxS(0.36, 0.29, 0.09), halfH: 0.29 }; } },
+    make: (M, c) => { const mt = M('electronics', c), tx = Math.random() < 0.5 ? screenTex() : spreadsheetTex(), base = m(cyl(0.11, 0.12, 0.014, 36), mt, 0, -0.276, -0.02); base.scale.z = 0.7;
+      return { mesh: grp(m(slab(0.72, 0.44, 0.024, 0.012, 0.004), M('electronics', 0x15151a), 0, 0.06), m(slab(0.42, 0.26, 0.05, 0.03, 0.01), mt, 0, 0.06, -0.035),
+        m(new THREE.PlaneGeometry(0.68, 0.4), M('screen', 0xffffff, { map: tx }), 0, 0.065, 0.0165), m(slab(0.05, 0.16, 0.025, 0.008, 0.003), mt, 0, -0.18, -0.06, -0.12), base), shape: boxS(0.36, 0.29, 0.09), halfH: 0.29 }; } },
   tv: { kind: 'electronics', hp: 4, pts: 60, mass: 7, bv: 7, size: 0.96, spots: ['floor', 'table'], colors: [0x1d1b26],
     make: (M, c) => { const mt = M('electronics', c), g = grp(m(bx(0.96, 0.58, 0.08), mt, 0, 0.03), m(new THREE.PlaneGeometry(0.9, 0.52), M('screen', 0xffffff, { map: staticTex() }), 0, 0.03, 0.041));
       for (const x of [-0.35, 0.35]) g.add(m(bx(0.06, 0.05, 0.2), mt, x, -0.285)); return { mesh: g, shape: boxS(0.48, 0.31, 0.1), halfH: 0.31 }; } },
   crt: { kind: 'electronics', hp: 4, pts: 55, mass: 12, bv: 7, size: 0.6, spots: BIG, colors: [0xcfc6a8, 0x3a3a3a],
     make: (M, c) => ({ mesh: grp(m(bx(0.6, 0.5, 0.5), M('electronics', c)), m(new THREE.PlaneGeometry(0.48, 0.38), M('screen', 0xffffff, { map: staticTex() }), 0, 0.02, 0.252)), shape: boxS(0.3, 0.25, 0.25), halfH: 0.25 }) },
-  printer: { kind: 'electronics', hp: 3, pts: 35, mass: 5, bv: 8.5, size: 0.52, spots: BIG, colors: [0xe6e6ee, 0xcfd6e6],
-    make: (M, c) => ({ mesh: grp(m(bx(0.5, 0.24, 0.38), M('electronics', c)), m(bx(0.38, 0.03, 0.2), M('electronics', 0x8d8aa0), 0, 0.13, -0.05), m(bx(0.36, 0.03, 0.02), M('electronics', 0x2b2b3a), 0, 0.04, 0.19), m(bx(0.04, 0.02, 0.01), M('emissive', 0x2fd18a), 0.18, 0.08, 0.192)), shape: boxS(0.25, 0.12, 0.19), halfH: 0.12 }) },
+  printer: { kind: 'electronics', hp: 3, pts: 35, mass: 5, bv: 8.5, size: 0.52, spots: BIG, colors: [0xd4d4dc, 0xc4cad6],
+    make: (M, c) => { const dark = M('electronics', 0x2b2b3a), paper = M('plastic', 0xfafafa);
+      return { mesh: grp(m(slab(0.5, 0.2, 0.38, 0.03, 0.008, true), M('electronics', c), 0, -0.02), m(slab(0.46, 0.02, 0.3, 0.02, 0.004, true), M('electronics', 0xd0d0d8), 0, 0.088, -0.02),
+        m(bx(0.36, 0.008, 0.17), M('electronics', 0x9a9aa6), 0, 0.15, -0.2, -0.9), m(bx(0.21, 0.003, 0.16), paper, 0, 0.155, -0.195, -0.9),
+        m(bx(0.38, 0.026, 0.02), dark, 0, 0.025, 0.19), m(bx(0.34, 0.006, 0.12), M('electronics', 0xb0b0ba), 0, -0.03, 0.25), m(bx(0.21, 0.003, 0.1), paper, 0, -0.025, 0.24),
+        m(slab(0.12, 0.006, 0.05, 0.01, 0.002, true), dark, 0.15, 0.1, 0.13), m(cyl(0.006, 0.006, 0.006, 12), M('plastic', 0x707080), 0.12, 0.105, 0.13), m(cyl(0.006, 0.006, 0.006, 12), M('plastic', 0x707080), 0.14, 0.105, 0.13), m(bx(0.012, 0.004, 0.006), M('emissive', 0x2fd18a), 0.18, 0.105, 0.13)),
+        shape: boxS(0.25, 0.12, 0.19), halfH: 0.12 }; } },
   laptop: { kind: 'electronics', hp: 2, pts: 30, mass: 1.5, bv: 7, size: 0.36, spots: SMALL, colors: [0xb8bcc4, 0x2b2b3a],
     make: (M, c) => { const mt = M('electronics', c), lid = grp(m(bx(0.34, 0.22, 0.012), mt), m(new THREE.PlaneGeometry(0.31, 0.19), M('screen', 0xffffff, { map: spreadsheetTex() }), 0, 0, 0.007)); lid.position.set(0, 0.01, -0.11); lid.rotation.x = -0.25;
       return { mesh: grp(m(bx(0.34, 0.02, 0.24), mt, 0, -0.1), m(new THREE.PlaneGeometry(0.3, 0.12), M('screen', 0xffffff, { map: keysTex() }), 0, -0.089, 0.03, -Math.PI / 2), lid), shape: boxS(0.17, 0.11, 0.12), halfH: 0.11 }; } },
   phone: { kind: 'electronics', hp: 1, pts: 12, mass: 0.2, bv: 6, size: 0.15, spots: SMALL, colors: [0x1a1a22, 0xd9d6e6],
-    make: (M, c) => ({ mesh: grp(m(bx(0.075, 0.01, 0.15), M('electronics', c)), m(new THREE.PlaneGeometry(0.068, 0.138), M('screen', 0xffffff, { map: screenTex() }), 0, 0.0055, 0, -Math.PI / 2)), shape: boxS(0.0375, 0.005, 0.075), halfH: 0.005 }) },
+    make: (M, c) => ({ mesh: grp(m(slab(0.075, 0.009, 0.15, 0.01, 0.0015, true), M('electronics', c)), m(new THREE.PlaneGeometry(0.068, 0.142), M('screen', 0xffffff, { map: screenTex() }), 0, 0.0047, 0, -Math.PI / 2),
+      m(slab(0.022, 0.003, 0.022, 0.005, 0.001, true), M('electronics', 0x101014), -0.018, -0.0055, -0.055), m(cyl(0.005, 0.005, 0.002, 14), M('glass', 0x222244), -0.018, -0.0072, -0.055)), shape: boxS(0.0375, 0.005, 0.075), halfH: 0.005 }) },
   speaker: { kind: 'electronics', hp: 2, pts: 25, mass: 3, bv: 7, size: 0.22, spots: ANY, colors: [0x1a1a22],
     make: (M, c) => ({ mesh: grp(m(bx(0.2, 0.32, 0.2), M('electronics', c)), m(cyl(0.07, 0.07, 0.02, 20), M('electronics', 0x3a3a44), 0, -0.05, 0.1, Math.PI / 2), m(cyl(0.03, 0.03, 0.02, 16), M('electronics', 0x3a3a44), 0, 0.09, 0.1, Math.PI / 2)), shape: boxS(0.1, 0.16, 0.1), halfH: 0.16 }) },
   microwave: { kind: 'electronics', hp: 3, pts: 40, mass: 8, bv: 8, size: 0.5, spots: BIG, colors: [0xe6e6ee, 0x2b2b30],
@@ -120,9 +166,15 @@ export const DEFS = {
   frame: { kind: 'wood', hp: 1, pts: 15, mass: 0.6, bv: 4, size: 0.3, spots: SMALL, colors: [0x6b4430, 0xc9a227, 0x1a1a1a],
     make: (M, c, o) => ({ mesh: grp(m(bx(0.3, 0.24, 0.025), M('wood', c)), m(new THREE.PlaneGeometry(0.25, 0.19), M('photo', 0xffffff, { map: o.photo || paintingTex() }), 0, 0, 0.0135)), shape: boxS(0.15, 0.12, 0.0125), halfH: 0.12, tilt: true }) },
   cinder: { kind: 'stone', hp: 2, pts: 15, mass: 10, bv: 12, size: 0.4, spots: ['floor', 'table'], colors: [0x9a9590],
-    make: (M, c) => ({ mesh: m(bx(0.39, 0.19, 0.19), M('stone', c)), shape: boxS(0.195, 0.095, 0.095), halfH: 0.095 }) },
+    make: (M, c) => { const sh = rrect(0.39, 0.19, 0.006); for (const x of [-0.095, 0.095]) sh.holes.push(rrect(0.13, 0.115, 0.012).getPoints(4).reduce((pth, q, i) => (i ? pth.lineTo(q.x + x, q.y) : pth.moveTo(q.x + x, q.y), pth), new THREE.Path()));
+      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.182, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.003, bevelSegments: 1, curveSegments: 3 }); g.translate(0, 0, -0.091); g.rotateX(-Math.PI / 2);
+      const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 4 + 0.3, uv.getY(i) * 4 + 0.6); // spread the concrete texture across the block
+      return { mesh: m(g, M('stone', c)), shape: boxS(0.195, 0.095, 0.095), halfH: 0.095 }; } },
   watercooler: { kind: 'plastic', hp: 2, pts: 35, mass: 6, bv: 9, size: 0.34, spots: ['floor'], colors: [0xf0f0f4],
-    make: (M, c) => ({ mesh: grp(m(bx(0.3, 0.9, 0.3), M('plastic', c), 0, -0.2), m(cyl(0.14, 0.14, 0.38, 22), M('glass', 0x6fc3ff), 0, 0.45)), shape: boxS(0.16, 0.65, 0.16), halfH: 0.65 }) },
+    make: (M, c) => { const BOTTLE = [[0, 0.27], [0.03, 0.27], [0.03, 0.31], [0.12, 0.36], [0.14, 0.4], [0.14, 0.47], [0.133, 0.48], [0.14, 0.49], [0.14, 0.58], [0.12, 0.63], [0, 0.645]];
+      return { mesh: grp(m(slab(0.3, 0.9, 0.3, 0.03, 0.01), M('plastic', c), 0, -0.2), m(bx(0.2, 0.17, 0.02), M('plastic', 0x2a2a30), 0, 0.06, 0.145), m(bx(0.17, 0.012, 0.07), M('metal', 0x9aa0aa), 0, -0.03, 0.16),
+        m(bx(0.026, 0.03, 0.035), M('plastic', 0xd03030), -0.045, 0.1, 0.165), m(bx(0.026, 0.03, 0.035), M('plastic', 0x3060d0), 0.045, 0.1, 0.165), m(cyl(0.11, 0.13, 0.03, 32), M('plastic', c), 0, 0.265),
+        m(lathe(BOTTLE, 36), M('glass', 0x6fc3ff)), m(lathe(BOTTLE.map(([r, y]) => [r * 0.94, y]).slice(1, -1).concat([[0, 0.6]]), 32), M('liquid', 0x3a9ae0))), shape: boxS(0.16, 0.65, 0.16), halfH: 0.65 }; } },
   // fixed things that stay put until they break (mass 0)
   window: { kind: 'glass', hp: 1, pts: 20, mass: 0, bv: 5, size: 1, spots: [], colors: [0xdff3ff], fixed: true,
     make: (M, c, o) => ({ mesh: m(bx(o.w, o.h, 0.012), M('glass', c)), shape: boxS(o.w / 2, o.h / 2, 0.03), halfH: o.h / 2 }) },
@@ -239,10 +291,11 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
 
   function add(key, x, y, z, ry = 0, o = {}) {
     const def = DEFS[key], color = o.color ?? pick(def.colors), r = def.make(M, color, { photo: api.photo, ...o });
-    const src = S.realistic && itemModel(key); // realistic look: swap in a real model, sized to the simple shape
+    const src = S.realistic && !(key === 'frame' && api.photo) && itemModel(key); // realistic look: swap in a real model, sized to the simple shape
     if (src) { const g = new THREE.Group(); g.add(fitInto(src, new THREE.Box3().setFromObject(r.mesh), 'item')); r.mesh = g; }
     r.mesh.traverse(n => { if (n.isMesh) { n.castShadow = !def.fixed || key === 'carbody'; n.receiveShadow = true; } });
-    S.outline(r.mesh, def.kind === 'glass' ? 1.04 : 1.05); scene.add(r.mesh);
+    if (def.kind !== 'glass' && key !== 'bowl') S.outline(r.mesh, 1.05); // outlines show through see-through and open vessels, so those go without
+    scene.add(r.mesh);
     const body = new CANNON.Body({ mass: def.mass, position: V(x, def.fixed ? y : y + r.halfH + 0.01, z) }); // fixed things: y is their centre
     if (r.shapes) r.shapes.forEach(([s, off]) => body.addShape(s, off)); else body.addShape(r.shape);
     body.quaternion.setFromEuler(o.rx || 0, ry, 0);
