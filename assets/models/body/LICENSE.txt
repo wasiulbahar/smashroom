@@ -1,0 +1,4 @@
+body.json is derived from the MakeHuman base mesh and macro targets (caucasian-male-young, universal-male-young-maxmuscle),
+which the MakeHuman project released as CC0 1.0 (public domain) in September 2020.
+https://github.com/makehumancommunity/makehuman
+It was cut into six parts at the joints, with the cuts capped, for the clay figure.

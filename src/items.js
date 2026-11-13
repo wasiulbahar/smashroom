@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=5';
-import { itemModel, fitInto } from './models.js?v=5';
+import { canvasTex } from './style.js?v=7';
+import { itemModel, fitInto } from './models.js?v=7';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];

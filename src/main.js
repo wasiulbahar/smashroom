@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU } from './style.js?v=5';
-import { SCENES } from './scenes.js?v=5';
-import { createItems, DEFS } from './items.js?v=5';
-import * as A from './audio.js?v=5';
-import { preloadItemModels } from './models.js?v=5';
-import { createClayFigure, preloadClayHead } from './clay.js?v=5';
-import { createReplay } from './replay.js?v=5';
+import { makeStyle, detectGPU } from './style.js?v=7';
+import { SCENES } from './scenes.js?v=7';
+import { createItems, DEFS } from './items.js?v=7';
+import * as A from './audio.js?v=7';
+import { preloadItemModels } from './models.js?v=7';
+import { createClayFigure, preloadClayBody } from './clay.js?v=7';
+import { createReplay } from './replay.js?v=7';
 
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -456,7 +456,7 @@ function flash(a) { const f = $('flash'); f.style.transition = 'none'; f.style.o
 
 // ---------- session flow
 let modelsReady = null;
-const headReady = preloadClayHead().then(() => { if (state === 'menu' && opts.scene === 'studio') build(); });
+const headReady = preloadClayBody().then(() => { if (state === 'menu' && opts.scene === 'studio') build(); });
 async function startSession() {
   A.initAudio(); A.setVolume(save.vol); A.setRoom(opts.scene);
   if (opts.scene === 'studio') { $('start').textContent = 'Loading…'; await Promise.race([headReady, new Promise(r => setTimeout(r, 20000))]); $('start').textContent = 'Start smashing'; }

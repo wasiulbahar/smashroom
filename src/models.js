@@ -12,15 +12,32 @@ export function loadModel(id) {
   return cache.get(id);
 }
 
-// breakable item -> model choices
+// breakable item -> model choices. 'id#name' takes only the pieces of a set whose name contains `name`.
 export const ITEM_MODELS = {
   tv: ['Television_01'], crt: ['television_02'], pot: ['ceramic_pot'], chair: ['WoodenChair_01'], stool: ['wooden_stool_01'], crate: ['wooden_crate_01'],
   vase: ['ceramic_vase_01', 'ceramic_vase_02', 'ceramic_vase_03', 'ceramic_vase_04', 'antique_ceramic_vase_01'],
-  laptop: ['classic_laptop'], lamp: ['desk_lamp_arm_01'], clock: ['alarm_clock_01'], kettle: ['vintage_electric_kettle'], microwave: ['vintage_microwave'],
+  laptop: ['classic_laptop'], lamp: ['desk_lamp_arm_01'], clock: ['alarm_clock_01', 'mantel_clock_01'], kettle: ['vintage_electric_kettle'], microwave: ['vintage_microwave'],
   jug: ['jug_01'], pan: ['brass_pan_01'], saucepan: ['pot_enamel_01'], speaker: ['boombox'],
+  bottle: ['wine_bottles_01#bordeaux', 'wine_bottles_01#alsace', 'wine_bottles_01#burgundy', 'wine_bottles_01#champagne'],
+  teapot: ['tea_set_01#teapot_01'], mug: ['tea_set_01#cup_small_01', 'tea_set_01#cup_small_02'],
+  plate: ['tea_set_01#plate_large_circular', 'tea_set_01#saucer_circular_03', 'tea_set_01#saucer_circular_04'],
 };
-export const preloadItemModels = () => Promise.all(Object.values(ITEM_MODELS).flat().map(loadModel));
-export const itemModel = key => { const ids = (ITEM_MODELS[key] || []).filter(id => ready.get(id)); return ids.length ? ready.get(ids[Math.floor(Math.random() * ids.length)]) : null; };
+const fileOf = spec => spec.split('#')[0];
+export const preloadItemModels = () => Promise.all([...new Set(Object.values(ITEM_MODELS).flat().map(fileOf))].map(loadModel));
+const pieces = new Map();
+function piece(spec) { // one item out of a set, keeping each part where it sits in the set
+  if (pieces.has(spec)) return pieces.get(spec);
+  const [id, name] = spec.split('#'), src = ready.get(id), g = new THREE.Group();
+  src.updateMatrixWorld(true);
+  src.traverse(o => { if (o.isMesh && o.name.includes(name)) { const c = o.clone(); o.matrixWorld.decompose(c.position, c.quaternion, c.scale); g.add(c); } });
+  pieces.set(spec, g.children.length ? g : null); return pieces.get(spec);
+}
+export const itemModel = key => {
+  const specs = (ITEM_MODELS[key] || []).filter(s => ready.get(fileOf(s)));
+  if (!specs.length) return null;
+  const s = specs[Math.floor(Math.random() * specs.length)];
+  return s.includes('#') ? piece(s) : ready.get(s);
+};
 
 // Scale a copy of `src` uniformly so it fits inside `box` (or matches its height), sitting on the box's floor.
 // mode 'height' = match height; 'item' = match height but never much wider than the box (keeps physics believable)

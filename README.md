@@ -8,7 +8,7 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 
 - **Two looks.** *Stylized* (bright cartoon, runs on almost anything) or *Realistic* (real textures and models, see-through glass, soft shadows, dust and glow; needs more PC power, quality drops automatically if it lags).
 - **Seven rooms.** Classic rage room, abandoned building, haunted house, corporate office, kitchen, car yard (smash a whole car) and a clay studio.
-- **Clay figure.** A life-size clay figure with a realistic scanned head that you punch, slap and kick with bare hands. Every hit leaves a dent, it sways and groans, limbs crack off, and every third figure is a tougher boss.
+- **Clay figure.** A life-size clay statue of a human body that you punch, slap and kick with bare hands. Every hit leaves a dent, slaps turn its head, it sways and groans, arms, legs and head break off at the joints, and every third figure is a tougher gold boss.
 - **Four modes.** Classic (2 minutes), Zen (no timer, calm music), Time attack (clear the room as fast as you can) and Target practice (throw things at targets on the walls).
 - **Things that react.** Gas cans explode and set off chain reactions, golden items are worth 10× for a few seconds, and cup pyramids topple.
 - **Game feel.** Hit-stop on big hits, camera kick, a combo announcer voice and phone vibration.
@@ -48,13 +48,13 @@ Then open http://localhost:8790. (Opening `index.html` straight from disk won't 
 
 ## Credits
 
-Third-party assets are CC0 (public domain), except the head scan, which is CC BY 3.0:
+All third-party assets are CC0 (public domain):
 
 - Textures and 3D models: [Poly Haven](https://polyhaven.com)
 - Impact sounds: [Kenney](https://kenney.nl/assets/impact-sounds)
 - Breaking and falling sounds: "75 CC0 breaking/falling/hit sfx" by rubberduck, [OpenGameArt](https://opengameart.org/content/75-cc0-breaking-falling-hit-sfx)
 - Glass break: "Glass Break" by Till Behrend, [OpenGameArt](https://opengameart.org/content/glass-break)
 - Footsteps: "Different steps on wood, stone, leaves, gravel and mud" by TinyWorlds, [OpenGameArt](https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud)
-- Clay figure head: "Infinite, 3D Head Scan" by Lee Perry-Smith, licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), based on a work at [triplegangers.com](https://www.triplegangers.com), via the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/models/gltf/LeePerrySmith)
+- Clay figure body: the [MakeHuman](https://github.com/makehumancommunity/makehuman) base mesh and macro targets, CC0
 
 See `assets/sounds/CREDITS.txt` for details.
