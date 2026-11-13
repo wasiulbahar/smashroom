@@ -11,7 +11,7 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Clay figure.** A life-size clay statue of a human body that you punch, slap and kick with bare hands. Every hit leaves a dent, slaps turn its head, it sways and groans, arms, legs and head break off at the joints, and every third figure is a tougher gold boss.
 - **Four modes.** Classic (2 minutes), Zen (no timer, calm music), Time attack (clear the room as fast as you can) and Target practice (throw things at targets on the walls).
 - **Things that react.** Gas cans explode and set off chain reactions, golden items are worth 10× for a few seconds, and cup pyramids topple.
-- **Game feel.** Hit-stop on big hits, camera kick, a combo announcer voice and phone vibration.
+- **Game feel.** Hit-stop on big hits, camera kick, on-screen combo calls and phone vibration.
 - **Best smash replay.** Your best moment plays back in slow motion at the end, and you can save it as a video clip.
 - **Smash, grab and throw.** 40+ breakable things: glass, china, TVs, monitors, printers, laptops, furniture, cinder blocks. Thrown things break easier and score more.
 - **Anything you hold is a weapon.** Pick up a pan, a chair or a bottle and hit things with it. Breakable things break in your hand.

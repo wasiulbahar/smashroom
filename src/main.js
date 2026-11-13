@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU } from './style.js?v=10';
-import { SCENES } from './scenes.js?v=10';
-import { createItems, DEFS } from './items.js?v=10';
-import * as A from './audio.js?v=10';
-import { preloadItemModels } from './models.js?v=10';
-import { createClayFigure, preloadClayBody } from './clay.js?v=10';
-import { createReplay } from './replay.js?v=10';
+import { makeStyle, detectGPU } from './style.js?v=11';
+import { SCENES } from './scenes.js?v=11';
+import { createItems, DEFS } from './items.js?v=11';
+import * as A from './audio.js?v=11';
+import { preloadItemModels } from './models.js?v=11';
+import { createClayFigure, preloadClayBody } from './clay.js?v=11';
+import { createReplay } from './replay.js?v=11';
 
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -48,7 +48,7 @@ const GMODES = {
 const vibrate = ms => { if (isTouch) try { navigator.vibrate?.(ms); } catch (e) {} };
 
 // ---------- world
-let opts = { mode: null, scene: 'classic', weapon: 'bat', quality: 'auto', music: true, gm: 'classic', voice: true };
+let opts = { mode: null, scene: 'classic', weapon: 'bat', quality: 'auto', music: true, gm: 'classic' };
 let S, scene, world, camera, I, room, pivot, weaponMesh, photoTex = null, W = WEAPONS.bat, figure = null;
 const qualityFor = () => opts.mode !== 'realistic' ? 'medium' : opts.quality === 'auto' ? gpu.tier : opts.quality;
 
@@ -217,7 +217,6 @@ const CALLS = { 3: 'Nice!', 5: 'Combo!', 8: 'Rampage!', 12: 'Unstoppable!', 16: 
 function bumpCombo() { combo++; comboTimer = 2.5; bestCombo = Math.max(bestCombo, combo); if (CALLS[combo]) announce(CALLS[combo]); emit('combo', { n: combo }); }
 function announce(text) {
   const a = $('announce'); a.textContent = text; a.classList.remove('show'); void a.offsetWidth; a.classList.add('show');
-  if (opts.voice && window.speechSynthesis) try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text.replace(/!/g, '')); u.pitch = 0.4; u.rate = 1.05; speechSynthesis.speak(u); } catch (e) {}
 }
 
 // a gas can went off: fireball, knock everything back, break what's close (which can set off more cans)
@@ -333,8 +332,9 @@ function doHit() {
 }
 function clayHit(res, dir) {
   const p = res.point, hard = atk === 'kick' || heavyNow;
-  A.at(p, () => { if (atk === 'punch') A.SFX.punch(1); else if (atk === 'slap') A.SFX.slap(1); else if (atk === 'kick') A.SFX.kick(1); else A.SFX.thud('wood', 1);
-    A.SFX.clay(hard ? 1 : 0.7); if (res.voice) A.SFX.voice(res.voice); });
+  A.at(p, () => { // the clay takes hits like a sandbag: a dull thud, deeper for kicks and heavy swings
+    if (atk === 'slap') { A.SFX.slap(0.8); A.SFX.bag(0.5, 1.15); }
+    else A.SFX.bag(hard ? 1 : 0.8, atk === 'kick' ? 0.8 : heavyNow ? 0.85 : atk === 'punch' ? 1 : 0.92); });
   shake = Math.max(shake, hard ? 0.16 : 0.07); recoil = 0.6; freeze(hard ? 35 : 20);
   kick = Math.min(0.08, kick + (hard ? 0.03 : 0.015)); vibrate(hard ? 35 : 15);
   bumpCombo(); emit('hit');
@@ -347,7 +347,7 @@ function clayHit(res, dir) {
     addScore(Math.round(part.pts * mult), p, 'big'); if (names[part.name]) popup(names[part.name], { x: p.x, y: p.y + 0.4, z: p.z }, 'small');
     if (performance.now() >= rageUntil) { rageMeter += 10; if (rageMeter >= 100) startRage(); }
   }
-  if (res.lost.length) { A.SFX.clay(1); A.SFX.wood(0.6); slowUntil = performance.now() + 200; flash(0.12); freeze(70); vibrate(60); }
+  if (res.lost.length) { A.at(p, () => { A.SFX.bag(1, 0.72); A.SFX.land('stone', 0.6); }); slowUntil = performance.now() + 200; flash(0.12); freeze(70); vibrate(60); }
   if (res.collapsed) { banner('Sculpture smashed!'); addScore(80, p, 'big'); figureDowned = true; }
 }
 function hitItem(it, dir) {
@@ -762,7 +762,7 @@ function renderLobby() {
     return card(k === opts.weapon, `<b>${ok ? '' : '🔒 '}${w.name}</b><small>${ok ? w.desc : 'Unlock: ' + unlockText(w.unlock)}</small>`, `data-w="${k}"`, !ok); }).join('');
   $('qualityRow').classList.toggle('hidden', opts.mode !== 'realistic');
   $('quality').value = opts.quality;
-  $('music').checked = opts.music; $('voice').checked = opts.voice;
+  $('music').checked = opts.music;
   $('darkTog').classList.toggle('hidden', !save.ach.lamps);
   $('achBtn').textContent = `Achievements ${ACH.filter(a => save.ach[a.id]).length}/${ACH.length}`;
   $('lifetime').textContent = `Lifetime: ${save.points.toLocaleString()} points · ${save.smashed.toLocaleString()} things smashed`;
@@ -799,7 +799,6 @@ $('achClose').onclick = () => $('achScreen').classList.add('hidden');
 $('tutBtn').onclick = () => { tutAgain = true; startSession(); };
 $('tutSkip').onclick = () => tut && tutDone(true);
 $('gmodes').onclick = e => { const b = e.target.closest('.card'); if (!b) return; opts.gm = b.dataset.g; renderLobby(); };
-$('voice').onchange = e => { opts.voice = e.target.checked; };
 $('dark').onchange = e => { opts.dark = e.target.checked; };
 $('watchAgain').onclick = () => replay.best && playReplay();
 $('saveClip').onclick = () => replay.download();
@@ -946,7 +945,7 @@ function frame(now) {
       smokers = smokers.filter(k => { puff(k.p, 0x4a4a50, 1, 0.35, 0.8, 0.4); return now < k.until; }); }
     W.hands ? poseHands() : poseWeapon();
     const fu = figure && figure.update(dt);
-    if (fu) { banner(fu === 'boss' ? 'Boss sculpture!' : 'New sculpture'); if (fu === 'boss') A.SFX.voice('boss'); }
+    if (fu) banner(fu === 'boss' ? 'Boss sculpture!' : 'New sculpture');
     if (!tut && now > goldenAt) { goldenAt = now + rand(14000, 22000); makeGolden(); }
     updateGolden(now, t);
     if (opts.gm === 'attack') { elapsed += rdt; if (remaining() === 0) endSession(); }

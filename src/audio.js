@@ -116,7 +116,7 @@ const SYN = {
 };
 
 // recorded CC0 samples (assets/sounds, see CREDITS.txt); generated sounds are the fallback until they load
-const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1 };
+const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6 };
 const bufs = {};
 function loadSamples() {
   for (const [set, n] of Object.entries(SETS)) for (let i = 0; i < n; i++)
@@ -150,6 +150,7 @@ export const SFX = {
       : kind === 'clay' ? smp('punch', 0.25 * i, 0.6) : smp('plastic', 0.3 * i, rand(1.1, 1.5));
     if (!ok) SYN.clink(kind, i);
   },
+  bag(i = 1, r = 1) { smp('bag', i, r) || SYN.thud('wood', i); }, // a dull, heavy hit, like punching a sandbag: the clay figure
   crack(i = 1, r = 1) { smp('crack', i, r) || SYN.wood(i); }, // wood splitting: tables and shelves giving way
   zap(i = 1) { if (!smp('zap', i, rand(0.9, 1.2))) return; smp('zap', 0.6 * i, rand(1.1, 1.4), 0.12); smp('zap', 0.35 * i, rand(0.8, 1), 0.3); }, // a light shorting out
   splash(i = 1) { smp('splash', i, rand(0.9, 1.1)); },
