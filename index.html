@@ -45,6 +45,9 @@ h2{font-family:Bungee,Impact,sans-serif;font-weight:400;font-size:18px;margin:22
 label.tog{display:flex;gap:8px;align-items:center;cursor:pointer;color:var(--muted)}
 label.tog input{width:20px;height:20px;accent-color:var(--pink)}
 select{font:inherit;background:var(--bg);color:var(--text);border:3px solid var(--ink);border-radius:8px;padding:6px 8px}
+.vols{display:flex;gap:18px;flex-wrap:wrap;margin-top:16px;color:var(--muted);font-size:14px;justify-content:center}
+.vols label{display:flex;gap:8px;align-items:center}
+.vols input{width:120px;accent-color:var(--pink)}
 .photo{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .photo span{color:var(--muted);font-size:13px}
 .keys{color:var(--muted);font-size:13px;margin-top:14px;line-height:1.7}
@@ -181,8 +184,13 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
       </div>
       <button class="btn" id="start">Start smashing</button>
     </div>
+    <div class="vols">
+        <label>Volume <input type="range" class="vol" data-v="master" min="0" max="100"></label>
+        <label>Effects <input type="range" class="vol" data-v="sfx" min="0" max="100"></label>
+        <label>Music <input type="range" class="vol" data-v="music" min="0" max="100"></label>
+      </div>
     <p class="keys" id="keysDesk">
-      <kbd>WASD</kbd> move · <kbd>Mouse</kbd> look · <kbd>Click</kbd> swing (hold to keep swinging)<br>
+      <kbd>WASD</kbd> move · <kbd>Mouse</kbd> look · <kbd>Click</kbd> swing · hold to wind up a heavy swing<br>
       <kbd>E</kbd> or <kbd>Right-click</kbd> grab what's highlighted · press again to throw · or <kbd>Click</kbd> to throw (hold for power) · <kbd>Q</kbd> drop · <kbd>Esc</kbd> pause<br>
       Bare hands: <kbd>Click</kbd> punch · <kbd>F</kbd> slap · <kbd>Space</kbd> kick
     </p>
@@ -193,6 +201,11 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
 <div id="pause" class="overlay hidden">
   <div class="panel" style="text-align:center">
     <h1 style="font-size:48px">Paused</h1>
+    <div class="vols">
+        <label>Volume <input type="range" class="vol" data-v="master" min="0" max="100"></label>
+        <label>Effects <input type="range" class="vol" data-v="sfx" min="0" max="100"></label>
+        <label>Music <input type="range" class="vol" data-v="music" min="0" max="100"></label>
+      </div>
     <div class="row" style="justify-content:center">
       <button class="btn" id="resume">Keep smashing</button>
       <button class="btn alt" id="quit">End session</button>
@@ -219,6 +232,6 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=4"></script>
+<script type="module" src="src/main.js?v=5"></script>
 </body>
 </html>

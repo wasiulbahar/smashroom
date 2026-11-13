@@ -14,7 +14,9 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Game feel.** Hit-stop on big hits, camera kick, a combo announcer voice and phone vibration.
 - **Best smash replay.** Your best moment plays back in slow motion at the end, and you can save it as a video clip.
 - **Smash, grab and throw.** 40+ breakable things: glass, china, TVs, monitors, printers, laptops, furniture, cinder blocks. Thrown things break easier and score more.
-- **Damage that stays.** Cracks on the walls, dents in the car, marks where thrown things hit.
+- **Real breaking.** Objects split into pieces of themselves, smaller near the hit, keeping their shape and texture. Tougher things show damage first: cracks where you hit, broken flickering screens, smoke.
+- **Damage that stays.** Cracks on the walls, dents in the car and on metal, liquid splashes, marks where thrown things hit.
+- **3D sound.** Recorded breaks placed where they happen, an echo matched to each room, pieces tinkling as they land, footsteps, muffled ears after an explosion, and volume sliders.
 - **Your photo.** Put a photo on cut-outs and picture frames, then smash them. The photo stays on your device and is never uploaded.
 - **Unlockable weapons** (frying pan, golf club, pipe wrench) and local high scores, saved in your browser.
 
@@ -23,7 +25,7 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 | | Keyboard and mouse | Phone |
 |---|---|---|
 | Move / look | WASD + mouse | Left thumb / right thumb |
-| Swing or punch | Click (hold to keep going) | Smash |
+| Swing or punch | Click, or hold to wind up a heavy swing | Smash |
 | Grab / throw | E or right-click, again to throw, or click to throw (hold for power) | Grab |
 | Drop | Q | |
 | Bare hands | Click punch, F slap, Space kick | Smash, Kick |
@@ -52,6 +54,7 @@ Third-party assets are CC0 (public domain), except the head scan, which is CC BY
 - Impact sounds: [Kenney](https://kenney.nl/assets/impact-sounds)
 - Breaking and falling sounds: "75 CC0 breaking/falling/hit sfx" by rubberduck, [OpenGameArt](https://opengameart.org/content/75-cc0-breaking-falling-hit-sfx)
 - Glass break: "Glass Break" by Till Behrend, [OpenGameArt](https://opengameart.org/content/glass-break)
+- Footsteps: "Different steps on wood, stone, leaves, gravel and mud" by TinyWorlds, [OpenGameArt](https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud)
 - Clay figure head: "Infinite, 3D Head Scan" by Lee Perry-Smith, licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), based on a work at [triplegangers.com](https://www.triplegangers.com), via the [three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/models/gltf/LeePerrySmith)
 
 See `assets/sounds/CREDITS.txt` for details.

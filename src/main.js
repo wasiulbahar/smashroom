@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU } from './style.js?v=4';
-import { SCENES } from './scenes.js?v=4';
-import { createItems, DEFS } from './items.js?v=4';
-import * as A from './audio.js?v=4';
-import { preloadItemModels } from './models.js?v=4';
-import { createClayFigure, preloadClayHead } from './clay.js?v=4';
-import { createReplay } from './replay.js?v=4';
+import { makeStyle, detectGPU } from './style.js?v=5';
+import { SCENES } from './scenes.js?v=5';
+import { createItems, DEFS } from './items.js?v=5';
+import * as A from './audio.js?v=5';
+import { preloadItemModels } from './models.js?v=5';
+import { createClayFigure, preloadClayHead } from './clay.js?v=5';
+import { createReplay } from './replay.js?v=5';
 
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -20,7 +20,7 @@ const gpu = detectGPU(renderer);
 // ---------- saved progress (this browser only)
 const SAVE_KEY = 'smashroom.v2';
 const save = (() => { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { return {}; } })();
-save.points ??= 0; save.smashed ??= 0; save.best ??= {};
+save.points ??= 0; save.smashed ??= 0; save.best ??= {}; save.vol ??= { master: 1, music: 1, sfx: 1 };
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
 
 const WEAPONS = {
@@ -72,7 +72,7 @@ function build() {
   if (Math.random() < 0.7) I.pyramid(room.slots);
   spawnPhotos();
   boomLight = new THREE.PointLight(0xffa040, 0, 12, 2); scene.add(boomLight); fx = [];
-  held = null; hlTarget = null; hlMeshes = []; charging = false; swingT = -1; marks = [];
+  held = null; hlTarget = null; hlMeshes = []; charging = false; swingT = -1; marks = []; puffs = []; smokers = []; recoil = 0; swingHold = 0;
 }
 const batchSize = () => Math.min(24, Math.max(14, Math.ceil(room.slots.length * 0.45)));
 function spawnPhotos() {
@@ -123,11 +123,63 @@ let held = null, charging = false, chargeT = 0, hlTarget = null, hlMeshes = [];
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), v4 = new THREE.Vector3();
 const HL = new THREE.MeshBasicMaterial({ color: 0xffd23f, side: THREE.BackSide, transparent: true, opacity: 0.85, depthWrite: false });
 
-function onClink(kind, i) { if (performance.now() - lastClink > 60) { lastClink = performance.now(); A.SFX.clink(kind, i); } }
+function onClink(kind, i, pos) { if (performance.now() - lastClink > 35) { lastClink = performance.now(); A.at(pos, () => A.SFX.land(kind, i)); } }
+
+// ---------- dust, smoke and liquid
+let puffs = [], smokers = [], puffTex = null, smokeT = 0;
+function puff(p, color, n = 3, size = 0.25, rise = 0.3, op = 0.5) {
+  if (!puffTex) { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.5, 'rgba(255,255,255,.45)'); r.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); puffTex = new THREE.CanvasTexture(c); }
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex, color, transparent: true, opacity: op, depthWrite: false }));
+    m.position.set(p.x + rand(-0.1, 0.1), p.y + rand(-0.05, 0.1), p.z + rand(-0.1, 0.1)); m.scale.setScalar(size * 0.5); scene.add(m);
+    puffs.push({ m, v: new THREE.Vector3(rand(-0.5, 0.5), rise + rand(0, 0.3), rand(-0.5, 0.5)), life: 0, max: rand(0.7, 1.4), size, op });
+  }
+  while (puffs.length > 70) { const o = puffs.shift(); scene.remove(o.m); o.m.material.dispose(); }
+}
+const DUST = { glass: 0xe8f4ff, ceramic: 0xe8e2d6, electronics: 0x8a8a92, wood: 0xb89a70, stone: 0xb0aaa2, plastic: 0xd0d0d8, photo: 0xb89a70, explosive: 0x555555 };
+const LIQUID = { bottle: 0x9a6a2a, beermug: 0xd9a22a, wineglass: 0x7a1030, jug: 0x9fd0ff, teapot: 0x8a5a2a, fishbowl: 0x6fc3ff, watercooler: 0x6fc3ff, jar: 0xc9882a };
+const DOWN = new THREE.Vector3(0, -1, 0);
+
+// ---------- damage you can see before something breaks
+function itemHitPoint(it) {
+  const o = camera.getWorldPosition(new THREE.Vector3()), f = camera.getWorldDirection(new THREE.Vector3());
+  ray.set(o, f); ray.far = 6;
+  const h = ray.intersectObject(it.mesh, true).find(x => x.face && !x.object.userData.ol && !x.object.userData.hl && !x.object.userData.gold);
+  if (!h) return null;
+  const n = h.face.normal.clone().transformDirection(h.object.matrixWorld); if (n.dot(f) > 0) n.negate();
+  return { point: h.point.clone(), normal: n };
+}
+function damageDecal(it, h, type, size) {
+  it.decals = (it.decals || 0) + 1; if (it.decals > 6) return;
+  const root = it.mesh; root.updateMatrixWorld(true);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: markTex(type), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, side: THREE.DoubleSide }));
+  m.userData.ol = true; // not part of the object: skipped by outlines, highlights and fragments
+  const nl = h.normal.clone().applyQuaternion(root.getWorldQuaternion(new THREE.Quaternion()).invert()).normalize();
+  m.position.copy(root.worldToLocal(h.point.clone())).addScaledVector(nl, 0.006); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), nl); m.rotateZ(rand(0, 6.28)); root.add(m);
+}
+function crackScreen(it) {
+  it.mesh.traverse(m => {
+    if (!m.isMesh || m.userData.ol || m.userData.cracked || !m.material.isMeshBasicMaterial || !m.material.map) return;
+    const src = m.material.map.image; if (!src || !src.width) return;
+    const c = document.createElement('canvas'); c.width = 256; c.height = Math.max(48, Math.round(256 * src.height / src.width)); const g = c.getContext('2d'); g.drawImage(src, 0, 0, c.width, c.height);
+    const cx = rand(60, 196), cy = rand(c.height * 0.25, c.height * 0.75); g.lineCap = 'round';
+    g.fillStyle = 'rgba(5,5,10,.85)'; g.beginPath(); g.arc(cx, cy, rand(10, 18), 0, 7); g.fill();
+    for (let k = 0; k < 13; k++) { let a = k / 13 * Math.PI * 2 + rand(-0.2, 0.2), x = cx, y = cy; g.strokeStyle = k % 3 ? 'rgba(10,10,15,.9)' : 'rgba(255,255,255,.8)'; g.lineWidth = rand(0.8, 2.4); g.beginPath(); g.moveTo(x, y);
+      for (let d = 0; d < rand(50, 200); d += 14) { a += rand(-0.3, 0.3); x += Math.cos(a) * 14; y += Math.sin(a) * 14; g.lineTo(x, y); } g.stroke(); }
+    for (let k = 0; k < 5; k++) { g.fillStyle = `rgba(${k % 2 ? '255,0,160' : '0,220,255'},.5)`; g.fillRect(0, rand(0, c.height), c.width, rand(1, 5)); }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; m.material = new THREE.MeshBasicMaterial({ map: t }); m.userData.cracked = true; (it.screens ||= []).push(m);
+  });
+  if (it.screens) it.flicker = performance.now() + 800;
+}
 function onBreak(it, fromHit) {
   const d = it.def, p = it.body.position;
-  A.SFX[d.kind]?.(1);
-  const big = d.size > 0.45 || (fromHit && W.heavy);
+  const sz = Math.min(1.2, d.size), rate = Math.max(0.7, Math.min(1.15, 1.22 - sz * 0.55)), lv = Math.max(0.85, Math.min(1.25, 0.8 + sz * 0.5));
+  A.at(p, () => { (A.SFX[d.kind] || A.SFX.plastic)(lv, rate); if (sz > 0.4) A.SFX.body(lv); }); // small things ring high and light, big things low and loud
+  const big = d.size > 0.45 || (fromHit && heavyNow);
+  puff(p, DUST[d.kind] || 0xbbbbbb, big ? 6 : 3, 0.2 + sz * 0.5, 0.25, d.kind === 'glass' ? 0.25 : 0.5);
+  if (d.kind === 'electronics') smokers.push({ p: new THREE.Vector3(p.x, p.y, p.z), until: performance.now() + 2200 });
+  if (LIQUID[it.key]) { I.sparks_(p, 22, LIQUID[it.key]); const h = surfaceHit(new THREE.Vector3(p.x, p.y, p.z), DOWN, 3); if (h) addMark(h.point, h.normal, 'splat', rand(0.35, 0.6) * (it.key === 'watercooler' ? 2 : 1), LIQUID[it.key]); }
   shake = Math.max(shake, big ? 0.3 : 0.18);
   if ((fromHit && big) || it.thrown) slowUntil = performance.now() + (it.thrown ? 220 : 170);
   flash(big ? 0.2 : 0.1);
@@ -162,7 +214,9 @@ function announce(text) {
 // a gas can went off: fireball, knock everything back, break what's close (which can set off more cans)
 function explode(p, src) {
   const P = new THREE.Vector3(p.x, p.y, p.z), R = 2.6, now = performance.now();
-  A.SFX.boom(); shake = Math.max(shake, 0.7); flash(0.5); freeze(110); slowUntil = now + 700; vibrate(150); kick = Math.min(0.12, kick + 0.08);
+  A.at(P, () => A.SFX.boom()); puff(P, 0x3a3632, 8, 1.1, 0.8, 0.6);
+  if (Math.hypot(P.x - player.x, P.z - player.z) < 5) { deafUntil = now + 1500; A.SFX.ring(); }
+  shake = Math.max(shake, 0.7); flash(0.5); freeze(110); slowUntil = now + 700; vibrate(150); kick = Math.min(0.12, kick + 0.08);
   for (const [color, grow, max, op] of [[0xffa040, 2.4, 0.5, 1], [0x2a2622, 3, 1.3, 0.55]]) {
     const ball = new THREE.Mesh(FIREBALL, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, toneMapped: false, depthWrite: false }));
     ball.position.copy(P); ball.scale.setScalar(0.2); scene.add(ball); fx.push({ mesh: ball, life: 0, max, grow, op });
@@ -215,21 +269,23 @@ function spawnTarget() {
 }
 const remaining = () => I.list.filter(i => !i.dead && i.def.hp !== Infinity && i.key !== 'cutout' && i.key !== 'target').length + (figure && !figureDowned ? 1 : 0);
 
-let atk = 'swing', side = 1, CW = W, atkCount = 0;
+let atk = 'swing', side = 1, CW = W, atkCount = 0, swingHold = 0, chargeK = 0, heavyNow = false, recoil = 0, deafUntil = 0, lastStep = 0;
 const ATTACK = { punch: { speed: 0.22, reach: 1.6, power: 1, knock: 5, cone: 0.82 }, slap: { speed: 0.3, reach: 1.5, power: 1, knock: 3, cone: 0.72 }, kick: { speed: 0.45, reach: 1.9, power: 2, knock: 10, cone: 0.72 } };
 const defaultAttack = () => W.hands ? (isTouch && ++atkCount % 3 === 0 ? 'slap' : 'punch') : 'swing';
 function startSwing(type = defaultAttack()) {
   if (swingT >= 0 || state !== 'play' || paused || held) return;
   if (type !== 'swing' && !W.hands) type = 'swing';
   atk = type; CW = type === 'swing' ? W : { ...W, ...ATTACK[type] }; if (type === 'punch') side = -side;
-  swingT = 0; hitDone = false; A.SFX.whoosh(W.heavy || type === 'kick');
+  swingT = 0; hitDone = false; swingHold = 0; A.SFX.whoosh(W.heavy || type === 'kick');
 }
 function doHit() {
   const origin = camera.getWorldPosition(v1), fwd = camera.getWorldDirection(v2), hits = [];
+  chargeK = atk === 'swing' ? Math.max(0, Math.min(1, (swingHold - 0.12) / 0.55)) : 0; heavyNow = !!W.heavy || chargeK >= 0.6;
+  if (chargeK > 0.05) { CW = { ...W, power: W.power + (chargeK >= 0.6 ? 1 : 0), knock: W.knock * (1 + 0.7 * chargeK), area: W.area || chargeK >= 0.9 }; if (chargeK > 0.3) A.SFX.whoosh(true); }
   if (atk === 'kick') { fwd.y -= 0.5; fwd.normalize(); }
   if (figure) {
     const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
-    const res = figure.hit(origin, fwd, CW.reach, atk === 'swing' ? (W.heavy ? 'heavy' : 'weapon') : atk, right);
+    const res = figure.hit(origin, fwd, CW.reach, atk === 'swing' ? (heavyNow ? 'heavy' : 'weapon') : atk, right);
     if (res) return clayHit(res, fwd);
   }
   for (const it of I.list) {
@@ -245,15 +301,15 @@ function doHit() {
     if (v3.length() < CW.reach && v3.normalize().dot(fwd) > CW.cone - 0.15) { c.body.wakeUp(); c.body.velocity.set(dir.x * 6 + rand(-1, 1), 2 + rand(0, 2), dir.z * 6 + rand(-1, 1)); } }
   if (!hits.length) {
     const h = surfaceHit(origin, fwd, CW.reach + 0.3);
-    if (h && !W.hands) { addMark(h.point, h.normal, 'crack', W.heavy ? 0.55 : 0.34); A.SFX.thud('wood', 0.8); I.sparks_(h.point, 6, 0xbbb4aa); shake = Math.max(shake, 0.08); }
+    if (h && !W.hands) { addMark(h.point, h.normal, 'crack', heavyNow ? 0.55 : 0.34); A.at(h.point, () => A.SFX.thud('wood', 0.8 + chargeK * 0.4, 0.9)); puff(h.point, 0xb0aaa2, 2, 0.2, 0.1, 0.4); I.sparks_(h.point, 6, 0xbbb4aa); shake = Math.max(shake, 0.08 + chargeK * 0.1); recoil = 1; freeze(25); }
     else shake = Math.max(shake, 0.02);
   }
 }
 function clayHit(res, dir) {
-  const p = res.point, hard = atk === 'kick' || W.heavy;
-  if (atk === 'punch') A.SFX.punch(1); else if (atk === 'slap') A.SFX.slap(1); else if (atk === 'kick') A.SFX.kick(1); else A.SFX.thud('wood', 1);
-  A.SFX.clay(hard ? 1 : 0.7); shake = Math.max(shake, hard ? 0.16 : 0.07);
-  if (res.voice) A.SFX.voice(res.voice);
+  const p = res.point, hard = atk === 'kick' || heavyNow;
+  A.at(p, () => { if (atk === 'punch') A.SFX.punch(1); else if (atk === 'slap') A.SFX.slap(1); else if (atk === 'kick') A.SFX.kick(1); else A.SFX.thud('wood', 1);
+    A.SFX.clay(hard ? 1 : 0.7); if (res.voice) A.SFX.voice(res.voice); });
+  shake = Math.max(shake, hard ? 0.16 : 0.07); recoil = 0.6; freeze(hard ? 35 : 20);
   kick = Math.min(0.08, kick + (hard ? 0.03 : 0.015)); vibrate(hard ? 35 : 15);
   bumpCombo();
   addScore(atk === 'slap' ? 2 : 3, p, 'small');
@@ -268,23 +324,28 @@ function clayHit(res, dir) {
   if (res.collapsed) { banner('Sculpture smashed!'); addScore(80, p, 'big'); figureDowned = true; }
 }
 function hitItem(it, dir) {
-  const rage = performance.now() < rageUntil, p = it.body.position;
+  const rage = performance.now() < rageUntil, p = it.body.position, kind = it.def.kind;
   if (it.key === 'target') { toast('Throw something at it!'); return; }
-  kick = Math.min(0.08, kick + (W.heavy ? 0.03 : 0.015)); vibrate(20);
-  if (it.def.hp === Infinity) {
-    A.SFX.metal(1); if (opts.weapon === 'pan') A.SFX.metal(0.8);
-    it.pop = 1; shake = Math.max(shake, 0.12); I.sparks_(p, 8, 0xffd27a); addScore(it.def.pts, p, 'small');
-    if (!it.fixed) { it.body.wakeUp(); it.body.velocity.set(dir.x * CW.knock, dir.y * CW.knock * 0.5 + 2, dir.z * CW.knock); it.body.angularVelocity.set(rand(-12, 12), rand(-12, 12), rand(-12, 12)); }
-    else { const h = surfaceHit(camera.getWorldPosition(v1), camera.getWorldDirection(v2), CW.reach + 2.5, it.mesh.children); if (h) addMark(h.point, h.normal, 'dent', W.heavy ? 0.45 : 0.3); }
+  kick = Math.min(0.08, kick + (heavyNow ? 0.03 : 0.015)); vibrate(20);
+  const h = itemHitPoint(it), at = h ? h.point : p, lv = 0.8 + chargeK * 0.5;
+  if (it.def.hp === Infinity) { // metal: it rings, dents and flies, but never breaks
+    A.at(at, () => { A.SFX.metal(lv, Math.max(0.7, 1.3 - it.def.size)); if (opts.weapon === 'pan') A.SFX.metal(0.8); });
+    it.pop = 1; shake = Math.max(shake, 0.12); I.sparks_(at, 8, 0xffd27a); addScore(it.def.pts, p, 'small'); recoil = 1; freeze(30);
+    if (!it.fixed) { if (h) damageDecal(it, h, 'dent', Math.min(0.2, it.def.size * 0.6)); it.body.wakeUp(); it.body.velocity.set(dir.x * CW.knock, dir.y * CW.knock * 0.5 + 2, dir.z * CW.knock); it.body.angularVelocity.set(rand(-12, 12), rand(-12, 12), rand(-12, 12)); }
+    else { const sh = surfaceHit(camera.getWorldPosition(v1), camera.getWorldDirection(v2), CW.reach + 2.5, it.mesh.children); if (sh) addMark(sh.point, sh.normal, 'dent', heavyNow ? 0.45 : 0.3); }
     return;
   }
-  it.hp -= CW.power + (CW.bonus === it.def.kind ? 1 : 0) + (rage ? 1 : 0);
-  if (it.hp <= 0) return I.shatter(it, dir, CW.knock * 0.7, true);
-  it.pop = 1;
+  it.hp -= CW.power + (CW.bonus === kind ? 1 : 0) + (rage ? 1 : 0);
+  if (it.hp <= 0) { recoil = 0.35; freeze(heavyNow ? 45 : 28); return I.shatter(it, dir, CW.knock * 0.7, true, h && h.point); }
+  // still in one piece: leave a crack where it was hit, break the screen, start it smoking
+  it.pop = 1; recoil = 1; freeze(30);
+  if (h) damageDecal(it, h, 'crack', Math.min(0.3, Math.max(0.1, it.def.size * 0.45)));
+  if (kind === 'electronics') { crackScreen(it); it.smoking = true; I.sparks_(at, 10, 0xffc531); }
+  puff(at, DUST[kind] || 0xbbbbbb, 2, 0.18, 0.2, 0.4);
   if (!it.fixed) { it.body.wakeUp(); it.born = 0; it.body.velocity.set(dir.x * CW.knock, dir.y * CW.knock * 0.5 + 2, dir.z * CW.knock); it.body.angularVelocity.set(rand(-10, 10), rand(-10, 10), rand(-10, 10)); }
-  for (let i = 0; i < 3; i++) I.shard(it.def.kind, Math.min(0.3, it.def.size) * rand(0.08, 0.14), it.color, p, it.fixed ? new CANNON.Vec3() : it.body.velocity, dir, 2, Math.min(1, it.def.size), I.photo);
-  if (W.hands) A.SFX[atk === 'slap' ? 'slap' : atk === 'kick' ? 'kick' : 'punch'](0.8);
-  A.SFX.thud(it.def.kind, 1); shake = Math.max(shake, W.heavy ? 0.14 : 0.08); flash(0.06);
+  for (let i = 0; i < 5; i++) I.shard(kind, Math.min(0.3, it.def.size) * rand(0.06, 0.13), it.color, at, it.fixed ? new CANNON.Vec3() : it.body.velocity, dir, 2, 0.15, I.photo);
+  A.at(at, () => { if (W.hands) A.SFX[atk === 'slap' ? 'slap' : atk === 'kick' ? 'kick' : 'punch'](0.8); A.SFX.thud(kind, lv, Math.max(0.75, 1.25 - it.def.size * 0.5)); if (kind === 'electronics') A.SFX.plastic(0.5, 1.2); });
+  shake = Math.max(shake, heavyNow ? 0.14 : 0.08); flash(0.06);
   addScore(2, p, 'small');
 }
 
@@ -397,7 +458,7 @@ function flash(a) { const f = $('flash'); f.style.transition = 'none'; f.style.o
 let modelsReady = null;
 const headReady = preloadClayHead().then(() => { if (state === 'menu' && opts.scene === 'studio') build(); });
 async function startSession() {
-  A.initAudio();
+  A.initAudio(); A.setVolume(save.vol); A.setRoom(opts.scene);
   if (opts.scene === 'studio') { $('start').textContent = 'Loading…'; await Promise.race([headReady, new Promise(r => setTimeout(r, 20000))]); $('start').textContent = 'Start smashing'; }
   if (opts.mode === 'realistic' && modelsReady) { $('start').textContent = 'Loading…'; await modelsReady; $('start').textContent = 'Start smashing'; }
   build();
@@ -484,6 +545,10 @@ document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
 });
 $('scenes').onclick = e => { const b = e.target.closest('.card'); if (!b) return; opts.scene = b.dataset.s; if (opts.scene === 'studio') opts.weapon = 'hands'; renderLobby(); build(); };
 $('weapons').onclick = e => { const b = e.target.closest('.card'); if (!b || b.classList.contains('locked')) return; opts.weapon = b.dataset.w; renderLobby(); equip(opts.weapon); };
+document.querySelectorAll('.vol').forEach(el => {
+  el.value = Math.round(save.vol[el.dataset.v] * 100);
+  el.oninput = () => { save.vol[el.dataset.v] = el.value / 100; document.querySelectorAll(`.vol[data-v=${el.dataset.v}]`).forEach(o => { o.value = el.value; }); A.setVolume(save.vol); persist(); };
+});
 $('gmodes').onclick = e => { const b = e.target.closest('.card'); if (!b) return; opts.gm = b.dataset.g; renderLobby(); };
 $('voice').onchange = e => { opts.voice = e.target.checked; };
 $('watchAgain').onclick = () => replay.best && playReplay();
@@ -507,7 +572,7 @@ $('photoInput').onchange = e => {
   img.src = URL.createObjectURL(f); e.target.value = '';
 };
 $('photoClear').onclick = () => { photoTex = null; renderLobby(); build(); };
-if (isTouch) $('keysDesk').textContent = 'Left thumb moves, right thumb looks. Smash swings. Grab picks things up, tap it again to throw.';
+if (isTouch) $('keysDesk').textContent = 'Left thumb moves, right thumb looks. Smash swings, hold it to wind up a heavy hit. Grab picks things up, tap it again to throw.';
 
 // ---------- input
 document.addEventListener('pointerlockchange', () => { if (state === 'play' && !isTouch) setPaused(!document.pointerLockElement); });
@@ -571,8 +636,15 @@ function updatePlayer(dt) {
       player.x += push[0]; player.z += push[1];
     }
   }
-  if (len > 0.1) player.bob += dt * 9;
+  if (len > 0.1) {
+    player.bob += dt * 9;
+    const ph = Math.floor(player.bob / Math.PI);
+    if (ph !== lastStep) { lastStep = ph; // a footstep; crunch if there's broken glass or china underfoot
+      const crunch = I.chunks.some(c => (c.kind === 'glass' || c.kind === 'ceramic') && c.body.position.y < 0.2 && Math.hypot(c.body.position.x - player.x, c.body.position.z - player.z) < 0.45);
+      A.SFX.step(STEP[opts.scene] || 'stone', crunch); }
+  }
 }
+const STEP = { classic: 'stone', abandoned: 'stone', haunted: 'wood', office: 'carpet', kitchen: 'stone', caryard: 'stone', studio: 'wood' };
 function poseHands() {
   const { L, R, palm, leg } = weaponMesh.userData, t = swingT < 0 ? 0 : swingT, b = Math.sin(player.bob) * 0.012;
   const jab = k => k < 0.45 ? Math.sin(k / 0.45 * Math.PI / 2) : Math.cos((k - 0.45) / 0.55 * Math.PI / 2);
@@ -592,6 +664,8 @@ function poseWeapon() {
   else if (t >= 0.18 && t < 0.42) { const k = Math.pow((t - 0.18) / 0.24, 2); rx = 0.6 - 2.6 * k; rz = -0.1 + 1.2 * k; px = -0.25 * k; pz = -0.12 * k; }
   else if (t >= 0.42) { const k = ease((t - 0.42) / 0.58); rx = -2 + 2.15 * k; rz = 1.1 - 1.4 * k; px = -0.25 * (1 - k); pz = -0.12 * (1 - k); }
   const b = Math.sin(player.bob) * 0.015, lower = held ? 0.35 : 0;
+  if (swingHold > 0.12 && !hitDone) { const k = Math.min(1, (swingHold - 0.12) / 0.55); rx += 0.3 * k + rand(-1, 1) * 0.015 * k; rz -= 0.15 * k; }
+  rx += recoil * 0.85; pz += recoil * 0.06;
   pivot.scale.setScalar(camera.aspect < 1 ? 0.7 : 1); pivot.rotation.set(rx, 0, rz); pivot.position.set((camera.aspect < 1 ? 0.05 : Math.min(0.45, camera.aspect * 0.3)) + px, -0.6 + b + Math.abs(b) - lower, -0.7 + pz);
 }
 
@@ -606,7 +680,18 @@ function frame(now) {
   if (playing) {
     timeLeft -= rdt; updatePlayer(rdt);
     if (mouseHeld && swingT < 0) startSwing();
-    if (swingT >= 0) { swingT += dt / CW.speed; if (!hitDone && swingT >= 0.4) { hitDone = true; doHit(); } if (swingT >= 1) swingT = -1; }
+    if (swingT >= 0) {
+      // holding the button pauses a weapon swing at the top to wind up a heavy hit
+      if (atk === 'swing' && !W.hands && !hitDone && swingT >= 0.16 && mouseHeld && swingHold < 0.75) swingHold += rdt; else swingT += dt / CW.speed;
+      if (!hitDone && swingT >= 0.4) { hitDone = true; doHit(); } if (swingT >= 1) { swingT = -1; swingHold = 0; }
+    }
+    recoil *= Math.pow(0.0008, rdt);
+    for (const it of I.list) { // damaged screens flicker, then dim
+      if (it.screens && it.flicker) { const on = now > it.flicker; const c = on ? (it.hp <= 1 ? 0x555555 : 0xffffff) : (Math.random() < 0.5 ? 0x111111 : 0xffffff); it.screens.forEach(m => m.material.color.setHex(c)); if (on) it.flicker = 0; }
+    }
+    smokeT += rdt; if (smokeT > 0.22) { smokeT = 0;
+      for (const it of I.list) if (it.smoking && !it.dead) puff(it.body.position, 0x55555a, 1, 0.3, 0.7, 0.35);
+      smokers = smokers.filter(k => { puff(k.p, 0x4a4a50, 1, 0.35, 0.8, 0.4); return now < k.until; }); }
     W.hands ? poseHands() : poseWeapon();
     const fu = figure && figure.update(dt);
     if (fu) { banner(fu === 'boss' ? 'Boss sculpture!' : 'New sculpture'); if (fu === 'boss') A.SFX.voice('boss'); }
@@ -636,6 +721,8 @@ function frame(now) {
     for (const u of room.updates) u(t, dt);
     fx = fx.filter(f => { f.life += rdt; const k = f.life / f.max; f.mesh.scale.setScalar(0.2 + f.grow * Math.min(1, k * 1.6)); f.mesh.material.opacity = f.op * (1 - k);
       if (k >= 1) { scene.remove(f.mesh); f.mesh.material.dispose(); return false; } return true; });
+    puffs = puffs.filter(o => { o.life += dt; const k = o.life / o.max; o.m.position.addScaledVector(o.v, dt); o.v.multiplyScalar(Math.pow(0.2, dt)); o.m.scale.setScalar(o.size * (0.5 + 1.6 * k)); o.m.material.opacity = o.op * (1 - k);
+      if (k >= 1) { scene.remove(o.m); o.m.material.dispose(); return false; } return true; });
     if (boomLight && boomLight.intensity > 0) boomLight.intensity = Math.max(0, boomLight.intensity * Math.pow(0.002, rdt) - 1);
   }
   if (state === 'play') {
@@ -666,9 +753,11 @@ function frame(now) {
       : W.hands && !isTouch ? 'Click punch · F slap · Space kick' : '';
     $('kickBtn').classList.toggle('hidden', !W.hands);
     $('hint').textContent = hint;
-    $('charge').style.opacity = charging ? 1 : 0; $('chargeFill').style.width = Math.min(100, chargeT / 0.8 * 100) + '%';
+    const wind = swingHold > 0.12 && !hitDone;
+    $('charge').style.opacity = charging || wind ? 1 : 0; $('chargeFill').style.width = Math.min(100, (wind ? (swingHold - 0.12) / 0.55 : chargeT / 0.8) * 100) + '%';
     $('grabBtn').textContent = held ? 'Throw' : 'Grab';
   }
+  A.listener(camera.position, camera.getWorldDirection(v2)); A.setMuffle(state === 'play' && (now < slowUntil || now < deafUntil));
   S.render(scene, camera, t);
 }
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); if (camera) { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); } S?.resize(innerWidth, innerHeight); });
@@ -676,4 +765,4 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, fal
 renderMode();
 opts.mode = 'stylized'; build(); opts.mode = null; // background behind the first screen
 requestAnimationFrame(frame);
-window.__smash = { get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { const t = last + ms; frame(t); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts };
+window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts };

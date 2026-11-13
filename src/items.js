@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=4';
-import { itemModel, fitInto } from './models.js?v=4';
+import { canvasTex } from './style.js?v=5';
+import { itemModel, fitInto } from './models.js?v=5';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -164,7 +164,76 @@ SHARD.metal = SHARD.electronics;
 SHARD.explosive = SHARD.electronics;
 SHARD.clay = { geo: new THREE.SphereGeometry(1, 8, 6).scale(1, 0.6, 1), he: s => [s * 0.8, s * 0.5, s * 0.8], n: 6 };
 
+// ---- real fragments: cut the object's own triangles with a few planes through the impact point,
+// so every piece is a piece of that object, with its shape, colour and texture.
+function collectTris(root) {
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(), out = [], m4 = new THREE.Matrix4(), n3 = new THREE.Matrix3(), v = new THREE.Vector3(), n = new THREE.Vector3();
+  let count = 0;
+  root.traverse(o => {
+    if (!o.isMesh || o.userData.ol || o.userData.hl || o.userData.gold) return;
+    const g = o.geometry, pos = g.attributes.position, nor = g.attributes.normal, uv = g.attributes.uv, idx = g.index;
+    if (!pos) return;
+    m4.multiplyMatrices(inv, o.matrixWorld); n3.getNormalMatrix(m4);
+    const cache = new Array(pos.count);
+    const get = i => cache[i] || (cache[i] = (v.fromBufferAttribute(pos, i).applyMatrix4(m4), nor ? n.fromBufferAttribute(nor, i).applyMatrix3(n3).normalize() : n.set(0, 1, 0),
+      [v.x, v.y, v.z, n.x, n.y, n.z, uv ? uv.getX(i) : 0, uv ? uv.getY(i) : 0]));
+    const cnt = idx ? idx.count : pos.count, polys = [];
+    for (let i = 0; i + 2 < cnt; i += 3) polys.push([get(idx ? idx.getX(i) : i), get(idx ? idx.getX(i + 1) : i + 1), get(idx ? idx.getX(i + 2) : i + 2)]);
+    count += polys.length; out.push({ mat: Array.isArray(o.material) ? o.material[0] : o.material, polys });
+  });
+  return { parts: out, count };
+}
+function splitPoly(poly, pl, front, back) {
+  const d = poly.map(q => q[0] * pl[0] + q[1] * pl[1] + q[2] * pl[2] - pl[3]);
+  let pos = false, neg = false; for (const x of d) { if (x > 1e-6) pos = true; else if (x < -1e-6) neg = true; }
+  if (!neg) return front.push(poly); if (!pos) return back.push(poly);
+  const f = [], b = [];
+  for (let i = 0; i < poly.length; i++) {
+    const j = (i + 1) % poly.length, a = poly[i], c = poly[j], da = d[i], dc = d[j];
+    if (da >= 0) f.push(a); if (da <= 0) b.push(a);
+    if ((da > 0 && dc < 0) || (da < 0 && dc > 0)) { const t = da / (da - dc), mid = a.map((x, k) => x + (c[k] - x) * t); f.push(mid); b.push(mid); }
+  }
+  if (f.length >= 3) front.push(f); if (b.length >= 3) back.push(b);
+}
+// returns [{ group, centroid (root-local), half, verts }]
+function fracture(root, impact, nPlanes, ds) {
+  const { parts, count } = collectTris(root); if (!count) return [];
+  if (count > 60000) nPlanes = Math.min(nPlanes, 2);
+  const box = new THREE.Box3(); for (const part of parts) for (const poly of part.polys) for (const q of poly) box.expandByPoint(new THREE.Vector3(q[0], q[1], q[2]));
+  const ext = box.getSize(new THREE.Vector3()).length() / 2, at = impact ? impact.clone().clamp(box.min, box.max) : box.getCenter(new THREE.Vector3());
+  let cells = [parts.map(q => q.polys)];
+  for (let j = 0; j < nPlanes; j++) {
+    const nrm = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize(), pt = at.clone().add(new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(ext * (j ? 0.3 : 0.06)));
+    const pl = [nrm.x, nrm.y, nrm.z, nrm.dot(pt)], next = [];
+    for (const cell of cells) {
+      const f = cell.map(() => []), b = cell.map(() => []);
+      cell.forEach((polys, k) => { for (const poly of polys) splitPoly(poly, pl, f[k], b[k]); });
+      if (f.some(x => x.length)) next.push(f); if (b.some(x => x.length)) next.push(b);
+    }
+    cells = next;
+  }
+  const out = [];
+  for (const cell of cells) {
+    const c = new THREE.Vector3(), bb = new THREE.Box3(); let nv = 0;
+    for (const polys of cell) for (const poly of polys) for (const q of poly) { c.x += q[0]; c.y += q[1]; c.z += q[2]; nv++; bb.expandByPoint(new THREE.Vector3(q[0], q[1], q[2])); }
+    if (!nv) continue; c.multiplyScalar(1 / nv);
+    const half = bb.getSize(new THREE.Vector3()).multiplyScalar(0.5); if (Math.max(half.x, half.y, half.z) < 0.012) continue;
+    const group = new THREE.Group();
+    cell.forEach((polys, k) => {
+      if (!polys.length) return; const P = [], N = [], U = [];
+      for (const poly of polys) for (let i = 1; i + 1 < poly.length; i++) for (const q of [poly[0], poly[i], poly[i + 1]]) { P.push(q[0] - c.x, q[1] - c.y, q[2] - c.z); N.push(q[3], q[4], q[5]); U.push(q[6], q[7]); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+      const mesh = new THREE.Mesh(g, ds(parts[k].mat)); mesh.castShadow = mesh.receiveShadow = true; group.add(mesh);
+    });
+    out.push({ group, centroid: c, half, verts: nv });
+  }
+  return out.sort((a, b) => b.verts - a.verts);
+}
+
 export function createItems({ scene, world, S, onBreak, onClink }) {
+  const dsCache = new Map(); // fragments are open shells, so their materials draw both sides
+  const ds = mat => { if (mat.side === THREE.DoubleSide) return mat; let c = dsCache.get(mat); if (!c) { c = mat.clone(); c.side = THREE.DoubleSide; dsCache.set(mat, c); } return c; };
   const api = { list: [], chunks: [], sparks: [], queue: [], photo: null };
   const M = S.mat;
 
@@ -186,7 +255,7 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
       const v = Math.abs(e.contact.getImpactVelocityAlongNormal());
       const limit = it.thrown ? def.bv * 0.55 : def.bv;
       if (v > limit && performance.now() - it.born > 900) { it.queued = true; api.queue.push([it, v]); }
-      else if (v > 1.4) onClink(def.kind, Math.min(1, v / 5));
+      else if (v > 1.4) onClink(def.kind, Math.min(1, v / 5), body.position);
     });
     api.list.push(it); return it;
   }
@@ -223,6 +292,7 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
   api.remove = remove;
 
   const shardMax = () => S.Q.chunks;
+  function trim() { while (api.chunks.length > shardMax()) { const c = api.chunks.shift(); world.removeBody(c.body); scene.remove(c.mesh); if (c.own) c.mesh.traverse(o => o.geometry && o.geometry.dispose()); } }
   api.shard = (kind, s, color, p, base, dir, force, spread, map) => {
     const C = SHARD[kind] || SHARD.electronics;
     const mat = kind === 'photo' && map ? M('photo', 0xffffff, { map }) : M(kind === 'photo' ? 'wood' : kind, color);
@@ -233,8 +303,7 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
     body.velocity.set(base.x + dir.x * force * rand(0.4, 1.2) + rand(-2, 2), base.y + dir.y * force * rand(0.3, 1) + rand(0.5, 3.5), base.z + dir.z * force * rand(0.4, 1.2) + rand(-2, 2));
     body.angularVelocity.set(rand(-15, 15), rand(-15, 15), rand(-15, 15));
     body.sleepSpeedLimit = 0.3; body.sleepTimeLimit = 0.4; body.linearDamping = 0.05;
-    world.addBody(body); api.chunks.push({ mesh, body });
-    while (api.chunks.length > shardMax()) { const c = api.chunks.shift(); world.removeBody(c.body); scene.remove(c.mesh); }
+    world.addBody(body); api.chunks.push({ mesh, body, kind }); trim();
   };
   const sparkGeo = new THREE.TetrahedronGeometry(0.014);
   api.sparks_ = (p, n, color = 0xffffff) => {
@@ -243,20 +312,42 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
       api.sparks.push({ mesh: s, v: new THREE.Vector3(rand(-4, 4), rand(1, 5), rand(-4, 4)), life: rand(0.4, 0.9) }); }
   };
 
-  // shatter: returns nothing, reports via onBreak
-  api.shatter = (it, dir, force, fromHit) => {
-    if (it.dead) return; remove(it);
-    const d = it.def, p = it.body.position, vel = it.fixed ? V(0, 0, 0) : it.body.velocity;
-    const n = Math.round((SHARD[d.kind].n + d.size * 8) * (d.shards || 1));
+  // shatter: the object comes apart into pieces of itself (smaller near the hit), plus a little grit. Reports via onBreak.
+  const MAXFR = { low: 6, medium: 10, high: 14 };
+  api.shatter = (it, dir, force, fromHit, hitPoint) => {
+    if (it.dead) return;
+    const d = it.def, p = it.body.position, vel = it.fixed ? V(0, 0, 0) : it.body.velocity, root = it.mesh;
+    let made = 0;
+    try {
+      root.updateMatrixWorld(true);
+      const hitW = hitPoint ? hitPoint.clone() : new THREE.Vector3(p.x - dir.x * d.size * 0.3, p.y, p.z - dir.z * d.size * 0.3);
+      const frags = fracture(root, root.worldToLocal(hitW.clone()), (d.size > 0.45 ? 4 : 3) - (S.quality === 'low' ? 1 : 0), ds).slice(0, MAXFR[S.quality] || 10);
+      const total = frags.reduce((a, f) => a + f.half.x * f.half.y * f.half.z, 0) || 1, q = root.getWorldQuaternion(new THREE.Quaternion()), sc = root.getWorldScale(new THREE.Vector3());
+      for (const f of frags) {
+        const w = root.localToWorld(f.centroid.clone()), out = w.clone().sub(hitW), dist = out.length() || 0.01; out.multiplyScalar(1 / dist);
+        f.group.position.copy(w); f.group.quaternion.copy(q); f.group.scale.copy(sc); S.outline(f.group, 1.04); scene.add(f.group);
+        const hx = Math.max(0.012, f.half.x * sc.x), hy = Math.max(0.012, f.half.y * sc.y), hz = Math.max(0.012, f.half.z * sc.z);
+        const body = new CANNON.Body({ mass: Math.max(0.03, (d.mass || d.size * 2) * f.half.x * f.half.y * f.half.z / total), shape: boxS(hx, hy, hz), position: V(w.x, w.y, w.z) });
+        body.quaternion.set(q.x, q.y, q.z, q.w);
+        const near = 1 / (0.35 + dist / Math.max(0.1, d.size)), k = force * rand(0.45, 1) * Math.min(1.6, near);
+        body.velocity.set(vel.x + dir.x * k + out.x * (1 + force * 0.3) + rand(-0.6, 0.6), vel.y + dir.y * k + out.y * (1 + force * 0.2) + rand(0.4, 2.2), vel.z + dir.z * k + out.z * (1 + force * 0.3) + rand(-0.6, 0.6));
+        body.angularVelocity.set(rand(-9, 9), rand(-9, 9), rand(-9, 9));
+        body.sleepSpeedLimit = 0.3; body.sleepTimeLimit = 0.4; body.linearDamping = 0.05; body.angularDamping = 0.1;
+        body.addEventListener('collide', e => { const v = Math.abs(e.contact.getImpactVelocityAlongNormal()); if (v > 1.2) onClink(d.kind, Math.min(1, v / 6), body.position); });
+        world.addBody(body); api.chunks.push({ mesh: f.group, body, kind: d.kind, own: true }); made++;
+      }
+    } catch (e) { console.warn('fracture failed, using plain shards', e); }
+    remove(it);
+    const n = Math.round((SHARD[d.kind].n + d.size * 8) * (d.shards || 1) * (made ? 0.4 : 1));
     const map = d.kind === 'photo' ? api.photo : null;
     for (let i = 0; i < n; i++) {
       const col = d.kind === 'electronics' ? pick([it.color, it.color, 0x222233, 0x1fae5b, 0xcfcfd8]) : (Math.random() < 0.85 ? it.color : 0xffffff);
-      api.shard(d.kind, Math.min(0.35, d.size) * rand(0.1, 0.26), col, p, vel, dir, force, Math.min(d.size, 1), map);
+      api.shard(d.kind, Math.min(0.35, d.size) * (made ? rand(0.05, 0.13) : rand(0.1, 0.26)), col, p, vel, dir, force, Math.min(d.size, 1), map);
     }
+    trim();
     if (d.kind === 'glass') api.sparks_(p, 18);
     if (d.kind === 'electronics') api.sparks_(p, 14, 0xffc531);
     if (d.kind === 'stone') api.sparks_(p, 20, 0xb8b0a8);
-    if (it.key === 'watercooler') api.sparks_(p, 40, 0x6fc3ff);
     onBreak(it, fromHit);
   };
 
