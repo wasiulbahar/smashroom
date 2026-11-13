@@ -3,3 +3,8 @@ Sounds in this folder are CC0 (public domain).
 - glass, glasshit, crash, wood, stone, debris, plastic, metal, metalfall, rockfall, woodfall, thud: '75 CC0 breaking/falling/hit sfx' by rubberduck, opengameart.org, CC0
 - glass_6: 'Glass Break' by Till Behrend, opengameart.org, CC0
 - stepwood, stepstone: 'Different steps on wood, stone, leaves, gravel and mud' by TinyWorlds, opengameart.org, CC0
+- crack_0-3: '35 wooden cracks/hits/destructions' by Independent.nu, opengameart.org, CC0
+- crack_4: '100 CC0 metal and wood SFX' by rubberduck, opengameart.org, CC0
+- zap: 'Electricity Game Sound Pack' (crackleelectricityloop), opengameart.org, CC0
+- splash: '6 short water splashes' by ezwa, opengameart.org, CC0
+- spray: '30 CC0 SFX loops' (water_flowing) by rubberduck, opengameart.org, CC0

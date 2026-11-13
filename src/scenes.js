@@ -1,8 +1,8 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=9';
-import { loadModel, fitInto } from './models.js?v=9';
+import { canvasTex } from './style.js?v=10';
+import { loadModel, fitInto } from './models.js?v=10';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -336,6 +336,44 @@ export const SCENES = {
       K.floor([[-2.8, 1], [2.8, 0.5], [-3, -4.5], [2.8, -5.5], [-7, -1], [7, -2], [0, 4.5], [-2, 6.5], [2.5, 6.8], [-7, 6]]);
       K.decal(spray('JUNK YARD', '#f4e6c8', 110), 4, 1.1, 0, 2, -W / 2 + 0.16, 0);
       return { ...K, pool: ['gascan', 'gascan', 'tv', 'crt', 'crt', 'monitor', 'bottle', 'bottle', 'cinder', 'crate', 'speaker', 'microwave', 'chair', 'jar', 'vase', 'pot', 'lamp'], start: { x: 0, z: 5 }, amb: 'caryard', photoSpots: [[-3.5, -1.5, 0.4], [3.5, -1.5, -0.4]] };
+    },
+  },
+  apartment: {
+    name: 'Apartment', desc: 'A whole flat: TV wall, fridge, glass table, bathroom mirror. Walls hide water pipes.', exposure: 1, env: 0.55, pipes: true,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx);
+      K.room(10, 8, 2.8, 'oldWood', 'plaster', 'plaster', { t: 1.6, wallTint: K.v(0xb8ac98, 0xd8c8e8), ceilTint: K.v(0x9a9488, undefined) });
+      scene.background = new THREE.Color(K.v(0x101420, 0x1e1a30)); scene.fog = new THREE.Fog(K.v(0x101420, 0x1e1a30), 11, 24);
+      const wood = S.surface('wood', 1, 1), dark = S.mat('wood', 0x3a2a20), fab = S.mat('fabric', 0x4a5a6a), white = S.mat('plastic', 0xf0f0ee), tile = S.surface('wallTiles', 1, 1);
+      // back wall: two windows onto the night, a TV on a low cabinet between them
+      const night = new THREE.MeshBasicMaterial({ color: K.v(0x18243a, 0x2a3a6a) });
+      for (const x of [-3, 3]) {
+        K.plane(1.3, 1.1, night, x, 1.6, -3.985);
+        for (const [w, h, y, dx] of [[1.42, 0.06, 2.18, 0], [1.42, 0.06, 1.02, 0], [0.06, 1.2, 1.6, -0.68], [0.06, 1.2, 1.6, 0.68], [0.04, 1.1, 1.6, 0]]) K.box(w, h, 0.06, white, x + dx, y, -3.96, { phys: false, outline: false });
+        for (const dx of [-0.33, 0.33]) K.fixed('window', x + dx, 1.6, -3.95, 0, { w: 0.6, h: 1.1 });
+      }
+      K.table(0, -3.7, 2.2, 0.45, 0.5, dark, dark, { solid: true });
+      K.fixed('tv', 0, 0.5, -3.7, 0);
+      // living area: sofa facing the TV, glass coffee table
+      K.box(2.2, 0.42, 0.85, fab, 0, 0.21, 0.6, { outline: true }); K.box(2.2, 0.5, 0.2, fab, 0, 0.67, 0.95, { outline: true });
+      for (const s of [-1, 1]) K.box(0.2, 0.6, 0.85, fab, s * 1.2, 0.3, 0.6, { outline: true });
+      K.obstacles.push([-1.3, 1.3, 0.15, 1.05]);
+      K.fixed('coffeetable', 0, 0.21, -1, 0);
+      // kitchen corner: fridge, counter, dining table
+      K.fixed('fridge', 4.55, 0.9, -3.55, 0); K.obstacles.push([4.2, 4.9, -3.9, -3.2]);
+      K.table(4.6, -1.6, 0.65, 2.4, 0.92, S.surface('steel', 1, 1), S.mat('wood', 0xe8e0d0), { solid: true });
+      K.table(3, 1.8, 1.5, 0.9, 0.76, wood, dark);
+      // bathroom corner: tiles, sink and mirror
+      K.box(0.02, 1.4, 1.8, tile, -4.98, 1.2, 2.6, { outline: false });
+      K.box(0.5, 0.18, 0.6, white, -4.7, 0.85, 2.6, { outline: true }); K.box(0.12, 0.85, 0.12, white, -4.85, 0.42, 2.6);
+      K.fixed('mirror', -4.97, 1.65, 2.6, Math.PI / 2, { w: 0.6, h: 0.8 });
+      K.shelf(-4.75, -1.4, 2, 0.35, [0.9, 1.45, 2], wood, dark, 'z');
+      for (const [x, z] of [[-1.5, -1.5], [1.6, 2.4]]) K.bulb(x, 2.3, z, 0xffdcae, K.v(4, 3), { cage: false, cord: 0.45, r: 0.07 });
+      K.light('spot', 0xffe6c8, K.v(11, 16), 0, 2.75, -0.5, { target: [0, 0.3, -2.5], angle: 1.15, pen: 0.8, shadow: true });
+      K.light('point', 0xffe0c0, K.v(3, 3), 3.5, 2.2, -1.5, { dist: 7 });
+      K.hemi(0xfff0e0, 0x504538, K.v(0.4, 0.9));
+      K.floor([[-2.6, 1], [2.4, -0.4], [-1.8, 3.2], [1, 3.4], [-3.4, -2.6]]);
+      return { ...K, pipes: true, pool: ['gascan', 'plate', 'platestack', 'mug', 'wineglass', 'bottle', 'bottle', 'vase', 'lamp', 'frame', 'clock', 'laptop', 'speaker', 'flowerpot', 'bowl', 'jar', 'teapot', 'phone', 'chair', 'stool', 'crt', 'fishbowl', 'microwave'], start: { x: 0, z: 2.9 }, amb: 'apartment', photoSpots: [[-2.4, 1, 0.3], [2.4, -1.6, -0.3]] };
     },
   },
   studio: {

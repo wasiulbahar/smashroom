@@ -17,6 +17,10 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Anything you hold is a weapon.** Pick up a pan, a chair or a bottle and hit things with it. Breakable things break in your hand.
 - **Wreck the room.** Tables and shelves give way after enough hits, lights pop and go dark, walls crack into holes.
 - **Missions and achievements.** Short timed missions pop up during classic and zen rounds; 17 achievements are tracked across rounds.
+- **Use the wreckage.** Legs, boards and beams from wrecked tables and shelves can be picked up and swung.
+- **Apartment.** A whole flat with a TV wall, fridge, glass coffee table, windows that crack before they fall out, and a bathroom mirror. Smash into the walls and you may hit a water pipe.
+- **Unlocks from achievements.** Fire axe ("Bring the house down"), Golden bat ("Mission ace") and Blackout mode, any room in the dark with a flashlight ("Lights out").
+- **Sledgehammer** knocks things into bigger chunks and punches wider holes in walls.
 - **Settings and tutorial.** Mouse speed, invert look, field of view and screen shake in the lobby and pause menu. A short tutorial runs the first time you play.
 - **Real breaking.** Objects split into pieces of themselves, smaller near the hit, keeping their shape and texture. Tougher things show damage first: cracks where you hit, broken flickering screens, smoke.
 - **Damage that stays.** Cracks on the walls, dents in the car and on metal, liquid splashes, marks where thrown things hit.

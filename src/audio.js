@@ -32,6 +32,14 @@ export function at(p, fn) { // every sound started inside fn comes from point p
   if (n.positionX) { n.positionX.value = p.x; n.positionY.value = p.y; n.positionZ.value = p.z; } else n.setPosition(p.x, p.y, p.z);
   n.connect(sfx); cur = n; try { return fn(); } finally { cur = null; }
 }
+// a looping recording fixed at point p (a burst pipe); returns a handle to fade it out
+export function loopAt(set, p, gain = 1) {
+  if (!ac || !has(set)) return null;
+  const s = ac.createBufferSource(), b = bufs[set][0]; s.buffer = b; s.loop = true; s.loopStart = 0.06; s.loopEnd = b.duration - 0.06; // skip the mp3 padding at both ends
+  const g = ac.createGain(); g.gain.value = gain;
+  at(p, () => s.connect(g).connect(B())); s.start();
+  return { set: v => g.gain.setTargetAtTime(v, ac.currentTime, 0.4), stop() { g.gain.setTargetAtTime(0, ac.currentTime, 0.5); setTimeout(() => { try { s.stop(); } catch (e) {} }, 2500); } };
+}
 export function listener(p, f) {
   if (!ac) return; const l = ac.listener;
   if (l.positionX) { l.positionX.value = p.x; l.positionY.value = p.y; l.positionZ.value = p.z; l.forwardX.value = f.x; l.forwardY.value = f.y; l.forwardZ.value = f.z; l.upX.value = 0; l.upY.value = 1; l.upZ.value = 0; }
@@ -108,7 +116,7 @@ const SYN = {
 };
 
 // recorded CC0 samples (assets/sounds, see CREDITS.txt); generated sounds are the fallback until they load
-const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1 };
+const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1 };
 const bufs = {};
 function loadSamples() {
   for (const [set, n] of Object.entries(SETS)) for (let i = 0; i < n; i++)
@@ -142,6 +150,9 @@ export const SFX = {
       : kind === 'clay' ? smp('punch', 0.25 * i, 0.6) : smp('plastic', 0.3 * i, rand(1.1, 1.5));
     if (!ok) SYN.clink(kind, i);
   },
+  crack(i = 1, r = 1) { smp('crack', i, r) || SYN.wood(i); }, // wood splitting: tables and shelves giving way
+  zap(i = 1) { if (!smp('zap', i, rand(0.9, 1.2))) return; smp('zap', 0.6 * i, rand(1.1, 1.4), 0.12); smp('zap', 0.35 * i, rand(0.8, 1), 0.3); }, // a light shorting out
+  splash(i = 1) { smp('splash', i, rand(0.9, 1.1)); },
   body(i = 1) { if (!ac) return; tn(now(), 95, 0.22, 0.4 * i, 'sine', B(), 42); }, // the low thump of something big
   step(surface, crunch) {
     if (!ac) return; const soft = surface === 'carpet';
@@ -214,6 +225,8 @@ export function startAmbience(kind) {
   if (kind === 'office') { loopTone(120, 0.02, 'sawtooth'); loopNoise('lowpass', 400, 0.5, 0.06);
     every(9000, t => { for (let k = 0; k < 4; k++) { tn(t + k * 0.12, 1300, 0.08, 0.04, 'square', amb); tn(t + k * 0.12, 1600, 0.08, 0.03, 'square', amb); } }); }
   if (kind === 'kitchen') { loopTone(60, 0.025, 'sawtooth'); loopNoise('lowpass', 250, 0.5, 0.05); every(3000, t => tn(t, rand(500, 900), 0.06, 0.03, 'sine', amb)); }
+  if (kind === 'apartment') { loopTone(50, 0.02, 'sawtooth'); loopNoise('lowpass', 220, 0.5, 0.08); // fridge hum and traffic outside
+    every(7000, t => nz(t, 2.5, 'bandpass', rand(250, 450), 0.8, 0.08, amb, rand(150, 250))); }
   if (kind === 'caryard') { const w = loopNoise('bandpass', 350, 0.6, 0.25); loopNoise('lowpass', 150, 0.4, 0.12); tick(3000, () => w.frequency.setTargetAtTime(rand(250, 600), now(), 2));
     every(6000, t => nz(t, 2, 'lowpass', 400, 0.7, 0.12, amb, 150)); }
 }

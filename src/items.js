@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=9';
-import { itemModel, fitInto } from './models.js?v=9';
+import { canvasTex } from './style.js?v=10';
+import { itemModel, fitInto } from './models.js?v=10';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -176,9 +176,9 @@ export const DEFS = {
         m(bx(0.026, 0.03, 0.035), M('plastic', 0xd03030), -0.045, 0.1, 0.165), m(bx(0.026, 0.03, 0.035), M('plastic', 0x3060d0), 0.045, 0.1, 0.165), m(cyl(0.11, 0.13, 0.03, 32), M('plastic', c), 0, 0.265),
         m(lathe(BOTTLE, 36), M('glass', 0x6fc3ff)), m(lathe(BOTTLE.map(([r, y]) => [r * 0.94, y]).slice(1, -1).concat([[0, 0.6]]), 32), M('liquid', 0x3a9ae0))), shape: boxS(0.16, 0.65, 0.16), halfH: 0.65 }; } },
   // fixed things that stay put until they break (mass 0)
-  window: { kind: 'glass', hp: 1, pts: 20, mass: 0, bv: 5, size: 1, spots: [], colors: [0xdff3ff], fixed: true,
+  window: { kind: 'glass', hp: 3, pts: 30, mass: 0, bv: 5, size: 1, spots: [], colors: [0xdff3ff], fixed: true,
     make: (M, c, o) => ({ mesh: m(bx(o.w, o.h, 0.012), M('glass', c)), shape: boxS(o.w / 2, o.h / 2, 0.03), halfH: o.h / 2 }) },
-  mirror: { kind: 'glass', hp: 1, pts: 30, mass: 0, bv: 5, size: 0.7, spots: [], colors: [0xffffff], fixed: true,
+  mirror: { kind: 'glass', hp: 2, pts: 30, mass: 0, bv: 5, size: 0.7, spots: [], colors: [0xffffff], fixed: true,
     make: (M, c, o) => ({ mesh: grp(m(bx(o.w + 0.08, o.h + 0.08, 0.03), M('wood', 0x3a2a1a), 0, 0, -0.02), m(bx(o.w, o.h, 0.01), M('mirror', c))), shape: boxS(o.w / 2, o.h / 2, 0.03), halfH: o.h / 2 }) },
   portrait: { kind: 'wood', hp: 1, pts: 30, mass: 0, bv: 5, size: 0.7, spots: [], colors: [0x5a3a1a, 0xa07a2a], fixed: true,
     make: (M, c, o) => ({ mesh: grp(m(bx(0.62, 0.82, 0.05), M('wood', c)), m(new THREE.PlaneGeometry(0.5, 0.7), M('photo', 0xffffff, { map: o.photo || portraitTex() }), 0, 0, 0.026)), shape: boxS(0.31, 0.41, 0.04), halfH: 0.41 }) },
@@ -190,6 +190,17 @@ export const DEFS = {
     make: (M, c, o) => ({ mesh: m(bx(o.w, o.h, 0.04), M(o.glow ? 'emissive' : 'glass', c)), shape: boxS(o.w / 2, o.h / 2, 0.04), halfH: o.h / 2 }) },
   carmirror: { kind: 'plastic', hp: 1, pts: 15, mass: 0, bv: 5, size: 0.2, spots: [], colors: [0x1a1a1a], fixed: true,
     make: (M, c) => ({ mesh: grp(m(bx(0.18, 0.1, 0.06), M('plastic', c)), m(bx(0.15, 0.08, 0.005), M('mirror', 0xffffff), 0, 0, -0.032)), shape: boxS(0.09, 0.05, 0.04), halfH: 0.05 }) },
+  // apartment: a fridge and a glass coffee table that stay put until they break
+  fridge: { kind: 'electronics', hp: 5, pts: 120, mass: 0, bv: 9, size: 1, spots: [], colors: [0xeef0f2, 0xd8dce0], fixed: true,
+    make: (M, c) => ({ mesh: grp(m(bx(0.7, 1.8, 0.66), M('electronics', c)), m(bx(0.69, 0.012, 0.01), M('plastic', 0x9aa0a8), 0, 0.28, 0.335),
+      m(bx(0.03, 0.42, 0.04), M('metal', 0xb8bcc4), -0.28, 0.55, 0.36), m(bx(0.03, 0.7, 0.04), M('metal', 0xb8bcc4), -0.28, -0.25, 0.36)), shape: boxS(0.35, 0.9, 0.33), halfH: 0.9 }) },
+  coffeetable: { kind: 'glass', hp: 2, pts: 80, mass: 0, bv: 6, size: 1, spots: [], colors: [0xcfe8f0], fixed: true,
+    make: (M, c) => { const g = grp(m(bx(1.1, 0.025, 0.6), M('glass', c), 0, 0.2)); for (const [x, z] of [[-0.5, -0.25], [0.5, -0.25], [-0.5, 0.25], [0.5, 0.25]]) g.add(m(cyl(0.015, 0.015, 0.4, 8), M('metal', 0x2a2a2e), x, 0, z));
+      return { mesh: g, shape: boxS(0.55, 0.21, 0.3), halfH: 0.21 }; } },
+  // wreckage you can pick up: legs, boards and beams from tables and shelves that gave way (never spawned, see adopt)
+  leg: { kind: 'wood', hp: 3, pts: 10, mass: 2, bv: 99, size: 0.45, spots: [], colors: [0x8a6a4a] },
+  plank: { kind: 'wood', hp: 3, pts: 15, mass: 3, bv: 99, size: 0.9, spots: [], colors: [0x8a6a4a] },
+  beam: { kind: 'wood', hp: 4, pts: 20, mass: 4, bv: 99, size: 1.2, spots: [], colors: [0x8a6a4a] },
   // explodes when it breaks: knocks everything around and sets off other cans
   gascan: { kind: 'explosive', hp: 1, pts: 25, mass: 3, bv: 7, size: 0.32, spots: ['floor', 'table'], colors: [0xc0392b, 0xd35400],
     make: (M, c) => ({ mesh: grp(m(bx(0.28, 0.34, 0.15), M('paint', c)), m(new THREE.PlaneGeometry(0.14, 0.14), M('photo', 0xffffff, { map: hazardTex() }), 0, -0.02, 0.076), m(bx(0.1, 0.04, 0.12), M('paint', c), 0.05, 0.19), m(cyl(0.018, 0.018, 0.08, 10), M('metal', 0x222222), -0.09, 0.2)),
@@ -313,6 +324,11 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
     api.list.push(it); return it;
   }
   api.add = add;
+  // turn a loose piece of a wrecked table or shelf into something you can grab, swing and break
+  api.adopt = (key, mesh, body) => {
+    const it = { key, def: DEFS[key], mesh, body, color: 0x8a6a4a, hp: DEFS[key].hp, born: performance.now(), pop: 0, dead: false, fixed: false, debris: true };
+    api.list.push(it); return it;
+  };
 
   api.batch = (pool, slots, n = 14) => {
     const placed = api.list.filter(i => !i.dead && !i.fixed).map(i => ({ x: i.body.position.x, y: i.body.position.y - 0.2, z: i.body.position.z, r: i.def.size / 2 }));
@@ -367,14 +383,14 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
 
   // shatter: the object comes apart into pieces of itself (smaller near the hit), plus a little grit. Reports via onBreak.
   const MAXFR = { low: 6, medium: 10, high: 14 };
-  api.shatter = (it, dir, force, fromHit, hitPoint) => {
+  api.shatter = (it, dir, force, fromHit, hitPoint, chunky) => { // chunky: a sledgehammer knocks it into fewer, bigger pieces
     if (it.dead) return;
     const d = it.def, p = it.body.position, vel = it.fixed ? V(0, 0, 0) : it.body.velocity, root = it.mesh;
     let made = 0;
     try {
       root.updateMatrixWorld(true);
       const hitW = hitPoint ? hitPoint.clone() : new THREE.Vector3(p.x - dir.x * d.size * 0.3, p.y, p.z - dir.z * d.size * 0.3);
-      const frags = fracture(root, root.worldToLocal(hitW.clone()), (d.size > 0.45 ? 4 : 3) - (S.quality === 'low' ? 1 : 0), ds).slice(0, MAXFR[S.quality] || 10);
+      const frags = fracture(root, root.worldToLocal(hitW.clone()), (d.size > 0.45 ? 4 : 3) - (S.quality === 'low' ? 1 : 0) - (chunky ? 1 : 0), ds).slice(0, MAXFR[S.quality] || 10);
       const total = frags.reduce((a, f) => a + f.half.x * f.half.y * f.half.z, 0) || 1, q = root.getWorldQuaternion(new THREE.Quaternion()), sc = root.getWorldScale(new THREE.Vector3());
       for (const f of frags) {
         const w = root.localToWorld(f.centroid.clone()), out = w.clone().sub(hitW), dist = out.length() || 0.01; out.multiplyScalar(1 / dist);
@@ -391,7 +407,7 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
       }
     } catch (e) { console.warn('fracture failed, using plain shards', e); }
     remove(it);
-    const n = Math.round((SHARD[d.kind].n + d.size * 8) * (d.shards || 1) * (made ? 0.4 : 1));
+    const n = Math.round((SHARD[d.kind].n + d.size * 8) * (d.shards || 1) * (made ? 0.4 : 1) * (chunky ? 0.5 : 1));
     const map = d.kind === 'photo' ? api.photo : null;
     for (let i = 0; i < n; i++) {
       const col = d.kind === 'electronics' ? pick([it.color, it.color, 0x222233, 0x1fae5b, 0xcfcfd8]) : (Math.random() < 0.85 ? it.color : 0xffffff);
