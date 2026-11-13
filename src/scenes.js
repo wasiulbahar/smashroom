@@ -1,14 +1,14 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=8';
-import { loadModel, fitInto } from './models.js?v=8';
+import { canvasTex } from './style.js?v=9';
+import { loadModel, fitInto } from './models.js?v=9';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
 
 function kit({ scene, world, S, items }) {
-  const K = { slots: [], obstacles: [], updates: [], statics: [] };
+  const K = { slots: [], obstacles: [], updates: [], statics: [], furniture: [], lamps: [] };
   const R = S.realistic;
   K.v = (realistic, stylized) => R ? realistic : stylized;
   K.box = (w, h, d, mat, x, y, z, o = {}) => {
@@ -17,9 +17,11 @@ function kit({ scene, world, S, items }) {
     if (o.outline) S.outline(mesh, 1.02);
     if (o.phys !== false) K.statics.push(mesh);
     if (o.phys !== false) { const b = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2)), position: new CANNON.Vec3(x, y, z) });
-      b.quaternion.setFromEuler(o.rx || 0, o.ry || 0, 0); world.addBody(b); }
+      b.quaternion.setFromEuler(o.rx || 0, o.ry || 0, 0); world.addBody(b); mesh.userData.body = b; mesh.userData.size = [w, h, d]; }
     return mesh;
   };
+  // tables and shelves that can be wrecked: main.js damages them and turns their parts loose when they give out
+  const furn = (name, parts, obstacle, hp) => { const f = { name, parts, obstacle, hp, maxHp: hp, dead: false }; parts.forEach(m => { m.userData.furn = f; }); K.furniture.push(f); return f; };
   K.cyl = (r, h, mat, x, y, z, o = {}) => {
     const mesh = new THREE.Mesh(new THREE.CylinderGeometry(o.rt ?? r, r, h, o.seg || 20), mat); mesh.position.set(x, y, z); mesh.rotation.set(o.rx || 0, 0, o.rz || 0);
     mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh); if (o.outline !== false) S.outline(mesh, 1.03); if (o.phys !== false) K.statics.push(mesh);
@@ -41,25 +43,29 @@ function kit({ scene, world, S, items }) {
     K.bounds = [-w / 2 + 0.4, w / 2 - 0.4, -d / 2 + 0.4, d / 2 - 0.4];
   };
   K.table = (cx, cz, w, d, h, top, leg, o = {}) => {
-    K.box(w, 0.08, d, top, cx, h - 0.04, cz, { outline: true });
+    const parts = [K.box(w, 0.08, d, top, cx, h - 0.04, cz, { outline: true })];
     if (o.solid) K.box(w - 0.06, h - 0.08, d - 0.06, leg, cx, (h - 0.08) / 2, cz);
-    else for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) K.box(0.08, h - 0.08, 0.08, leg, cx + sx * (w / 2 - 0.08), (h - 0.08) / 2, cz + sz * (d / 2 - 0.08));
+    else for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) parts.push(K.box(0.08, h - 0.08, 0.08, leg, cx + sx * (w / 2 - 0.08), (h - 0.08) / 2, cz + sz * (d / 2 - 0.08)));
     const cols = Math.max(1, Math.floor((w - 0.2) / 0.38)), rows = Math.max(1, Math.floor((d - 0.1) / 0.45));
     for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++)
       K.slots.push({ x: cx - (cols - 1) * 0.19 + i * 0.38, y: h, z: cz - (rows - 1) * 0.225 + j * 0.45, k: o.k || 'table', w: Math.min(w, d) * 0.6 });
-    if (o.block !== false) K.obstacles.push([cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2]);
+    const ob = [cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2];
+    if (o.block !== false) K.obstacles.push(ob);
+    if (!o.solid && h > 0.5) furn('table', parts, ob, Math.round(4 + w)); // counters and pallets stay put
     return h;
   };
   // shelf against a wall. axis 'x' = runs along x (back/front wall), 'z' = runs along z (side wall)
   K.shelf = (cx, cz, len, depth, levels, board, post, axis = 'x') => {
     const alongX = axis === 'x', W = alongX ? len : depth, D = alongX ? depth : len, top = levels[levels.length - 1] + 0.5;
-    for (const s of [-1, 1]) K.box(alongX ? 0.06 : depth, top, alongX ? depth : 0.06, post, cx + (alongX ? s * len / 2 : 0), top / 2, cz + (alongX ? 0 : s * len / 2));
+    const parts = [];
+    for (const s of [-1, 1]) parts.push(K.box(alongX ? 0.06 : depth, top, alongX ? depth : 0.06, post, cx + (alongX ? s * len / 2 : 0), top / 2, cz + (alongX ? 0 : s * len / 2)));
     for (const y of levels) {
-      K.box(W, 0.05, D, board, cx, y - 0.025, cz, { outline: true });
+      parts.push(K.box(W, 0.05, D, board, cx, y - 0.025, cz, { outline: true }));
       const n = Math.floor(len / 0.42);
       for (let i = 0; i < n; i++) { const t = -len / 2 + 0.21 + i * (len - 0.42) / Math.max(1, n - 1); K.slots.push({ x: cx + (alongX ? t : 0), y, z: cz + (alongX ? 0 : t), k: 'shelf', max: 0.4, ry: alongX ? 0 : Math.PI / 2 }); }
     }
-    K.obstacles.push([cx - W / 2, cx + W / 2, cz - D / 2, cz + D / 2]);
+    const ob = [cx - W / 2, cx + W / 2, cz - D / 2, cz + D / 2]; K.obstacles.push(ob);
+    furn('shelf', parts, ob, 5);
   };
   K.floor = list => list.forEach(([x, z]) => K.slots.push({ x, y: 0, z, k: 'floor' }));
   K.light = (type, color, intensity, x, y, z, o = {}) => {
@@ -78,7 +84,9 @@ function kit({ scene, world, S, items }) {
     const b = new THREE.Mesh(new THREE.SphereGeometry(o.r || 0.06, 12, 10), S.mat('emissive', color)); b.position.set(x, y, z); scene.add(b);
     if (o.cage) { const c = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 0), new THREE.MeshBasicMaterial({ color: 0x222222, wireframe: true })); c.position.copy(b.position); scene.add(c);
       const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, o.cord || 0.6, 4), new THREE.MeshBasicMaterial({ color: 0x111111 })); wire.position.set(x, y + (o.cord || 0.6) / 2 + 0.1, z); scene.add(wire); }
-    return K.light('point', color, intensity, x, y - 0.05, z, { dist: o.dist || 9 });
+    const l = K.light('point', color, intensity, x, y - 0.05, z, { dist: o.dist || 9 });
+    K.lamps.push({ meshes: [b], light: l, pos: b.position.clone(), r: (o.r || 0.06) + 0.1 }); // breakable
+    return l;
   };
   // drifting dust in the air, realistic only
   K.dust = (n = 350, b = K.bounds, top = 3) => {
@@ -245,7 +253,7 @@ export const SCENES = {
       const panels = [];
       for (const x of [-3.5, 0, 3.5]) for (const z of [-2.5, 1.5]) {
         const p = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6), S.mat('emissive', 0xf4f8ff)); p.rotation.x = Math.PI / 2; p.position.set(x, 2.99, z); scene.add(p); panels.push(p);
-        K.light('point', 0xe8f0ff, K.v(7, 3), x, 2.7, z, { dist: 8 });
+        K.lamps.push({ meshes: [p], light: K.light('point', 0xe8f0ff, K.v(7, 3), x, 2.7, z, { dist: 8 }), pos: p.position.clone(), r: 0.6 });
       }
       K.light('spot', 0xf4f8ff, K.v(32, 18), 0, 2.95, 0, { target: [0, 0, -0.5], angle: 1.1, pen: 0.8, shadow: true });
       K.hemi(0xf0f4ff, 0x404448, K.v(0.35, 0.9));
@@ -264,7 +272,7 @@ export const SCENES = {
         g.fillStyle = '#c03030'; g.font = '34px Rubik, Arial'; g.fillText('GROWTH!!', 300, 260); g.fillStyle = '#222'; g.font = '22px Rubik, Arial'; g.fillText('Action items: ???', 40, 50); });
       K.decal(wb, 2.4, 1.4, 2.2, 1.7, -4.98, 0);
       K.model('WetFloorSign_01', 1.2, 0, 0.6, { h: 0.62, w: 0.4, d: 0.4, ry: 0.4 });
-      K.updates.push(t => { const p = panels[4]; const on = Math.sin(t * 37) > -0.9 || Math.random() > 0.3; p.visible = on; });
+      K.updates.push(t => { const p = panels[4]; if (p.userData.broken) return; const on = Math.sin(t * 37) > -0.9 || Math.random() > 0.3; p.visible = on; });
       return { ...K, pool: ['gascan', 'monitor', 'monitor', 'keyboard', 'keyboard', 'mug', 'mug', 'phone', 'laptop', 'printer', 'lamp', 'flowerpot', 'watercooler', 'speaker', 'frame', 'clock', 'chair', 'crt'], start: { x: 0, z: 3.6 }, amb: 'office', photoSpots: [[-0.8, -4.3, 0], [4.2, -2.6, -0.6]] };
     },
   },

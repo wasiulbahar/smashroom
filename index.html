@@ -100,6 +100,23 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
 #replayBox{margin-top:16px;background:var(--bg);border:3px solid var(--ink);border-radius:12px;padding:10px}
 #replayBox canvas{width:100%;aspect-ratio:16/9;display:block;border-radius:8px;background:#140d1f}
 #replayBox .row{margin-top:10px}
+#mission{position:absolute;left:50%;top:14px;transform:translateX(-50%);min-width:min(420px,60vw);max-width:62vw;background:rgba(20,13,31,.8);border:3px solid var(--ink);border-radius:12px;padding:6px 14px;text-align:center;font-family:Rubik,sans-serif;font-weight:600;font-size:15px}
+#mission .lbl{font-family:Bungee,Impact,sans-serif;font-size:11px;color:var(--yellow)}
+#missionBar{height:6px;background:rgba(255,255,255,.12);border-radius:4px;margin-top:5px;overflow:hidden}
+#missionFill{height:100%;width:100%;background:var(--teal)}
+#mission.done{border-color:var(--teal)}#mission.fail{border-color:var(--pink);opacity:.7}
+#tut{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);background:rgba(20,13,31,.88);border:3px solid var(--yellow);border-radius:12px;padding:10px 18px;text-align:center;font-family:Rubik,sans-serif;max-width:92vw;pointer-events:auto}
+#tut .lbl{font-family:Bungee,Impact,sans-serif;font-size:11px;color:var(--yellow)}
+#tutText{font-size:18px;font-weight:600;margin:4px 0}
+#tutSkip{font-size:12px;color:var(--muted);cursor:pointer;background:none;border:none;font-family:inherit;text-decoration:underline}
+#ach{position:fixed;right:16px;top:100px;z-index:16;background:var(--card);border:3px solid var(--yellow);border-radius:12px;padding:10px 14px;max-width:280px;opacity:0;pointer-events:none;font-family:Rubik,sans-serif}
+#ach.show{animation:tst 3.2s ease-out}
+#ach b{display:block;font-family:Bungee,Impact,sans-serif;font-weight:400;color:var(--yellow);font-size:17px}
+#ach small{color:var(--muted)} #ach .lbl{font-size:11px;color:var(--teal)}
+.card .bar{height:6px;background:rgba(255,255,255,.12);border-radius:4px;margin-top:8px;overflow:hidden}
+.card .bar i{display:block;height:100%;background:var(--teal)}
+.card.got{border-color:var(--yellow);cursor:default}.card.got b::before{content:'★ ';color:var(--yellow)}
+#achGrid .card{cursor:default}
 #touch{position:fixed;inset:0;z-index:12;touch-action:none}
 #joy{position:absolute;width:110px;height:110px;margin:-55px 0 0 -55px;border:3px solid rgba(255,247,234,.5);border-radius:50%;pointer-events:none}
 #knob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;background:rgba(255,247,234,.6);border-radius:50%}
@@ -126,7 +143,10 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
   <div id="rage"><div id="rageFill"></div><span id="rageTxt">Rage</span></div>
   <div id="banner"></div>
   <div id="announce"></div>
+  <div id="mission" class="hidden"><div class="lbl">Mission</div><div id="missionText"></div><div id="missionBar"><div id="missionFill"></div></div></div>
+  <div id="tut" class="hidden"><div class="lbl" id="tutStep"></div><div id="tutText"></div><button id="tutSkip">Skip tutorial (T)</button></div>
 </div>
+<div id="ach"></div>
 <div id="pops"></div>
 
 <div id="touch" class="hidden">
@@ -189,9 +209,16 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
         <label>Effects <input type="range" class="vol" data-v="sfx" min="0" max="100"></label>
         <label>Music <input type="range" class="vol" data-v="music" min="0" max="100"></label>
       </div>
+    <div class="vols sets">
+        <label>Mouse speed <input type="range" class="set" data-k="sens" min="0.3" max="2.5" step="0.05"></label>
+        <label>Field of view <input type="range" class="set" data-k="fov" min="60" max="95" step="1"></label>
+        <label><input type="checkbox" class="set" data-k="invert"> Invert look</label>
+        <label><input type="checkbox" class="set" data-k="shake"> Screen shake</label>
+      </div>
+    <div class="row" style="justify-content:center;margin-top:12px"><button class="btn alt" id="achBtn">Achievements</button><button class="btn alt" id="tutBtn">Play the tutorial</button></div>
     <p class="keys" id="keysDesk">
       <kbd>WASD</kbd> move · <kbd>Mouse</kbd> look · <kbd>Click</kbd> swing · hold to wind up a heavy swing<br>
-      <kbd>E</kbd> or <kbd>Right-click</kbd> grab what's highlighted · press again to throw · or <kbd>Click</kbd> to throw (hold for power) · <kbd>Q</kbd> drop · <kbd>Esc</kbd> pause<br>
+      <kbd>E</kbd> or <kbd>Right-click</kbd> grab what's highlighted · <kbd>Click</kbd> hit with it · <kbd>E</kbd> throw · hold <kbd>Right-click</kbd> power throw · <kbd>Q</kbd> drop · <kbd>Esc</kbd> pause<br>
       Bare hands: <kbd>Click</kbd> punch · <kbd>F</kbd> slap · <kbd>Space</kbd> kick
     </p>
     <p class="note" id="lifetime"></p>
@@ -201,6 +228,12 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
 <div id="pause" class="overlay hidden">
   <div class="panel" style="text-align:center">
     <h1 style="font-size:48px">Paused</h1>
+    <div class="vols sets">
+        <label>Mouse speed <input type="range" class="set" data-k="sens" min="0.3" max="2.5" step="0.05"></label>
+        <label>Field of view <input type="range" class="set" data-k="fov" min="60" max="95" step="1"></label>
+        <label><input type="checkbox" class="set" data-k="invert"> Invert look</label>
+        <label><input type="checkbox" class="set" data-k="shake"> Screen shake</label>
+      </div>
     <div class="vols">
         <label>Volume <input type="range" class="vol" data-v="master" min="0" max="100"></label>
         <label>Effects <input type="range" class="vol" data-v="sfx" min="0" max="100"></label>
@@ -210,6 +243,15 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
       <button class="btn" id="resume">Keep smashing</button>
       <button class="btn alt" id="quit">End session</button>
     </div>
+  </div>
+</div>
+
+<div id="achScreen" class="overlay hidden">
+  <div class="panel">
+    <h1 style="font-size:44px">Achievements</h1>
+    <p class="tag" id="achCount"></p>
+    <div class="grid" id="achGrid" style="margin-top:14px"></div>
+    <div class="row"><span></span><button class="btn" id="achClose">Back</button></div>
   </div>
 </div>
 
@@ -232,6 +274,6 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=8"></script>
+<script type="module" src="src/main.js?v=9"></script>
 </body>
 </html>

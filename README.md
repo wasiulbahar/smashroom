@@ -14,6 +14,10 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Game feel.** Hit-stop on big hits, camera kick, a combo announcer voice and phone vibration.
 - **Best smash replay.** Your best moment plays back in slow motion at the end, and you can save it as a video clip.
 - **Smash, grab and throw.** 40+ breakable things: glass, china, TVs, monitors, printers, laptops, furniture, cinder blocks. Thrown things break easier and score more.
+- **Anything you hold is a weapon.** Pick up a pan, a chair or a bottle and hit things with it. Breakable things break in your hand.
+- **Wreck the room.** Tables and shelves give way after enough hits, lights pop and go dark, walls crack into holes.
+- **Missions and achievements.** Short timed missions pop up during classic and zen rounds; 17 achievements are tracked across rounds.
+- **Settings and tutorial.** Mouse speed, invert look, field of view and screen shake in the lobby and pause menu. A short tutorial runs the first time you play.
 - **Real breaking.** Objects split into pieces of themselves, smaller near the hit, keeping their shape and texture. Tougher things show damage first: cracks where you hit, broken flickering screens, smoke.
 - **Damage that stays.** Cracks on the walls, dents in the car and on metal, liquid splashes, marks where thrown things hit.
 - **3D sound.** Recorded breaks placed where they happen, an echo matched to each room, pieces tinkling as they land, footsteps, muffled ears after an explosion, and volume sliders.
@@ -26,7 +30,10 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 |---|---|---|
 | Move / look | WASD + mouse | Left thumb / right thumb |
 | Swing or punch | Click, or hold to wind up a heavy swing | Smash |
-| Grab / throw | E or right-click, again to throw, or click to throw (hold for power) | Grab |
+| Grab | E or right-click | Grab |
+| Hit with what you hold | Click | Smash |
+| Throw | E, or hold right-click for a power throw | Throw |
+| Skip tutorial | T | Skip button |
 | Drop | Q | |
 | Bare hands | Click punch, F slap, Space kick | Smash, Kick |
 | Shift | Run | |
