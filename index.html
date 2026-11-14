@@ -3,11 +3,41 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>SMASHROOM</title>
+<title>SMASHROOM: Free Online Rage Room Game | Smash Things in Your Browser</title>
 <link rel="icon" href="assets/icons/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
-<meta name="description" content="A rage room in your browser. Smash and throw glass, plates, TVs and a whole car.">
+<meta name="description" content="SMASHROOM is a free online rage room you play in your browser. Smash glass, plates, TVs, furniture and a whole car with a bat or sledgehammer. No download, works on PC and phone.">
+<link rel="canonical" href="https://wasiulbahar.com/smashroom/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta name="theme-color" content="#231a33">
+<meta name="author" content="Wasiul Bahar">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SMASHROOM">
+<meta property="og:title" content="SMASHROOM: Free Online Rage Room Game">
+<meta property="og:description" content="Smash, throw and wreck everything in seven rooms. A rage room in your browser, free, no download.">
+<meta property="og:url" content="https://wasiulbahar.com/smashroom/">
+<meta property="og:image" content="https://wasiulbahar.com/smashroom/assets/share.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="SMASHROOM gameplay: a baseball bat smashing plates and glass in a rage room">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="SMASHROOM: Free Online Rage Room Game">
+<meta name="twitter:description" content="Smash, throw and wreck everything. A rage room in your browser, free, no download.">
+<meta name="twitter:image" content="https://wasiulbahar.com/smashroom/assets/share.jpg">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+ {"@type":["VideoGame","WebApplication"],"name":"SMASHROOM","alternateName":["Smash Room","Online Rage Room"],"url":"https://wasiulbahar.com/smashroom/","image":"https://wasiulbahar.com/smashroom/assets/share.jpg",
+  "description":"A free online rage room game. Smash and throw glass, plates, TVs, furniture and a car in seven rooms, from a corporate office to a haunted house, or smash a clay statue with your bare hands.",
+  "genre":["Action","Simulation","Casual","Stress relief"],"keywords":"rage room, smash room, break room, online rage room, stress relief game, smashing game, destruction game, browser game, free online game",
+  "applicationCategory":"GameApplication","operatingSystem":"Any (web browser)","gamePlatform":["Web browser","PC","Mobile"],"playMode":"SinglePlayer","inLanguage":"en","isAccessibleForFree":true,
+  "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Wasiul Bahar","url":"https://wasiulbahar.com/"}},
+ {"@type":"FAQPage","mainEntity":[
+  {"@type":"Question","name":"What is an online rage room?","acceptedAnswer":{"@type":"Answer","text":"A rage room (also called a smash room or break room) is a place where you pay to break things to let off stress. SMASHROOM puts one in your browser: you pick a room and a weapon and smash everything in it, for free."}},
+  {"@type":"Question","name":"Is SMASHROOM free?","acceptedAnswer":{"@type":"Answer","text":"Yes. It is free to play in any modern browser, with no download and no account."}},
+  {"@type":"Question","name":"Does it work on phones?","acceptedAnswer":{"@type":"Answer","text":"Yes. It has touch controls, and the Stylized look runs well on phones and older laptops."}},
+  {"@type":"Question","name":"What can you break?","acceptedAnswer":{"@type":"Answer","text":"Glass, bottles, plates, vases, TVs, monitors, printers, laptops, tables, shelves, lights, windows, walls and a whole car. You can also throw things, and smash a clay statue with your bare hands."}}]}]}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
@@ -117,6 +147,10 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
 .card .bar i{display:block;height:100%;background:var(--teal)}
 .card.got{border-color:var(--yellow);cursor:default}.card.got b::before{content:'★ ';color:var(--yellow)}
 #achGrid .card{cursor:default}
+details.about{margin-top:18px;color:var(--muted);font-size:14px;line-height:1.5}
+details.about summary{cursor:pointer;color:var(--text);font-weight:600}
+details.about h2{font-size:16px;margin:12px 0 4px;color:var(--text)}
+details.about p{margin:6px 0}
 #touch{position:fixed;inset:0;z-index:12;touch-action:none}
 #joy{position:absolute;width:110px;height:110px;margin:-55px 0 0 -55px;border:3px solid rgba(255,247,234,.5);border-radius:50%;pointer-events:none}
 #knob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;background:rgba(255,247,234,.6);border-radius:50%}
@@ -160,7 +194,7 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
 <div id="modeScreen" class="overlay hidden">
   <div class="panel">
     <h1>SMASHROOM</h1>
-    <p class="tag">Two minutes. One room. Everything breaks. Pick how it should look.</p>
+    <p class="tag">A free online rage room. Two minutes. One room. Everything breaks. Pick how it should look.</p>
     <div class="modes">
       <button class="card mode" data-mode="stylized">
         <b>Stylized</b>
@@ -174,6 +208,17 @@ body.rage #vig{opacity:1;animation:pulse .5s ease-in-out infinite alternate}
       </button>
     </div>
     <p class="note" id="gpuNote"></p>
+    <details class="about">
+      <summary>What is SMASHROOM?</summary>
+      <h2>A rage room in your browser</h2>
+      <p>A rage room, also called a smash room or break room, is a place where you break things to let off stress. SMASHROOM is a free online rage room game: no download, no account, on PC or phone.</p>
+      <p>Pick one of seven rooms: a classic rage room, an abandoned building, a haunted house, a corporate office, a kitchen, an apartment or a car yard. Grab a baseball bat, sledgehammer, crowbar or frying pan and smash glass, plates, TVs, printers, tables, shelves, lights, windows and walls. Pick things up and throw them, or hit things with whatever you are holding. In the clay studio you can punch, slap and kick a clay statue.</p>
+      <h2>Modes</h2>
+      <p>Classic (two minutes, chase a high score), Zen (no timer), Time attack (clear the room fast) and Target practice. Missions, combos, achievements and unlockable weapons keep it going.</p>
+      <h2>Questions</h2>
+      <p><b>Is it free?</b> Yes, free in any modern browser.</p>
+      <p><b>Does it work on phones?</b> Yes, with touch controls. The Stylized look runs well on phones and older laptops.</p>
+    </details>
   </div>
 </div>
 
