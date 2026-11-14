@@ -242,9 +242,19 @@ export function startAmbience(kind) {
     every(11000, () => far('keys', 0.14, { lp: 4000 }));
     every(8000, () => far('clink', 0.12, { lp: 3000 }));
     every(12000, () => { const n = 3 + Math.floor(rand(0, 4)); for (let k = 0; k < n; k++) setTimeout(() => far('stepwood', 0.12, { lp: 900, rate: rand(0.6, 0.7) }), k * 520); }); }
-  if (kind === 'kitchen') { loopTone(60, 0.025, 'sawtooth'); loopNoise('lowpass', 250, 0.5, 0.05); every(3000, t => tn(t, rand(500, 900), 0.06, 0.03, 'sine', amb)); }
-  if (kind === 'apartment') { loopTone(50, 0.02, 'sawtooth'); loopNoise('lowpass', 220, 0.5, 0.08); // fridge hum and traffic outside
-    every(7000, t => nz(t, 2.5, 'bandpass', rand(250, 450), 0.8, 0.08, amb, rand(150, 250))); }
+  if (kind === 'kitchen') { // soft air, dishes and cutlery being put away, a door, someone walking past
+    loopNoise('lowpass', 600, 0.3, 0.025);
+    every(4000, () => far('clink', rand(0.1, 0.18), { lp: 3500 }));
+    every(9000, () => far('ceramic', 0.06, { lp: 2500, rate: rand(1.1, 1.3) }));
+    every(15000, () => far('door', 0.25, { lp: 1500, rate: rand(0.85, 1) }));
+    every(12000, () => { const n = 3 + Math.floor(rand(0, 3)); for (let k = 0; k < n; k++) setTimeout(() => far('stepwood', 0.1, { lp: 800, rate: rand(0.65, 0.75) }), k * 520); }); }
+  if (kind === 'apartment') { // traffic outside, neighbours upstairs and next door
+    loopNoise('lowpass', 220, 0.5, 0.06);
+    every(7000, t => nz(t, 2.5, 'bandpass', rand(250, 450), 0.8, 0.06, amb, rand(150, 250)));
+    every(10000, () => { const n = 4 + Math.floor(rand(0, 4)); for (let k = 0; k < n; k++) setTimeout(() => far('stepwood', 0.1, { lp: 500, rate: rand(0.55, 0.65) }), k * 560); });
+    every(16000, () => far('door', 0.22, { lp: 900, rate: rand(0.8, 0.95) }));
+    every(13000, () => far('keys', 0.08, { lp: 2500 }));
+    every(9000, () => far('clink', 0.08, { lp: 2000 })); }
   if (kind === 'caryard') { const w = loopNoise('bandpass', 350, 0.6, 0.25); loopNoise('lowpass', 150, 0.4, 0.12); tick(3000, () => w.frequency.setTargetAtTime(rand(250, 600), now(), 2));
     every(6000, t => nz(t, 2, 'lowpass', 400, 0.7, 0.12, amb, 150)); }
 }
