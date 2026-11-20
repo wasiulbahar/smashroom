@@ -1,14 +1,14 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=13';
-import { loadModel, fitInto } from './models.js?v=13';
+import { canvasTex } from './style.js?v=14';
+import { loadModel, fitInto } from './models.js?v=14';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
 
 function kit({ scene, world, S, items }) {
-  const K = { slots: [], obstacles: [], updates: [], statics: [], furniture: [], lamps: [] };
+  const K = { slots: [], obstacles: [], updates: [], statics: [], furniture: [], lamps: [], cars: [] };
   const R = S.realistic;
   K.v = (realistic, stylized) => R ? realistic : stylized;
   K.box = (w, h, d, mat, x, y, z, o = {}) => {
@@ -32,15 +32,15 @@ function kit({ scene, world, S, items }) {
   K.decal = (tex, w, h, x, y, z, ry = 0, opacity = 1) => K.plane(w, h, new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }), x, y, z, ry);
   // floor, four walls, ceiling. texture repeats roughly once per 2 m
   K.room = (w, d, h, floor, wall, ceil, o = {}) => {
-    const t = o.t || 2;
-    K.box(w, 0.2, d, S.surface(floor, w / t, d / t, o.floorTint), 0, -0.1, 0, { cast: false });
+    const t = o.t || 2, oz = o.oz || 0; // oz: the room's centre along z (rooms grow toward the front and keep their back wall)
+    K.box(w, 0.2, d, S.surface(floor, w / t, d / t, o.floorTint), 0, -0.1, oz, { cast: false });
     const wm = S.surface(wall, w / t, h / t, o.wallTint), wm2 = S.surface(wall, d / t, h / t, o.wallTint);
-    if (!o.noBack) K.box(w, h, 0.2, wm, 0, h / 2, -d / 2 - 0.1, { cast: false });
-    K.box(w, h, 0.2, wm, 0, h / 2, d / 2 + 0.1, { cast: false });
-    K.box(0.2, h, d, wm2, -w / 2 - 0.1, h / 2, 0, { cast: false });
-    K.box(0.2, h, d, wm2, w / 2 + 0.1, h / 2, 0, { cast: false });
-    if (ceil) K.box(w, 0.2, d, S.surface(ceil, w / t, d / t, o.ceilTint), 0, h + 0.1, 0, { cast: false });
-    K.bounds = [-w / 2 + 0.4, w / 2 - 0.4, -d / 2 + 0.4, d / 2 - 0.4];
+    if (!o.noBack) K.box(w, h, 0.2, wm, 0, h / 2, oz - d / 2 - 0.1, { cast: false });
+    K.box(w, h, 0.2, wm, 0, h / 2, oz + d / 2 + 0.1, { cast: false });
+    K.box(0.2, h, d, wm2, -w / 2 - 0.1, h / 2, oz, { cast: false });
+    K.box(0.2, h, d, wm2, w / 2 + 0.1, h / 2, oz, { cast: false });
+    if (ceil) K.box(w, 0.2, d, S.surface(ceil, w / t, d / t, o.ceilTint), 0, h + 0.1, oz, { cast: false });
+    K.bounds = [-w / 2 + 0.4, w / 2 - 0.4, oz - d / 2 + 0.4, oz + d / 2 - 0.4];
   };
   K.table = (cx, cz, w, d, h, top, leg, o = {}) => {
     const parts = [K.box(w, 0.08, d, top, cx, h - 0.04, cz, { outline: true })];
@@ -105,6 +105,17 @@ function kit({ scene, world, S, items }) {
     m.geometry.translate(0, -len / 2, 0); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); scene.add(m);
   };
   K.fixed = (key, x, y, z, ry = 0, o = {}) => items.add(key, x, y, z, ry, o);
+  K.car = (cx, cz, color) => {
+    const group = K.cars.length; K.cars.push({ x: cx, z: cz });
+    K.fixed('carbody', cx, 0, cz, 0, { color, group });
+    K.obstacles.push([cx - 1.05, cx + 1.05, cz - 2.3, cz + 2.3]);
+    K.fixed('carglass', cx, 1.15, cz + 0.6, 0, { w: 1.56, h: 0.6, rx: -0.5, group });
+    K.fixed('carglass', cx, 1.15, cz - 1.05, 0, { w: 1.56, h: 0.5, rx: 0.5, group });
+    for (const s of [-1, 1]) for (const z of [0.15, -0.55]) K.fixed('carglass', cx + s * 0.84, 1.13, cz + z, Math.PI / 2, { w: 0.62, h: 0.42, group });
+    for (const s of [-1, 1]) { K.fixed('carlight', cx + s * 0.62, 0.72, cz + 2.12, 0, { w: 0.34, h: 0.14, glow: true, color: 0xfff6d0, group });
+      K.fixed('carlight', cx + s * 0.65, 0.72, cz - 2.12, 0, { w: 0.3, h: 0.12, glow: true, color: 0xff2a2a, group });
+      K.fixed('carmirror', cx + s * 1.0, 0.95, cz + 0.55, 0, { group }); }
+  };
   // realistic only: drop in a CC0 model of height h standing at (x, y, z); optionally hide the simple stand-ins it replaces
   K.model = (id, x, y, z, o = {}) => {
     if (!R) return;
@@ -142,7 +153,7 @@ export const SCENES = {
     name: 'Classic rage room', desc: 'Dented plywood, rubber floor, cage lights and spray paint.', exposure: 1, env: 0.45,
     build(ctx) {
       const { scene, S } = ctx, K = kit(ctx);
-      K.room(10, 10, 3.6, 'rubber', 'plywood', 'concreteFloor', { ceilTint: 0x555555 });
+      K.room(10, 15, 3.6, 'rubber', 'plywood', 'concreteFloor', { ceilTint: 0x555555, oz: 2.5 });
       scene.background = new THREE.Color(K.v(0x0e0c10, 0x231a33)); scene.fog = new THREE.Fog(K.v(0x0e0c10, 0x231a33), 9, 22);
       const steel = S.surface('steel', 1, 1), rust = S.surface('rust', 1, 1), wood = S.surface('wood', 1, 1);
       K.table(0, -1.6, 3.2, 1.3, 0.92, steel, rust);
@@ -159,7 +170,14 @@ export const SCENES = {
       if (S.realistic) dents(K, 26, -4.89, 0.4, 2.8, -4.5, 4.5);
       const stripe = canvasTex(512, 32, (g, w, h) => { g.fillStyle = '#ffc531'; g.fillRect(0, 0, w, h); g.fillStyle = '#140d1f'; for (let x = -h; x < w; x += 40) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + 20, h); g.lineTo(x + 20 + h, 0); g.lineTo(x + h, 0); g.fill(); } });
       stripe.wrapS = THREE.RepeatWrapping; stripe.repeat.x = 4;
-      for (const [x, z, ry] of [[0, -4.99, 0], [0, 4.99, Math.PI], [-4.99, 0, Math.PI / 2], [4.99, 0, -Math.PI / 2]]) K.decal(stripe, 10, 0.25, x, 0.14, z, ry);
+      for (const [x, z, ry, w] of [[0, -4.99, 0, 10], [0, 9.99, Math.PI, 10], [-4.99, 2.5, Math.PI / 2, 15], [4.99, 2.5, -Math.PI / 2, 15]]) K.decal(stripe, w, 0.25, x, 0.14, z, ry);
+      // the front half: more tables and racks to clear
+      K.table(-2.6, 5.4, 2.2, 1.1, 0.85, wood, rust); K.table(2.8, 6.6, 1.6, 1.2, 0.9, steel, rust);
+      K.shelf(-4.68, 6.6, 3.4, 0.55, [1.15, 1.95], rust, rust, 'z'); K.shelf(4.68, 5.6, 3.4, 0.55, [1.15, 1.95], rust, rust, 'z');
+      for (const x of [-2.4, 2.4]) K.bulb(x, 3.0, 5.8, 0xffd9a0, K.v(12, 5), { cage: true, cord: 0.5 });
+      K.light('point', 0xffe0c0, K.v(10, 5), 0, 3.2, 7.5, { dist: 12 });
+      K.floor([[0, 4.2], [-0.8, 7.8], [1.4, 8.8], [-3.4, 9], [3.4, 9], [0.6, 3.6]]);
+      K.decal(spray('BREAK IT', '#2fd1c0', 130), 3.6, 1.1, 0, 2.6, 9.88, Math.PI);
       K.hemi(0xffe2c0, 0x2a2030, K.v(0.25, 0.9));
       K.light('spot', 0xfff0dc, K.v(70, 25), 0, 3.5, 0.2, { target: [0, 0.8, -1.8], angle: 0.95, pen: 0.7, shadow: true });
       for (const x of [-2.8, 0, 2.8]) K.bulb(x, 3.0, -1.8, 0xffd9a0, K.v(14, 5), { cage: true, cord: 0.5 });
@@ -172,7 +190,7 @@ export const SCENES = {
     name: 'Abandoned building', desc: 'Cracked concrete, broken windows, rubble and daylight.', exposure: 1.15, env: 0.35,
     build(ctx) {
       const { scene, S } = ctx, K = kit(ctx);
-      K.room(11, 11, 3.8, 'concreteFloor', 'blockWall', 'concreteFloor', { noBack: true, ceilTint: 0x777777 });
+      K.room(11, 16, 3.8, 'concreteFloor', 'blockWall', 'concreteFloor', { noBack: true, ceilTint: 0x777777, oz: 2.5 });
       scene.background = new THREE.Color(K.v(0x9bb3c4, 0x3a3550)); scene.fog = new THREE.Fog(K.v(0x8a96a0, 0x3a3550), 8, 26);
       const wall = S.surface('blockWall', 2, 1), z = -5.6;
       K.box(11.4, 1.1, 0.25, wall, 0, 0.55, z); K.box(11.4, 1.4, 0.25, wall, 0, 3.1, z);
@@ -194,9 +212,14 @@ export const SCENES = {
       K.table(-3.8, -1.6, 1.2, 1.2, 0.15, wood, wood, { solid: true });
       K.table(3.9, -2.6, 1.2, 1.2, 0.15, wood, wood, { solid: true });
       K.table(3.8, 3.2, 1.4, 1, 0.75, wood, rust);
+      K.table(-2.4, 6.6, 2.2, 1, 0.8, wood, rust); K.table(2.6, 8, 1.4, 1, 0.75, wood, rust);
+      K.shelf(5.2, 6.2, 3, 0.5, [1, 1.8], rust, rust, 'z');
+      K.box(0.6, 3.8, 0.6, conc, -3, 1.9, 8.6); K.obstacles.push([-3.3, -2.7, 8.3, 8.9]);
+      K.light('point', 0xbfd4ff, K.v(9, 4), 0, 2.6, 7, { dist: 12 });
+      K.floor([[0, 5], [-4.5, 6], [0.8, 9.6], [-1.4, 9.4], [3.6, 9.6], [-4.4, 9.4]]);
       K.floor([[-1.5, 0.3], [1.5, 0], [-4, 1.5], [4.2, -0.5], [0.5, -4.4], [-4, 3.8], [1, 3.6], [-1.2, -4.3]]);
       for (const [x, z, ry] of [[-4.6, -4.4, 0.3], [-4.0, -4.6, -0.2], [4.6, 1.8, 0.5]]) { const b = K.box(0.5, 0.4, 0.4, S.mat('wood', 0xb08a5a), x, 0.2, z, { ry, outline: true }); K.model('cardboard_box_01', x, 0, z, { h: 0.4, w: 0.55, d: 0.45, ry, mode: 'inside', hide: [b] }); }
-      K.decal(spray('KEEP OUT', '#d8d0c0', 110), 3.6, 1, 0, 2.9, 5.39, Math.PI);
+      K.decal(spray('KEEP OUT', '#d8d0c0', 110), 3.6, 1, 0, 2.9, 10.39, Math.PI);
       K.decal(spray('X', '#e8202c', 160, 300, 260), 1, 0.9, -5.39, 1.6, -2, Math.PI / 2);
       K.decal(spray('WHO WAS HERE', '#2f9bff', 80), 3, 0.8, 5.39, 1.5, 1.5, -Math.PI / 2);
       K.dust(600, K.bounds, 3.6);
@@ -207,7 +230,7 @@ export const SCENES = {
     name: 'Haunted house', desc: 'Peeling wallpaper, candlelight, creepy china and portraits.', exposure: 0.95, env: 0.2,
     build(ctx) {
       const { scene, S } = ctx, K = kit(ctx);
-      K.room(9, 9, 3.4, 'oldWood', 'wallpaper', 'oldWood', { wallTint: K.v(0xb0a0a8, undefined), ceilTint: 0x3a2a20 });
+      K.room(9, 13, 3.4, 'oldWood', 'wallpaper', 'oldWood', { wallTint: K.v(0xb0a0a8, undefined), ceilTint: 0x3a2a20, oz: 2 });
       scene.background = new THREE.Color(K.v(0x07060a, 0x1a1028)); scene.fog = new THREE.FogExp2(K.v(0x0c0a12, 0x1a1028), K.v(0.09, 0.05));
       const stone = S.surface('blockWall', 1, 1, 0x9a8f88), dark = S.mat('wood', 0x3a2618), wood = S.surface('oldWood', 1, 1, 0x8a6a50);
       K.box(2.2, 1.4, 0.6, stone, 0, 0.7, -4.2); K.box(2.6, 0.12, 0.75, dark, 0, 1.46, -4.15, { outline: true }); K.box(1.1, 0.8, 0.2, S.mat('emissive', 0x140805), 0, 0.5, -3.95, { phys: false });
@@ -221,6 +244,11 @@ export const SCENES = {
       K.fixed('mirror', 4.42, 1.8, -1.6, -Math.PI / 2, { w: 0.7, h: 1 });
       K.fixed('portrait', -4.42, 1.9, 2.4, Math.PI / 2); K.fixed('portrait', 4.42, 1.9, 1.3, -Math.PI / 2); K.fixed('portrait', -2.4, 2.2, -4.43, 0); K.fixed('portrait', 2.4, 2.2, -4.43, 0);
       K.floor([[-2.2, 1.8], [2.2, 2.6], [-3, -3.4], [1.8, 0.8], [-1.6, 3.4]]);
+      // the front parlour
+      K.table(-1.4, 5.8, 2.2, 1, 0.78, wood, dark); K.shelf(4.2, 5.4, 2.6, 0.5, [0.9, 1.6, 2.3], dark, dark, 'z'); K.shelf(-4.2, 6.4, 2.4, 0.5, [0.9, 1.6], dark, dark, 'z');
+      K.fixed('portrait', 0, 2.2, 8.43, Math.PI); K.fixed('portrait', 2.6, 2.2, 8.43, Math.PI); K.fixed('mirror', 4.42, 1.8, 7.6, -Math.PI / 2, { w: 0.7, h: 1 });
+      K.light('point', 0xffa040, K.v(5, 2.5), -1.4, 1.4, 5.8, { dist: 7 });
+      K.floor([[1.4, 4.8], [-3, 7.8], [2.2, 7.8], [0.4, 7.6]]);
       const gc = K.box(0.5, 2.1, 0.4, dark, -3.95, 1.05, 3.7, { outline: true }); K.obstacles.push([-4.3, -3.6, 3.4, 4]); K.model('vintage_grandfather_clock_01', -3.95, 0, 3.7, { h: 2.1, w: 0.6, d: 0.5, ry: Math.PI / 2, mode: 'inside', hide: [gc] });
       const cb = K.box(0.55, 1.8, 1.1, dark, 4.15, 0.9, -3.2, { outline: true }); K.obstacles.push([3.8, 4.5, -3.8, -2.6]); K.model('GothicCabinet_01', 4.15, 0, -3.2, { h: 1.8, w: 0.6, d: 1.2, ry: -Math.PI / 2, mode: 'inside', hide: [cb] });
       const flames = [];
@@ -245,27 +273,28 @@ export const SCENES = {
     name: 'Corporate office', desc: 'Cubicles, buzzing lights, monitors and printers.', exposure: 1, env: 0.55,
     build(ctx) {
       const { scene, S } = ctx, K = kit(ctx);
-      K.room(12, 10, 3, 'carpet', 'plaster', null);
+      K.room(12, 15, 3, 'carpet', 'plaster', null, { oz: 2.5 });
       scene.background = new THREE.Color(K.v(0x202428, 0x2a3040)); scene.fog = new THREE.Fog(K.v(0x202428, 0x2a3040), 12, 26);
       const tiles = canvasTex(256, 256, (g) => { g.fillStyle = '#e8e6e0'; g.fillRect(0, 0, 256, 256); g.strokeStyle = '#b8b4ac'; g.lineWidth = 4; g.strokeRect(0, 0, 256, 256); for (let i = 0; i < 300; i++) { g.fillStyle = 'rgba(0,0,0,.06)'; g.fillRect(Math.random() * 256, Math.random() * 256, 2, 2); } });
-      tiles.wrapS = tiles.wrapT = THREE.RepeatWrapping; tiles.repeat.set(10, 8);
-      K.box(12, 0.1, 10, S.realistic ? new THREE.MeshStandardMaterial({ map: tiles, roughness: 0.9 }) : S.mat('plastic', 0xe8e6e0), 0, 3.05, 0, { cast: false });
+      tiles.wrapS = tiles.wrapT = THREE.RepeatWrapping; tiles.repeat.set(10, 12);
+      K.box(12, 0.1, 15, S.realistic ? new THREE.MeshStandardMaterial({ map: tiles, roughness: 0.9 }) : S.mat('plastic', 0xe8e6e0), 0, 3.05, 2.5, { cast: false });
       const panels = [];
-      for (const x of [-3.5, 0, 3.5]) for (const z of [-2.5, 1.5]) {
+      for (const x of [-3.5, 0, 3.5]) for (const z of [-2.5, 1.5, 5.5]) {
         const p = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6), S.mat('emissive', 0xf4f8ff)); p.rotation.x = Math.PI / 2; p.position.set(x, 2.99, z); scene.add(p); panels.push(p);
         K.lamps.push({ meshes: [p], light: K.light('point', 0xe8f0ff, K.v(7, 3), x, 2.7, z, { dist: 8 }), pos: p.position.clone(), r: 0.6 });
       }
       K.light('spot', 0xf4f8ff, K.v(32, 18), 0, 2.95, 0, { target: [0, 0, -0.5], angle: 1.1, pen: 0.8, shadow: true });
       K.hemi(0xf0f4ff, 0x404448, K.v(0.35, 0.9));
       const desk = S.surface('wood', 1, 1, 0xd8c8b0), leg = S.surface('steel', 1, 1), fabric = S.mat('fabric', 0x5a6a80);
-      for (const [cx, cz] of [[-2.6, -2.2], [2.6, -2.2], [-2.6, 1.2], [2.6, 1.2]]) {
+      for (const [cx, cz] of [[-2.6, -2.2], [2.6, -2.2], [-2.6, 1.2], [2.6, 1.2], [-2.6, 5], [2.6, 5]]) {
         K.table(cx, cz, 2.2, 0.9, 0.75, desk, leg);
         K.box(2.3, 1.4, 0.06, fabric, cx, 0.7, cz - 0.5); K.box(0.06, 1.4, 1, fabric, cx + (cx < 0 ? -1.15 : 1.15), 0.7, cz);
       }
       K.table(-5.3, -3.6, 1, 0.8, 0.9, leg, leg, { solid: true });
       K.table(5.3, 3.5, 1, 1, 0.85, desk, leg);
       K.box(0.5, 1.3, 0.6, leg, 5.6, 0.65, -1); K.box(0.5, 1.3, 0.6, leg, 5.6, 0.65, -0.35); K.obstacles.push([5.3, 6, -1.4, 0]);
-      K.floor([[0, -0.6], [0, 2.8], [-5, 0.4], [5, 1.4], [-4.5, 3.8], [1.2, -4.2], [-1.4, -4.3]]);
+      K.floor([[0, -0.6], [0, 2.8], [-5, 0.4], [5, 1.4], [-4.5, 3.8], [1.2, -4.2], [-1.4, -4.3], [-5, 6.4], [5, 6.8], [0, 6.2]]);
+      K.table(0, 8.2, 3, 1.2, 0.76, desk, leg); // meeting table by the front wall
       K.decal(sign([['SYNERGY', 74, 210], ['Together we achieve more meetings', 22, 270]], '#1b2a4a', '#f4f0e6'), 1.4, 1.05, -2, 1.9, -4.98, 0);
       K.decal(sign([['HANG IN THERE', 58, 320], ['Q4 is almost over', 24, 360]], '#e8dcc0', '#3a2a1a'), 1.1, 0.82, 5.98, 1.8, -2.5, -Math.PI / 2);
       const wb = canvasTex(512, 300, (g) => { g.fillStyle = '#fbfbf8'; g.fillRect(0, 0, 512, 300); g.strokeStyle = '#2050c0'; g.lineWidth = 4; g.beginPath(); g.moveTo(40, 240); g.lineTo(140, 180); g.lineTo(240, 200); g.lineTo(340, 90); g.lineTo(460, 50); g.stroke();
@@ -280,7 +309,7 @@ export const SCENES = {
     name: 'Kitchen', desc: 'Tiled walls, shelves of plates, glasses and pans.', exposure: 1, env: 0.6,
     build(ctx) {
       const { scene, S } = ctx, K = kit(ctx);
-      K.room(9, 8, 3, 'tiles', 'plaster', 'plaster', { t: 1.2, wallTint: K.v(0xf2ead8, undefined) });
+      K.room(9, 12, 3, 'tiles', 'plaster', 'plaster', { t: 1.2, wallTint: K.v(0xf2ead8, undefined), oz: 2 });
       scene.background = new THREE.Color(K.v(0x1a1814, 0x2a2238)); scene.fog = new THREE.Fog(K.v(0x1a1814, 0x2a2238), 10, 22);
       const cab = S.surface('wood', 1, 1, 0xe8e0d0), top = S.surface('steel', 1, 1), shelfWood = S.surface('wood', 1, 1);
       K.table(0, -3.65, 8.6, 0.65, 0.92, top, cab, { solid: true });
@@ -295,7 +324,11 @@ export const SCENES = {
       for (const x of [-0.7, 0.7]) K.bulb(x, 2.1, -0.4, 0xffd9a0, K.v(4, 3), { cage: true, cord: 0.7, r: 0.06 });
       K.light('spot', 0xfff2e0, K.v(28, 18), 0, 2.95, 1, { target: [0, 0.9, -1.5], angle: 1.1, pen: 0.8, shadow: true });
       K.hemi(0xfff4e0, 0x403830, K.v(0.4, 0.9));
-      K.floor([[-2, 2], [2, 2.6], [-3, 3.3], [1.4, 1.2]]);
+      K.floor([[-2, 2], [2, 2.6], [-3, 3.3], [1.4, 1.2], [2, 6.8], [-3.6, 4.4], [0, 7.3]]);
+      K.table(0, 4.6, 2.4, 1, 0.92, top, cab, { solid: true }); // island
+      K.table(-2.6, 6.4, 1.6, 1, 0.76, shelfWood, shelfWood);
+      K.shelf(4.2, 5.2, 3, 0.35, [1.3, 1.9], shelfWood, shelfWood, 'z');
+      for (const x of [-0.7, 0.7]) K.bulb(x, 2.1, 4.6, 0xffd9a0, K.v(4, 3), { cage: true, cord: 0.7, r: 0.06 });
       return { ...K, pool: ['gascan', 'plate', 'plate', 'platestack', 'bowl', 'bowl', 'mug', 'cup', 'wineglass', 'beermug', 'teapot', 'jug', 'jar', 'pan', 'saucepan', 'kettle', 'fork', 'microwave', 'fishbowl', 'vase', 'flowerpot', 'bottle'], start: { x: 0, z: 2.8 }, amb: 'kitchen', photoSpots: [[-2.4, 1, 0.3], [2.4, -1.6, -0.3]] };
     },
   },
@@ -313,15 +346,8 @@ export const SCENES = {
       K.hemi(0xffc8a0, 0x302830, K.v(0.7, 1));
       K.light('dir', 0xffb070, K.v(3.5, 1.4), -10, 6, -6, { target: [0, 0, 0], shadow: true, size: 10 });
       for (const [x, z] of [[-7, 7], [7, -7]]) { K.cyl(0.08, 5, S.mat('metal', 0x555555), x, 2.5, z); K.bulb(x * 0.95, 5, z * 0.95, 0xfff2d0, K.v(40, 12), { r: 0.15, dist: 20 }); }
-      const cx = 0, cz = -2;
-      K.fixed('carbody', cx, 0, cz, 0, { color: pick([0xb3202a, 0x2a5ab3, 0x2a8a4a, 0xd9a22a]) });
-      K.obstacles.push([cx - 1.05, cx + 1.05, cz - 2.3, cz + 2.3]);
-      K.fixed('carglass', cx, 1.15, cz + 0.6, 0, { w: 1.56, h: 0.6, rx: -0.5 });
-      K.fixed('carglass', cx, 1.15, cz - 1.05, 0, { w: 1.56, h: 0.5, rx: 0.5 });
-      for (const s of [-1, 1]) for (const z of [0.15, -0.55]) K.fixed('carglass', cx + s * 0.84, 1.13, cz + z, Math.PI / 2, { w: 0.62, h: 0.42 });
-      for (const s of [-1, 1]) { K.fixed('carlight', cx + s * 0.62, 0.72, cz + 2.12, 0, { w: 0.34, h: 0.14, glow: true, color: 0xfff6d0 });
-        K.fixed('carlight', cx + s * 0.65, 0.72, cz - 2.12, 0, { w: 0.3, h: 0.12, glow: true, color: 0xff2a2a });
-        K.fixed('carmirror', cx + s * 1.0, 0.95, cz + 0.55, 0); }
+      const colors = [0xb3202a, 0x2a5ab3, 0x2a8a4a, 0xd9a22a].sort(() => Math.random() - 0.5);
+      K.car(0, -2, colors[0]); K.car(-3.2, 4.4, colors[1]);
       const rust = S.surface('rust', 1, 1), wood = S.surface('wood', 1, 1);
       for (const [x, z] of [[-6, -6], [-5.2, -6.2], [-6.3, -5.1]]) for (let i = 0; i < 3; i++) { const t = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.13, 10, 20), S.mat('plastic', 0x151518)); t.rotation.x = Math.PI / 2; t.position.set(x, 0.13 + i * 0.25, z); t.castShadow = true; scene.add(t);
         K.model('old_tyre', x, i * 0.25, z, { h: 0.26, w: 0.92, d: 0.92, mode: 'inside', ry: Math.random() * 3, hide: [t] }); }
@@ -333,16 +359,16 @@ export const SCENES = {
       K.table(-5, 3.5, 1.2, 1, 0.15, wood, wood, { solid: true });
       K.table(4.5, -4.5, 2, 1, 0.8, wood, rust);
       K.table(4.5, 5.6, 1.4, 1, 0.15, wood, wood, { solid: true });
-      K.floor([[-2.8, 1], [2.8, 0.5], [-3, -4.5], [2.8, -5.5], [-7, -1], [7, -2], [0, 4.5], [-2, 6.5], [2.5, 6.8], [-7, 6]]);
+      K.floor([[-2.8, 1], [2.8, 0.5], [-3, -4.5], [2.8, -5.5], [-7, -1], [7, -2], [1.4, 3.4], [2.5, 6.8], [-7, 6], [0.5, 7.6], [-6.8, 2.2], [3.6, -7.4], [-1.4, -7.6]]);
       K.decal(spray('JUNK YARD', '#f4e6c8', 110), 4, 1.1, 0, 2, -W / 2 + 0.16, 0);
-      return { ...K, pool: ['gascan', 'gascan', 'tv', 'crt', 'crt', 'monitor', 'bottle', 'bottle', 'cinder', 'crate', 'speaker', 'microwave', 'chair', 'jar', 'vase', 'pot', 'lamp'], start: { x: 0, z: 5 }, amb: 'caryard', photoSpots: [[-3.5, -1.5, 0.4], [3.5, -1.5, -0.4]] };
+      return { ...K, pool: ['gascan', 'gascan', 'tv', 'crt', 'crt', 'monitor', 'bottle', 'bottle', 'cinder', 'crate', 'speaker', 'microwave', 'chair', 'jar', 'vase', 'pot', 'lamp'], start: { x: 1.6, z: 5 }, amb: 'caryard', photoSpots: [[-3.5, -1.5, 0.4], [3.5, -1.5, -0.4]] };
     },
   },
   apartment: {
     name: 'Apartment', desc: 'A whole flat: TV wall, fridge, glass table, bathroom mirror. Walls hide water pipes.', exposure: 1, env: 0.55, pipes: true,
     build(ctx) {
       const { scene, S } = ctx, K = kit(ctx);
-      K.room(10, 8, 2.8, 'oldWood', 'plaster', 'plaster', { t: 1.6, wallTint: K.v(0xb8ac98, 0xd8c8e8), ceilTint: K.v(0x9a9488, undefined) });
+      K.room(10, 12, 2.8, 'oldWood', 'plaster', 'plaster', { t: 1.6, wallTint: K.v(0xb8ac98, 0xd8c8e8), ceilTint: K.v(0x9a9488, undefined), oz: 2 });
       scene.background = new THREE.Color(K.v(0x101420, 0x1e1a30)); scene.fog = new THREE.Fog(K.v(0x101420, 0x1e1a30), 11, 24);
       const wood = S.surface('wood', 1, 1), dark = S.mat('wood', 0x3a2a20), fab = S.mat('fabric', 0x4a5a6a), white = S.mat('plastic', 0xf0f0ee), tile = S.surface('wallTiles', 1, 1);
       // back wall: two windows onto the night, a TV on a low cabinet between them
@@ -372,22 +398,106 @@ export const SCENES = {
       K.light('spot', 0xffe6c8, K.v(11, 16), 0, 2.75, -0.5, { target: [0, 0.3, -2.5], angle: 1.15, pen: 0.8, shadow: true });
       K.light('point', 0xffe0c0, K.v(3, 3), 3.5, 2.2, -1.5, { dist: 7 });
       K.hemi(0xfff0e0, 0x504538, K.v(0.4, 0.9));
-      K.floor([[-2.6, 1], [2.4, -0.4], [-1.8, 3.2], [1, 3.4], [-3.4, -2.6]]);
+      K.floor([[-2.6, 1], [2.4, -0.4], [-1.8, 3.2], [1, 3.4], [-3.4, -2.6], [0, 5.6], [-1.2, 7.2], [1.8, 7.4]]);
+      // bedroom at the front: bed, bedside table, desk, wardrobe
+      const bedding = S.mat('fabric', 0xd8d0c4);
+      K.box(1.6, 0.42, 2.1, bedding, -3.7, 0.21, 6.7, { outline: true }); K.box(1.7, 1, 0.1, dark, -3.7, 0.5, 7.8, { outline: true }); K.obstacles.push([-4.5, -2.9, 5.6, 7.9]);
+      K.table(-2.4, 7.5, 0.5, 0.45, 0.55, dark, dark, { solid: true });
+      K.table(3.6, 7, 1.6, 0.7, 0.75, wood, dark);
+      K.box(0.6, 2, 1.4, dark, 4.65, 1, 4.6, { outline: true }); K.obstacles.push([4.3, 5, 3.9, 5.3]);
+      K.bulb(0, 2.3, 6, 0xffdcae, K.v(4, 3), { cage: false, cord: 0.45, r: 0.07 });
+      K.light('point', 0xffe0c0, K.v(3, 3), 0, 2.2, 6.5, { dist: 8 });
       return { ...K, pipes: true, pool: ['gascan', 'plate', 'platestack', 'mug', 'wineglass', 'bottle', 'bottle', 'vase', 'lamp', 'frame', 'clock', 'laptop', 'speaker', 'flowerpot', 'bowl', 'jar', 'teapot', 'phone', 'chair', 'stool', 'crt', 'fishbowl', 'microwave'], start: { x: 0, z: 2.9 }, amb: 'apartment', photoSpots: [[-2.4, 1, 0.3], [2.4, -1.6, -0.3]] };
+    },
+  },
+  downtown: {
+    name: 'Downtown', desc: 'A city street at night. Cars, shop windows, a phone booth and a hydrant. The more you wreck, the more heat you draw.', exposure: 1, env: 0.4, heat: true,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx);
+      const L = 30, X = 8; // street runs along z; shop fronts at x = +-X
+      K.box(2 * X, 0.2, L, S.surface('asphalt', 4, 8), 0, -0.1, 0, { cast: false });
+      const walk = S.surface('concreteFloor', 1, 8, 0xa8a49c);
+      for (const s of [-1, 1]) K.box(3, 0.12, L, walk, s * (X - 1.5), 0.06, 0, { cast: false });
+      const lines = canvasTex(32, 512, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#e8d070'; for (let y = 0; y < h; y += 64) g.fillRect(12, y, 8, 36); });
+      lines.wrapT = THREE.RepeatWrapping; lines.repeat.y = 6; K.plane(0.25, L, new THREE.MeshBasicMaterial({ map: lines, transparent: true, depthWrite: false }), 0, 0.006, 0, 0, -Math.PI / 2);
+      // building fronts: brick, upper-floor windows, shop windows with lit interiors, neon signs
+      const brick = S.surface('brick', L / 2, 4.5), H = 9;
+      for (const s of [-1, 1]) K.box(0.3, H, L, brick, s * (X + 0.15), H / 2, 0, { cast: false });
+      const upper = canvasTex(512, 256, (g, w, h) => { g.clearRect(0, 0, w, h); for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) { const lit = Math.random() < 0.35; g.fillStyle = lit ? (Math.random() < 0.5 ? '#ffd890' : '#bfe0ff') : '#141824'; g.fillRect(16 + c * 62, 16 + r * 80, 40, 56); g.strokeStyle = '#2a2420'; g.lineWidth = 4; g.strokeRect(16 + c * 62, 16 + r * 80, 40, 56); } });
+      for (const s of [-1, 1]) K.decal(upper, L, 6, s * (X - 0.01), 6, 0, -s * Math.PI / 2);
+      const SHOPS = [['PAWN', '#ffc531'], ['LIQUOR', '#ff4f9a'], ['DINER', '#2fd1c0'], ['ARCADE', '#b06aff'], ['PIZZA', '#ff7a2a'], ['LAUNDRY', '#6ab8ff']];
+      let n = 0;
+      for (const s of [-1, 1]) for (const z of [-9, 0, 9]) {
+        const [name, col] = SHOPS[n++], x = s * (X - 0.02), ry = -s * Math.PI / 2;
+        const inside = canvasTex(256, 160, (g, w, h) => { g.fillStyle = '#3a2c20'; g.fillRect(0, 0, w, h); g.fillStyle = col; g.globalAlpha = 0.25; g.fillRect(0, 0, w, h); g.globalAlpha = 1;
+          for (let k = 0; k < 3; k++) { g.fillStyle = '#5a4434'; g.fillRect(10, 30 + k * 45, w - 20, 6); for (let i = 0; i < 9; i++) { g.fillStyle = ['#d04040', '#40a0d0', '#e0c040', '#60c070'][(i + k) % 4]; g.fillRect(16 + i * 26, 12 + k * 45, 16, 18); } } });
+        K.decal(inside, 3, 1.8, x, 1.4, z, ry);
+        K.fixed('window', s * (X - 0.12), 1.4, z, ry, { w: 3, h: 1.8 });
+        K.box(3.4, 0.12, 0.12, S.mat('metal', 0x2a2a30), s * (X - 0.08), 2.36, z, { ry, phys: false });
+        const sign = canvasTex(512, 128, (g, w, h) => { g.clearRect(0, 0, w, h); g.font = '84px Bungee, Impact, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = col; g.shadowBlur = 24; g.fillStyle = col; g.fillText(name, w / 2, h / 2); g.fillText(name, w / 2, h / 2); });
+        const neon = K.decal(sign, 2.8, 0.7, s * (X - 0.03), 2.9, z, ry);
+        const glow = K.light('point', new THREE.Color(col).getHex(), K.v(6, 4), s * (X - 0.8), 2.9, z, { dist: 7 });
+        K.lamps.push({ meshes: [neon], light: glow, pos: neon.position.clone(), r: 1.2 });
+      }
+      // street lights (breakable if you throw something at them)
+      for (const s of [-1, 1]) for (const z of [-9, 1, 10]) {
+        const px = s * (X - 2.6), pz = z + s * 2.5;
+        K.cyl(0.07, 4.6, S.mat('metal', 0x3a3e44), px, 2.3, pz); K.box(0.9, 0.06, 0.06, S.mat('metal', 0x3a3e44), px - s * 0.45, 4.55, pz, { phys: false });
+        K.obstacles.push([px - 0.15, px + 0.15, pz - 0.15, pz + 0.15]);
+        K.bulb(px - s * 0.85, 4.45, pz, 0xffd7a0, K.v(30, 12), { r: 0.14, dist: 14 });
+      }
+      // parked cars along both curbs
+      const colors = [0xb3202a, 0x2a5ab3, 0x2a8a4a, 0xd9a22a, 0x8a8f96].sort(() => Math.random() - 0.5);
+      K.car(-3.8, -7, colors[0]); K.car(-3.8, 5.5, colors[1]); K.car(3.8, -1.5, colors[2]); K.car(3.8, 9.5, colors[3]);
+      // street furniture
+      K.fixed('hydrant', 5.6, 0.52, -0.6, 0); K.fixed('hydrant', -5.6, 0.52, -3.6, 0);
+      K.fixed('booth', -7, 1.27, 2, Math.PI / 2); K.obstacles.push([-7.5, -6.5, 1.5, 2.5]);
+      K.fixed('vending', 7.35, 1.07, 5, -Math.PI / 2); K.obstacles.push([6.9, 7.8, 4.5, 5.5]);
+      const steel = S.mat('metal', 0x5a6068); // bus shelter
+      for (const z of [-13.2, -10.8]) K.box(0.08, 2.4, 0.08, steel, 6.4, 1.2, z);
+      K.box(1.6, 0.08, 2.8, steel, 7, 2.4, -12, { phys: false });
+      K.fixed('window', 7.6, 1.3, -12, -Math.PI / 2, { w: 2.4, h: 1.6 });
+      K.box(0.4, 0.45, 2, S.mat('wood', 0x6a4a30), 7.1, 0.45, -12, { outline: true }); K.obstacles.push([6.8, 7.8, -13.2, -10.8]);
+      const wood = S.surface('wood', 1, 1), rust = S.surface('rust', 1, 1);
+      K.table(-6.6, 5, 0.8, 1.6, 1, wood, rust, { solid: true }); // newsstand counter
+      K.table(6.3, 1.6, 0.8, 0.8, 0.75, S.surface('steel', 1, 1), rust); K.table(6.3, -4.2, 0.8, 0.8, 0.75, S.surface('steel', 1, 1), rust); // cafe tables
+      for (const [x, z] of [[-6.6, -5.5], [6.6, 7.6], [-6.6, 11.5]]) { K.cyl(0.3, 0.9, S.mat('plastic', 0x2a4a2a), x, 0.45, z); K.obstacles.push([x - 0.35, x + 0.35, z - 0.35, z + 0.35]); K.slots.push({ x, y: 0.9, z, k: 'shelf', max: 0.35 }); }
+      const walkSlots = [[-6.4, -10], [-6.4, -8], [6.4, -7.5], [6.4, 0], [-6.4, -12.5], [6.4, 11], [-6.4, 13], [6.4, 13.5], [6.4, -2.5], [-6.4, -0.5], [6.4, 4], [-6.4, 7.6], [-6.4, 10.4], [6.4, -9.6]];
+      walkSlots.forEach(([x, z]) => K.slots.push({ x, y: 0.12, z, k: 'floor' }));
+      K.floor([[0, -10], [1.5, -4], [-1.5, 2], [0.5, 7], [-1, 12], [1.8, 11.6], [-2, -12], [-1.5, -7], [1, -1], [-0.8, 4.5], [1.6, -12.5], [0, 9.5]]);
+      // the ends of the street: barricades, invisible walls, a skyline far off
+      const stripe = canvasTex(256, 32, (g, w, h) => { g.fillStyle = '#f2f2f2'; g.fillRect(0, 0, w, h); g.fillStyle = '#d8202a'; for (let x = -h; x < w; x += 48) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + 24, h); g.lineTo(x + 24 + h, 0); g.lineTo(x + h, 0); g.fill(); } });
+      for (const s of [-1, 1]) {
+        const z = s * (L / 2 - 0.6);
+        for (const x of [-4, 0, 4]) { const b = K.box(2.6, 0.35, 0.12, new THREE.MeshStandardMaterial({ map: stripe }), x, 0.9, z, { outline: true }); for (const dx of [-1.1, 1.1]) K.box(0.08, 0.9, 0.08, S.mat('metal', 0x888888), x + dx, 0.45, z, { phys: false }); }
+        K.box(2 * X, 4, 0.3, S.mat('plastic', 0x000000), 0, 2, s * (L / 2 + 0.2)).visible = false;
+        const sky = canvasTex(1024, 256, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#05070f'); gr.addColorStop(1, '#2a1f3a'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+          for (let x = 0; x < w;) { const bw = 40 + Math.random() * 70, bh = 60 + Math.random() * 170; g.fillStyle = '#0b0d16'; g.fillRect(x, h - bh, bw, bh); for (let yy = h - bh + 8; yy < h - 6; yy += 12) for (let xx = x + 6; xx < x + bw - 6; xx += 10) if (Math.random() < 0.22) { g.fillStyle = Math.random() < 0.6 ? '#ffd58a' : '#a8d0ff'; g.fillRect(xx, yy, 4, 6); } x += bw + 4; } });
+        K.plane(60, 15, new THREE.MeshBasicMaterial({ map: sky, fog: false }), 0, 7, s * 40, s > 0 ? Math.PI : 0);
+      }
+      K.bounds = [-X + 0.5, X - 0.5, -L / 2 + 1.2, L / 2 - 1.2];
+      // cop lights at the far end: off until the heat gets high
+      K.copLights = [K.light('point', 0xff1a2a, 0, -2, 2.4, -L / 2 + 1.5, { dist: 22 }), K.light('point', 0x1a4aff, 0, 2, 2.4, -L / 2 + 1.5, { dist: 22 })];
+      scene.background = new THREE.Color(K.v(0x070912, 0x161230)); scene.fog = new THREE.Fog(K.v(0x0a0c18, 0x161230), 14, 34);
+      K.hemi(0x8090c0, 0x201820, K.v(0.25, 0.7));
+      K.light('dir', 0x9fb0ff, K.v(0.8, 0.5), -6, 14, 8, { target: [0, 0, 0], shadow: true, size: 16 });
+      return { ...K, heat: true, pool: ['gascan', 'gascan', 'bottle', 'bottle', 'bottle', 'tv', 'crt', 'monitor', 'cinder', 'crate', 'speaker', 'microwave', 'chair', 'lamp', 'jar', 'vase', 'pot', 'laptop', 'mug'], start: { x: 0, z: 12 }, amb: 'city', photoSpots: [[-1.6, -10, 0.2], [1.6, -10, -0.2]] };
     },
   },
   studio: {
     name: 'Clay studio', desc: 'A life-size clay figure to punch, slap and kick. Dents stay, limbs come off.', exposure: 1, env: 0.5,
     build(ctx) {
       const { scene, S } = ctx, K = kit(ctx);
-      K.room(9, 9, 3.2, 'oldWood', 'plaster', 'plaster', { wallTint: K.v(0xe8dfd0, 0xcfc6e0) });
+      K.room(9, 12, 3.2, 'oldWood', 'plaster', 'plaster', { wallTint: K.v(0xe8dfd0, 0xcfc6e0), oz: 1.5 });
       scene.background = new THREE.Color(K.v(0x15120f, 0x231a33)); scene.fog = new THREE.Fog(K.v(0x15120f, 0x231a33), 10, 22);
       const stone = S.surface('blockWall', 1, 1, 0xe0d8cc), wood = S.surface('wood', 1, 1), steel = S.surface('steel', 1, 1);
       K.box(1.1, 0.06, 1.1, stone, 0, 0.03, -1.2, { outline: true }); K.obstacles.push([-0.6, 0.6, -1.8, -0.6]);
       K.shelf(-4.2, -0.6, 3.2, 0.45, [0.9, 1.6, 2.3], wood, wood, 'z');
       K.shelf(4.2, -0.6, 3.2, 0.45, [0.9, 1.6, 2.3], wood, wood, 'z');
       K.table(0, -3.9, 3, 0.8, 0.9, wood, steel);
-      K.floor([[-2.6, 1.6], [2.6, 1.6], [-2.8, -3], [2.8, -3]]);
+      K.floor([[-2.6, 1.6], [2.6, 1.6], [-2.8, -3], [2.8, -3], [-2.2, 5.6], [2.2, 5.6]]);
+      K.shelf(-4.2, 5, 2.6, 0.45, [0.9, 1.6, 2.3], wood, wood, 'z'); K.shelf(4.2, 5, 2.6, 0.45, [0.9, 1.6, 2.3], wood, wood, 'z');
+      K.table(0, 6.6, 2.4, 0.8, 0.9, wood, steel);
       K.decal(spray('HANDS ONLY', '#c96f3b', 110), 3.6, 1, 0, 2.5, -4.48, 0, 0.9);
       K.hemi(0xfff0e0, 0x302820, K.v(0.35, 0.9));
       K.light('spot', 0xfff2e0, K.v(28, 22), 0.8, 3.1, 0.6, { target: [0, 1.4, -1.2], angle: 0.7, pen: 0.6, shadow: true });

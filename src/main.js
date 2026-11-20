@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU } from './style.js?v=13';
-import { SCENES } from './scenes.js?v=13';
-import { createItems, DEFS } from './items.js?v=13';
-import * as A from './audio.js?v=13';
-import { preloadItemModels } from './models.js?v=13';
-import { createClayFigure, preloadClayBody } from './clay.js?v=13';
-import { createReplay } from './replay.js?v=13';
+import { makeStyle, detectGPU } from './style.js?v=14';
+import { SCENES } from './scenes.js?v=14';
+import { createItems, DEFS } from './items.js?v=14';
+import * as A from './audio.js?v=14';
+import { preloadItemModels } from './models.js?v=14';
+import { createClayFigure, preloadClayBody } from './clay.js?v=14';
+import { createReplay } from './replay.js?v=14';
 
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -76,9 +76,9 @@ function build() {
   spawnPhotos();
   boomLight = new THREE.PointLight(0xffa040, 0, 12, 2); scene.add(boomLight); fx = [];
   applyBlackout();
-  held = null; hlTarget = null; hlMeshes = []; charging = false; swingT = -1; marks = []; puffs = []; smokers = []; recoil = 0; swingHold = 0; loose = []; wallHits = []; pipes.forEach(P => P.sound?.stop()); pipes = [];
+  held = null; hlTarget = null; hlMeshes = []; charging = false; swingT = -1; marks = []; puffs = []; smokers = []; recoil = 0; swingHold = 0; loose = []; wallHits = []; pipes.forEach(P => P.sound?.stop()); pipes = []; resetHeat();
 }
-const batchSize = () => Math.min(24, Math.max(14, Math.ceil(room.slots.length * 0.45)));
+const batchSize = () => Math.min(S.quality === 'low' ? 24 : 36, Math.max(16, Math.ceil(room.slots.length * 0.5))); // bigger rooms hold more
 function spawnPhotos() {
   if (!photoTex || !room.photoSpots) return;
   if (I.list.some(i => i.key === 'cutout' && !i.dead)) return;
@@ -201,11 +201,14 @@ function onBreak(it, fromHit) {
   }
   smashed++; byKind[d.kind] = (byKind[d.kind] || 0) + 1;
   emit('break', { kind: d.kind, key: it.key, thrown: !!it.thrown, held: !!it.byHeld, size: d.size });
+  if (room.heat) addHeat(it.group != null ? 5 : it.key === 'window' ? 7 : it.fixed ? 6 : d.size > 0.45 ? 3 : 1.6);
+  if (it.group != null) carAlarm(it.group);
+  if (it.key === 'hydrant') burstPipe(new THREE.Vector3(p.x, p.y + 0.2, p.z), new THREE.Vector3(0, 1, 0), true);
   if (it.blast) { it.blast.n++; maxStat('chain', it.blast.n); }
   if ((it.key === 'carglass' || it.key === 'carlight') && !I.list.some(i => !i.dead && (i.key === 'carglass' || i.key === 'carlight'))) { addStat('carclear'); banner('Car wrecked!'); }
   bumpCombo();
   const rage = performance.now() < rageUntil, gold = it.golden && performance.now() < it.golden;
-  const mult = Math.min(4, 1 + Math.floor(combo / 4) * 0.5) * (rage ? 2 : 1) * (it.thrown ? 1.5 : 1) * (gold ? 10 : 1) * (W.gold ? 1.25 : 1);
+  const mult = Math.min(4, 1 + Math.floor(combo / 4) * 0.5) * (rage ? 2 : 1) * (it.thrown ? 1.5 : 1) * (gold ? 10 : 1) * (W.gold ? 1.25 : 1) * (1 + heatStars() * 0.15);
   addScore(Math.round(d.pts * mult), p, d.pts >= 30 || it.thrown || gold ? 'big' : '');
   if (gold) { banner('Golden!'); A.SFX.coin(); A.SFX.golden(); freeze(90); vibrate(80); I.sparks_(p, 30, 0xffd23f); }
   if (it.blasted) popup('Chain!', { x: p.x, y: p.y + 0.35, z: p.z }, 'small');
@@ -359,6 +362,7 @@ function hitItem(it, dir) {
   const h = itemHitPoint(it), at = h ? h.point : p, lv = 0.8 + chargeK * 0.5;
   if (it.def.hp === Infinity) { // metal: it rings, dents and flies, but never breaks
     A.at(at, () => { A.SFX.metal(lv, Math.max(0.7, 1.3 - it.def.size)); if (opts.weapon === 'pan') A.SFX.metal(0.8); });
+    if (it.group != null) { carAlarm(it.group); addHeat(2); }
     it.pop = 1; shake = Math.max(shake, 0.12); I.sparks_(at, 8, 0xffd27a); addScore(it.def.pts, p, 'small'); recoil = 1; freeze(30);
     if (!it.fixed) { if (h) damageDecal(it, h, 'dent', Math.min(0.2, it.def.size * 0.6)); it.body.wakeUp(); it.body.velocity.set(dir.x * CW.knock, dir.y * CW.knock * 0.5 + 2, dir.z * CW.knock); it.body.angularVelocity.set(rand(-12, 12), rand(-12, 12), rand(-12, 12)); }
     else { const sh = surfaceHit(camera.getWorldPosition(v1), camera.getWorldDirection(v2), CW.reach + 2.5, it.mesh.children); if (sh) addMark(sh.point, sh.normal, 'dent', heavyNow ? 0.45 : 0.3); }
@@ -500,7 +504,7 @@ const ACH = [
   ['collapse', 'Bring the house down', 'Wreck 5 shelves or tables', 'collapses', 5], ['lamps', 'Lights out', 'Smash 10 lights', 'lamps', 10],
   ['holes', 'Wall puncher', 'Smash 5 holes in walls', 'holes', 5], ['car', 'Car wrecker', 'Break every window and light on the car in one round', 'carclear', 1],
   ['combo', 'Unstoppable', 'Reach a 20x combo', 'combo', 20], ['menace', 'Absolute menace', 'Smash 45 things in one round', 'round', 45],
-  ['missions', 'Mission ace', 'Complete 20 missions', 'missions', 20],
+  ['missions', 'Mission ace', 'Complete 20 missions', 'missions', 20], ['wanted', 'Most wanted', 'Reach five stars of heat Downtown', 'stars', 5],
 ].map(([id, name, desc, stat, need]) => ({ id, name, desc, stat, need }));
 const REWARD = { collapse: 'Fire axe', missions: 'Golden bat', lamps: 'Blackout mode (any room, by flashlight)' };
 let achQueue = [], achUntil = 0, persistT = 0;
@@ -528,6 +532,8 @@ const MISSIONS = [
   { id: 'kick5', text: 'Kick the statue 5 times', need: 5, time: 18, ev: 'clay', test: e => e.atk === 'kick', req: () => figure && figure.alive && W.hands },
   { id: 'car3', text: 'Break 3 car windows or lights', need: 3, time: 25, ev: 'break', test: e => e.key === 'carglass' || e.key === 'carlight', req: () => hasKey('carglass') || hasKey('carlight') },
   { id: 'big3', text: 'Smash 3 big things', need: 3, time: 25, ev: 'break', test: e => e.size > 0.45, req: () => I.list.filter(i => !i.dead && i.def.size > 0.45 && i.def.hp !== Infinity).length >= 3 },
+  { id: 'alarm3', text: 'Set off 3 car alarms', need: 3, time: 30, ev: 'alarm', req: () => room.cars && room.cars.length >= 3 },
+  { id: 'heat3', text: 'Reach 3 stars of heat', need: 3, time: 35, ev: 'heat', max: true, req: () => !!room.heat },
   { id: 'hole', text: 'Smash a hole in a wall', need: 1, time: 25, ev: 'hole', req: () => !W.hands },
 ];
 let mission = null, nextMission = 0, lastMission = '';
@@ -646,27 +652,56 @@ function damageWall(h) {
 // ---------- burst pipes: water sprays out of a hole in an apartment wall and pools on the floor
 let pipes = [];
 const DROP = new THREE.SphereGeometry(1, 6, 4);
-function burstPipe(p, n) {
+function burstPipe(p, n, geyser) {
   const mat = S.mat('liquid', 0x9cc8e8), puddle = new THREE.Mesh(new THREE.CircleGeometry(1, 24), S.mat('liquid', 0x7fa8c8));
   puddle.rotation.x = -Math.PI / 2; puddle.position.set(p.x + n.x * 0.6, 0.012, p.z + n.z * 0.6); puddle.scale.setScalar(0.05); scene.add(puddle);
-  const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 10), S.mat('metal', 0xb87333)); pipe.position.copy(p).addScaledVector(n, 0.03); scene.add(pipe); // the copper pipe shows in the hole
+  const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, geyser ? 0.2 : 0.5, 10), S.mat('metal', geyser ? 0x6a6e74 : 0xb87333)); pipe.position.copy(p).addScaledVector(n, geyser ? -0.1 : 0.03); scene.add(pipe); // the copper pipe shows in the hole
   const sound = A.loopAt('spray', p, 0.45);
   A.at(p, () => { A.SFX.splash(1); A.SFX.metal(0.6, 0.8); });
-  pipes.push({ p: p.clone(), n: n.clone(), mat, puddle, pipe, sound, drops: [], until: performance.now() + 22000, acc: 0 });
-  popup('Burst pipe!', { x: p.x, y: p.y + 0.3, z: p.z }, 'small'); addScore(40, p, 'big'); emit('pipe');
+  pipes.push({ p: p.clone(), n: n.clone(), mat, puddle, pipe, sound, drops: [], until: performance.now() + 22000, acc: 0, geyser });
+  popup(geyser ? 'Hydrant!' : 'Burst pipe!', { x: p.x, y: p.y + 0.3, z: p.z }, 'small'); addScore(40, p, 'big'); emit('pipe');
 }
 function updatePipes(dt, now) {
   for (const P of pipes) {
     const on = now < P.until, k = on ? 1 : 0;
     if (!on && P.sound) { P.sound.stop(); P.sound = null; }
-    P.acc += dt * (on ? 90 : 4); // drips once it runs dry
-    while (P.acc > 1 && P.drops.length < 160) { P.acc--; const m = new THREE.Mesh(DROP, P.mat); m.scale.setScalar(rand(0.008, 0.02)); m.position.copy(P.p); scene.add(m);
-      P.drops.push({ m, v: new THREE.Vector3(P.n.x * rand(1.5, 3.2) * k + rand(-0.4, 0.4) * k, rand(-0.2, 1.2) * k, P.n.z * rand(1.5, 3.2) * k + rand(-0.4, 0.4) * k) }); }
+    P.acc += dt * (on ? (P.geyser ? 160 : 90) : 4); // drips once it runs dry
+    while (P.acc > 1 && P.drops.length < (P.geyser ? 260 : 160)) { P.acc--; const m = new THREE.Mesh(DROP, P.mat); m.scale.setScalar(rand(0.008, 0.02)); m.position.copy(P.p); scene.add(m);
+      P.drops.push({ m, v: P.geyser ? new THREE.Vector3(rand(-0.9, 0.9) * k, rand(5, 8.5) * k, rand(-0.9, 0.9) * k) : new THREE.Vector3(P.n.x * rand(1.5, 3.2) * k + rand(-0.4, 0.4) * k, rand(-0.2, 1.2) * k, P.n.z * rand(1.5, 3.2) * k + rand(-0.4, 0.4) * k) }); }
     P.drops = P.drops.filter(d => { d.v.y -= 9.8 * dt; d.m.position.addScaledVector(d.v, dt); if (d.m.position.y > 0.02) return true; scene.remove(d.m); return false; });
     if (on) P.puddle.scale.setScalar(Math.min(1.6, P.puddle.scale.x + dt * 0.07));
   }
 }
 function clearPipes() { for (const P of pipes) { P.sound?.stop(); P.drops.forEach(d => scene.remove(d.m)); scene.remove(P.puddle, P.pipe); } pipes = []; }
+
+// ---------- heat (Downtown): wreck enough and the cops come. Stars raise the score multiplier; five stars in a timed round ends it: Busted.
+let heat = 0, lastHeat = 0, stars = 0, siren = null, bustedAt = 0, busted = false, alarms = [];
+const heatStars = () => (room && room.heat ? stars : 0);
+function resetHeat() { heat = 0; stars = 0; bustedAt = 0; busted = false; siren?.stop(); siren = null; alarms.forEach(a => a.sound?.stop()); alarms = []; $('heat').classList.add('hidden'); }
+function addHeat(n) { if (!room.heat || state !== 'play' || opts.gm === 'targets') return; heat = Math.min(100, heat + n); lastHeat = performance.now(); }
+function carAlarm(g) {
+  if (alarms.some(a => a.g === g && a.until > performance.now())) return;
+  const c = room.cars[g], pos = { x: c.x, y: 0.9, z: c.z };
+  alarms.push({ g, until: performance.now() + 9000, sound: A.loopAt('alarm', pos, 0.55) });
+  addHeat(8); popup('Car alarm!', { x: c.x, y: 1.8, z: c.z }, 'small'); emit('alarm');
+}
+function updateHeat(dt, now) {
+  if (!room.heat) return;
+  for (const a of alarms) if (a.sound && now > a.until) { a.sound.stop(); a.sound = null; }
+  for (const it of I.list) if (it.group != null && it.key === 'carlight' && !it.dead) { const on = alarms.some(a => a.g === it.group && a.sound); it.mesh.visible = !on || Math.floor(now / 350) % 2 === 0; } // hazard lights blink with the alarm
+  if (now - lastHeat > 5000 && !bustedAt) heat = Math.max(0, heat - dt * 2.5); // lie low and it cools off
+  const s = Math.min(5, Math.floor(heat / 18));
+  if (s !== stars) { if (s > stars) { flash(0.08); toast(s >= 5 ? 'Every cop in the city is coming' : s >= 3 ? 'Sirens are getting closer' : 'Someone called the cops'); emit('heat', { n: s }); maxStat('stars', s); } stars = s; }
+  const el = $('heat'); el.classList.toggle('hidden', state !== 'play' || stars === 0);
+  el.querySelector('.stars').innerHTML = [0, 1, 2, 3, 4].map(i => `<i class="${i < stars ? 'on' : ''}">★</i>`).join('');
+  if (stars >= 2 && !siren) siren = A.loopAt('siren', { x: 0, y: 2, z: -24 }, 0);
+  if (siren) { if (stars < 2) { siren.stop(); siren = null; } else siren.set(0.08 + 0.09 * stars); }
+  const flashOn = stars >= 4 && Math.floor(now / 260) % 2 === 0;
+  if (room.copLights) { room.copLights[0].intensity = stars >= 4 ? (flashOn ? S.realistic ? 60 : 30 : 0) : 0; room.copLights[1].intensity = stars >= 4 ? (!flashOn ? S.realistic ? 60 : 30 : 0) : 0; }
+  if (stars >= 5 && opts.gm === 'classic' && !bustedAt) { bustedAt = now + 6000; banner('Busted in 6...'); }
+  $('heatLbl').textContent = bustedAt ? `Cops arrive in ${Math.max(0, Math.ceil((bustedAt - now) / 1000))}` : `Heat x${(1 + stars * 0.15).toFixed(2)}`;
+  if (bustedAt && now > bustedAt && state === 'play') { busted = true; endSession(); }
+}
 
 // ---------- blackout: any room in the dark with a flashlight (unlocked by "Lights out")
 function applyBlackout() {
@@ -714,7 +749,8 @@ function endSession() {
   if (!attack || cleared) { list.push(entry); list.sort((a, b) => attack ? a.time - b.time : b.score - a.score); save.best[key] = list.slice(0, 5); }
   persist();
   const fresh = Object.keys(WEAPONS).filter(k => unlocked(k) && !before.includes(k));
-  $('rating').textContent = attack ? (cleared ? `Cleared in ${fmtTime(elapsed)}` : 'Room not cleared')
+  if (siren) { siren.stop(); siren = null; } alarms.forEach(a => a.sound?.stop());
+  $('rating').textContent = busted ? 'Busted! The cops got you' : attack ? (cleared ? `Cleared in ${fmtTime(elapsed)}` : 'Room not cleared')
     : opts.gm === 'zen' ? 'Feeling better?' : opts.gm === 'targets' ? `${targetsHit} targets hit`
     : smashed < 10 ? 'Mildly annoyed' : smashed < 25 ? 'Properly cross' : smashed < 45 ? 'Furious' : 'Absolute menace';
   const stat = (l, v) => `<div class="stat"><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
@@ -929,7 +965,7 @@ function frame(now) {
 
   if (playing) {
     if (!tut) timeLeft -= rdt; // the clock waits while you learn
-    updatePlayer(rdt); updateTut(); updateMission(now); updateLamps(now); updatePipes(dt, now);
+    updatePlayer(rdt); updateTut(); updateMission(now); updateLamps(now); updatePipes(dt, now); updateHeat(rdt, now);
     if (mouseHeld && swingT < 0) startSwing();
     if (swingT >= 0) {
       // holding the button pauses a weapon swing at the top to wind up a heavy hit

@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=13';
-import { itemModel, fitInto } from './models.js?v=13';
+import { canvasTex } from './style.js?v=14';
+import { itemModel, fitInto } from './models.js?v=14';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -197,6 +197,21 @@ export const DEFS = {
   coffeetable: { kind: 'glass', hp: 2, pts: 80, mass: 0, bv: 6, size: 1, spots: [], colors: [0xcfe8f0], fixed: true,
     make: (M, c) => { const g = grp(m(bx(1.1, 0.025, 0.6), M('glass', c), 0, 0.2)); for (const [x, z] of [[-0.5, -0.25], [0.5, -0.25], [-0.5, 0.25], [0.5, 0.25]]) g.add(m(cyl(0.015, 0.015, 0.4, 8), M('metal', 0x2a2a2e), x, 0, z));
       return { mesh: g, shape: boxS(0.55, 0.21, 0.3), halfH: 0.21 }; } },
+  // street furniture for Downtown (fixed until it breaks)
+  hydrant: { kind: 'metal', hp: 3, pts: 40, mass: 0, bv: 99, size: 0.5, spots: [], colors: [0xc8282a, 0xe0b020], fixed: true,
+    make: (M, c) => ({ mesh: grp(m(cyl(0.12, 0.14, 0.6, 16), M('paint', c), 0, -0.08), m(cyl(0.16, 0.16, 0.06, 16), M('paint', c), 0, -0.36), m(cyl(0.14, 0.12, 0.08, 16), M('paint', c), 0, 0.24),
+      m(new THREE.SphereGeometry(0.1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), M('paint', c), 0, 0.27), m(cyl(0.05, 0.05, 0.36, 10), M('metal', 0x9aa0a8), 0, 0.02, 0, 0, 0, Math.PI / 2), m(cyl(0.06, 0.06, 0.1, 10), M('metal', 0x9aa0a8), 0, 0.02, 0.13, Math.PI / 2)),
+      shape: boxS(0.16, 0.4, 0.16), halfH: 0.4 }) },
+  vending: { kind: 'electronics', hp: 5, pts: 150, mass: 0, bv: 99, size: 1, spots: [], colors: [0xd0202a, 0x2050c0, 0x20a060], fixed: true,
+    make: (M, c) => { const g = grp(m(bx(0.9, 1.9, 0.75), M('paint', c)), m(bx(0.55, 1.3, 0.02), M('glass', 0xcfe8f0), -0.1, 0.2, 0.38), m(bx(0.5, 1.25, 0.01), M('emissive', 0xfff4dc), -0.1, 0.2, 0.37),
+      m(bx(0.2, 0.5, 0.03), M('plastic', 0x1a1a1e), 0.3, 0.3, 0.38), m(bx(0.6, 0.12, 0.03), M('plastic', 0x111111), -0.1, -0.7, 0.38));
+      for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) g.add(m(cyl(0.04, 0.04, 0.12, 10), M('paint', pick([0xd0202a, 0x2050c0, 0xf0c020, 0x20a060])), -0.3 + k * 0.13, 0.65 - r * 0.3, 0.3));
+      return { mesh: g, shape: boxS(0.45, 0.95, 0.38), halfH: 0.95 }; } },
+  booth: { kind: 'glass', hp: 3, pts: 90, mass: 0, bv: 99, size: 1.1, spots: [], colors: [0xcfe0ea], fixed: true,
+    make: (M, c) => { const red = M('paint', 0xb8262a), g = grp(m(bx(1, 0.15, 1), red, 0, 1.08), m(bx(1, 0.08, 1), red, 0, -1.11), m(bx(0.92, 0.12, 0.02), M('emissive', 0xfff2d0), 0, 0.95, 0.5));
+      for (const [x, z] of [[-0.47, -0.47], [0.47, -0.47], [-0.47, 0.47], [0.47, 0.47]]) g.add(m(bx(0.06, 2.1, 0.06), red, x, 0, z));
+      for (const [x, z, ry] of [[0, -0.47, 0], [-0.47, 0, Math.PI / 2], [0.47, 0, Math.PI / 2], [0, 0.47, 0]]) g.add(m(bx(0.86, 1.7, 0.012), M('glass', c), x, 0.05, z, 0, ry));
+      g.add(m(bx(0.3, 0.4, 0.12), M('metal', 0x2a2a30), 0, 0.2, -0.38)); return { mesh: g, shape: boxS(0.5, 1.15, 0.5), halfH: 1.15 }; } },
   // wreckage you can pick up: legs, boards and beams from tables and shelves that gave way (never spawned, see adopt)
   leg: { kind: 'wood', hp: 3, pts: 10, mass: 2, bv: 99, size: 0.45, spots: [], colors: [0x8a6a4a] },
   plank: { kind: 'wood', hp: 3, pts: 15, mass: 3, bv: 99, size: 0.9, spots: [], colors: [0x8a6a4a] },
@@ -312,7 +327,7 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
     body.quaternion.setFromEuler(o.rx || 0, ry, 0);
     body.sleepSpeedLimit = 0.15; body.angularDamping = 0.2; body.linearDamping = 0.02;
     world.addBody(body);
-    const it = { key, def, mesh: r.mesh, body, color, hp: def.hp * (o.hpMul || 1), born: performance.now(), pop: 0, dead: false, fixed: !!def.fixed };
+    const it = { key, def, mesh: r.mesh, body, color, hp: def.hp * (o.hpMul || 1), born: performance.now(), pop: 0, dead: false, fixed: !!def.fixed, group: o.group };
     if (def.fixed) { r.mesh.position.copy(body.position); r.mesh.quaternion.copy(body.quaternion); }
     body.addEventListener('collide', e => {
       if (it.dead || it.queued || it.held) return;

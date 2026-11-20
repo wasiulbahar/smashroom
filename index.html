@@ -15,7 +15,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SMASHROOM">
 <meta property="og:title" content="SMASHROOM: Free Online Rage Room Game">
-<meta property="og:description" content="Smash, throw and wreck everything in seven rooms. A rage room in your browser, free, no download.">
+<meta property="og:description" content="Smash, throw and wreck everything in nine rooms, from an office to a city street. A rage room in your browser, free, no download.">
 <meta property="og:url" content="https://wasiulbahar.com/smashroom/">
 <meta property="og:image" content="https://wasiulbahar.com/smashroom/assets/share.jpg">
 <meta property="og:image:width" content="1200">
@@ -28,7 +28,7 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
  {"@type":["VideoGame","WebApplication"],"name":"SMASHROOM","alternateName":["Smash Room","Online Rage Room"],"url":"https://wasiulbahar.com/smashroom/","image":"https://wasiulbahar.com/smashroom/assets/share.jpg",
-  "description":"A free online rage room game. Smash and throw glass, plates, TVs, furniture and a car in seven rooms, from a corporate office to a haunted house, or smash a clay statue with your bare hands.",
+  "description":"A free online rage room game. Smash and throw glass, plates, TVs, furniture and a car in nine rooms, from a corporate office to a city street at night, or smash a clay statue with your bare hands.",
   "genre":["Action","Simulation","Casual","Stress relief"],"keywords":"rage room, smash room, break room, online rage room, stress relief game, smashing game, destruction game, browser game, free online game",
   "applicationCategory":"GameApplication","operatingSystem":"Any (web browser)","gamePlatform":["Web browser","PC","Mobile"],"playMode":"SinglePlayer","inLanguage":"en","isAccessibleForFree":true,
   "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Wasiul Bahar","url":"https://wasiulbahar.com/"}},
@@ -88,6 +88,9 @@ kbd{background:var(--bg);border:2px solid var(--ink);border-radius:5px;padding:0
 .box .lbl{font-size:11px;color:var(--muted)}
 .box .val{font-size:30px;line-height:1.05}
 #tl{left:14px}#tr{right:14px;text-align:right}
+#heat{position:absolute;left:14px;top:96px;background:rgba(20,13,31,.7);border:3px solid var(--ink);border-radius:12px;padding:4px 12px}
+#heat .stars i{font-style:normal;font-size:24px;color:rgba(255,255,255,.18);margin-right:2px}#heat .stars i.on{color:var(--yellow);text-shadow:0 0 8px rgba(255,197,49,.8)}
+#heat small{display:block;font-family:Rubik,sans-serif;font-size:11px;color:var(--muted)}
 #tr .sub{font-family:Rubik,sans-serif;font-size:12px;color:var(--muted)}
 #time.low{color:var(--pink);animation:blink .5s steps(2) infinite}
 @keyframes blink{50%{opacity:.4}}
@@ -172,6 +175,7 @@ details.about p{margin:6px 0}
 <div id="hud" class="hidden">
   <div class="box" id="tl"><div class="lbl">Time</div><div class="val" id="time">2:00</div></div>
   <div class="box" id="tr"><div class="lbl">Score</div><div class="val" id="score">0</div><div class="sub"><span id="smashed">0</span> smashed</div><div class="sub" id="extra"></div></div>
+  <div id="heat" class="hidden"><span class="stars"></span><small id="heatLbl"></small></div>
   <div id="combo"></div>
   <div id="cross"></div><div id="hint"></div><div id="charge"><div id="chargeFill"></div></div>
   <div id="rage"><div id="rageFill"></div><span id="rageTxt">Rage</span></div>
@@ -198,7 +202,7 @@ details.about p{margin:6px 0}
     <div class="modes">
       <button class="card mode" data-mode="stylized">
         <b>Stylized</b>
-        <ul><li>Bright cartoon look with bold outlines</li><li>All seven rooms, every weapon</li><li>Smooth and light</li></ul>
+        <ul><li>Bright cartoon look with bold outlines</li><li>All nine rooms, every weapon</li><li>Smooth and light</li></ul>
         <div class="req">Runs well on almost anything, including phones and older laptops.</div>
       </button>
       <button class="card mode real" data-mode="realistic">
@@ -212,7 +216,7 @@ details.about p{margin:6px 0}
       <summary>What is SMASHROOM?</summary>
       <h2>A rage room in your browser</h2>
       <p>A rage room, also called a smash room or break room, is a place where you break things to let off stress. SMASHROOM is a free online rage room game: no download, no account, on PC or phone.</p>
-      <p>Pick one of seven rooms: a classic rage room, an abandoned building, a haunted house, a corporate office, a kitchen, an apartment or a car yard. Grab a baseball bat, sledgehammer, crowbar or frying pan and smash glass, plates, TVs, printers, tables, shelves, lights, windows and walls. Pick things up and throw them, or hit things with whatever you are holding. In the clay studio you can punch, slap and kick a clay statue.</p>
+      <p>Pick one of nine rooms: a classic rage room, an abandoned building, a haunted house, a corporate office, a kitchen, an apartment, a car yard, a clay studio or a city street at night, where wrecking cars and shop windows draws heat from the cops. Grab a baseball bat, sledgehammer, crowbar or frying pan and smash glass, plates, TVs, printers, tables, shelves, lights, windows and walls. Pick things up and throw them, or hit things with whatever you are holding. In the clay studio you can punch, slap and kick a clay statue.</p>
       <h2>Modes</h2>
       <p>Classic (two minutes, chase a high score), Zen (no timer), Time attack (clear the room fast) and Target practice. Missions, combos, achievements and unlockable weapons keep it going.</p>
       <h2>Questions</h2>
@@ -319,6 +323,6 @@ details.about p{margin:6px 0}
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=13"></script>
+<script type="module" src="src/main.js?v=14"></script>
 </body>
 </html>

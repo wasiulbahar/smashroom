@@ -13,3 +13,4 @@ Sounds in this folder are CC0 (public domain).
 - zap: 'Electricity Game Sound Pack' (crackleelectricityloop), opengameart.org, CC0
 - splash: '6 short water splashes' by ezwa, opengameart.org, CC0
 - spray: '30 CC0 SFX loops' (water_flowing) by rubberduck, opengameart.org, CC0
+- siren, alarm: cut from 'sirens and alarm noise', opengameart.org, CC0

@@ -116,7 +116,7 @@ const SYN = {
 };
 
 // recorded CC0 samples (assets/sounds, see CREDITS.txt); generated sounds are the fallback until they load
-const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6, type: 1, door: 2, keys: 2 };
+const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6, type: 1, door: 2, keys: 2, siren: 1, alarm: 1 };
 const bufs = {};
 function loadSamples() {
   for (const [set, n] of Object.entries(SETS)) for (let i = 0; i < n; i++)
@@ -255,6 +255,12 @@ export function startAmbience(kind) {
     every(16000, () => far('door', 0.22, { lp: 900, rate: rand(0.8, 0.95) }));
     every(13000, () => far('keys', 0.08, { lp: 2500 }));
     every(9000, () => far('clink', 0.08, { lp: 2000 })); }
+  if (kind === 'city') { // night street: traffic a block away, a car passing, footsteps, a door
+    loopNoise('lowpass', 260, 0.5, 0.09);
+    every(6000, t => nz(t, 3, 'bandpass', rand(220, 420), 0.7, 0.1, amb, rand(140, 260)));
+    every(9000, () => { const n = 4 + Math.floor(rand(0, 4)); for (let k = 0; k < n; k++) setTimeout(() => far('stepstone', 0.08, { lp: 1500 }), k * 480); });
+    every(15000, () => far('door', 0.2, { lp: 1200, rate: rand(0.85, 1) }));
+    every(12000, () => far('keys', 0.07, { lp: 3000 })); }
   if (kind === 'caryard') { const w = loopNoise('bandpass', 350, 0.6, 0.25); loopNoise('lowpass', 150, 0.4, 0.12); tick(3000, () => w.frequency.setTargetAtTime(rand(250, 600), now(), 2));
     every(6000, t => nz(t, 2, 'lowpass', 400, 0.7, 0.12, amb, 150)); }
 }

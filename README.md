@@ -7,7 +7,7 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 ## What's in it
 
 - **Two looks.** *Stylized* (bright cartoon, runs on almost anything) or *Realistic* (real textures and models, see-through glass, soft shadows, dust and glow; needs more PC power, quality drops automatically if it lags).
-- **Seven rooms.** Classic rage room, abandoned building, haunted house, corporate office, kitchen, car yard (smash a whole car) and a clay studio.
+- **Nine rooms.** Classic rage room, abandoned building, haunted house, corporate office, kitchen, apartment, car yard (smash whole cars), a clay studio and a Downtown city street.
 - **Clay figure.** A life-size clay statue of a human body that you punch, slap and kick with bare hands. Every hit leaves a dent, slaps turn its head, it sways and groans, arms, legs and head break off at the joints, and every third figure is a tougher gold boss.
 - **Four modes.** Classic (2 minutes), Zen (no timer, calm music), Time attack (clear the room as fast as you can) and Target practice (throw things at targets on the walls).
 - **Things that react.** Gas cans explode and set off chain reactions, golden items are worth 10× for a few seconds, and cup pyramids topple.
@@ -18,6 +18,8 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Wreck the room.** Tables and shelves give way after enough hits, lights pop and go dark, walls crack into holes.
 - **Missions and achievements.** Short timed missions pop up during classic and zen rounds; 17 achievements are tracked across rounds.
 - **Use the wreckage.** Legs, boards and beams from wrecked tables and shelves can be picked up and swung.
+- **Downtown.** A city street at night: parked cars with alarms, shop windows, neon signs, a phone booth, a vending machine and fire hydrants that turn into geysers. Wrecking it builds Heat (up to five stars): a higher score multiplier, sirens closing in, and in a timed round five stars means you get Busted.
+- **Bigger rooms.** Every room is larger, with more tables, shelves and things to break. The car yard has two cars.
 - **Apartment.** A whole flat with a TV wall, fridge, glass coffee table, windows that crack before they fall out, and a bathroom mirror. Smash into the walls and you may hit a water pipe.
 - **Unlocks from achievements.** Fire axe ("Bring the house down"), Golden bat ("Mission ace") and Blackout mode, any room in the dark with a flashlight ("Lights out").
 - **Sledgehammer** knocks things into bigger chunks and punches wider holes in walls.
