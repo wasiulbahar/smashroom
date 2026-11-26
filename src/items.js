@@ -161,6 +161,10 @@ export const DEFS = {
     make: (M, c) => { const mt = M('wood', c), g = grp(m(cyl(0.18, 0.18, 0.04, 20), mt, 0, 0.3));
       for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; g.add(m(cyl(0.02, 0.025, 0.62, 8), mt, Math.cos(a) * 0.12, 0, Math.sin(a) * 0.12, Math.sin(a) * 0.15, 0, -Math.cos(a) * 0.15)); }
       return { mesh: g, shape: cylS(0.18, 0.15, 0.64, 8), halfH: 0.32 }; } },
+  gem: { kind: 'glass', hp: 1, pts: 500, mass: 0.3, bv: 3, size: 0.16, spots: [], colors: [0xff3a6a, 0x3ad8ff, 0x7aff6a],
+    make: (M, c) => { const g = grp(m(new THREE.OctahedronGeometry(0.08, 0), M('glass', c), 0, 0.08, 0)); g.children[0].scale.y = 1.3; return { mesh: g, shape: boxS(0.06, 0.08, 0.06), halfH: 0.08 }; } },
+  till: { kind: 'electronics', hp: 3, pts: 120, mass: 6, bv: 7, size: 0.45, spots: [], colors: [0x2a2a30],
+    make: (M, c) => ({ mesh: grp(m(bx(0.42, 0.12, 0.36), M('plastic', c), 0, 0.06, 0), m(bx(0.34, 0.06, 0.3), M('metal', 0x8a8f96), 0, 0.15, 0.01), m(bx(0.26, 0.18, 0.03), M('screen', 0x1a3a2a), 0, 0.3, -0.12, -0.3)), shape: boxS(0.21, 0.13, 0.18), halfH: 0.13 }) },
   scrapcube: { kind: 'metal', hp: Infinity, pts: 10, mass: 25, bv: 99, size: 0.6, spots: [], colors: [0x6a6a70, 0x7a5a3a, 0x5a6a7a, 0x8a3a2a, 0x4a5a3a],
     make: (M, c, o) => { const s = o.s || 0.6, g = grp(m(bx(s, s * 0.9, s), M('metal', c))); // a compacted block: crumpled panels poking out of every face
       for (let i = 0; i < 9; i++) { const f = m(bx(s * rand(0.25, 0.6), s * rand(0.04, 0.1), s * 0.03), M('paint', pick([0xb3202a, 0x2a5ab3, 0xd9a22a, 0xe8e8ec, 0x2a8a4a, c])), rand(-s / 2.4, s / 2.4), rand(-s / 2.6, s / 2.6), (Math.random() < 0.5 ? -1 : 1) * s * 0.5); f.rotation.set(rand(-0.4, 0.4), Math.random() < 0.5 ? 0 : Math.PI / 2, rand(-0.6, 0.6)); g.add(f); }

@@ -48,7 +48,7 @@ const WEAPONS = {
 };
 const unlocked = k => { const u = WEAPONS[k].unlock; return !u || (u.pts && save.points >= u.pts) || (u.smashed && save.smashed >= u.smashed) || (u.ach && !!save.ach[u.ach]); };
 const unlockText = u => u.ach ? `achievement "${ACH.find(a => a.id === u.ach).name}"` : u.pts ? `${save.points.toLocaleString()} / ${u.pts.toLocaleString()} lifetime points` : `${save.smashed} / ${u.smashed} things smashed`;
-const NAMES = { scrapcube: 'scrap cube', domino: 'domino', leg: 'table leg', plank: 'board', beam: 'wooden beam', coffeetable: 'coffee table', platestack: 'stack of plates', crt: 'old TV', tv: 'TV', beermug: 'beer mug', wineglass: 'wine glass', fishbowl: 'fish bowl', watercooler: 'water cooler', cinder: 'cinder block', fork: 'cutlery', flowerpot: 'plant pot' };
+const NAMES = { gem: 'jewel', till: 'till', scrapcube: 'scrap cube', domino: 'domino', leg: 'table leg', plank: 'board', beam: 'wooden beam', coffeetable: 'coffee table', platestack: 'stack of plates', crt: 'old TV', tv: 'TV', beermug: 'beer mug', wineglass: 'wine glass', fishbowl: 'fish bowl', watercooler: 'water cooler', cinder: 'cinder block', fork: 'cutlery', flowerpot: 'plant pot' };
 const nameOf = k => NAMES[k] || k;
 const GMODES = {
   classic: { name: 'Classic', desc: 'Two minutes. Score as much as you can.' },
@@ -410,6 +410,7 @@ function hitItem(it, dir) {
     A.at(at, () => { A.SFX.metal(lv, Math.max(0.7, 1.3 - it.def.size)); if (opts.weapon === 'pan') A.SFX.metal(0.8); });
     if (it.group != null) { carAlarm(it.group); addHeat(2); }
     it.pop = 1; shake = Math.max(shake, 0.12); I.sparks_(at, 8, 0xffd27a); addScore(it.def.pts, p, 'small'); recoil = 1; freeze(14 + 40 * hw);
+    if (it.key === 'pan' || it.key === 'saucepan') for (const o of I.list) if (o !== it && !o.dead && !o.fixed && !o.held && o.body.position.distanceTo(it.body.position) < 0.6) { o.body.wakeUp(); o.thrown = true; o.body.velocity.set(rand(-1, 1), 6, rand(-1, 1)); emit('flip'); } // hit a pan and whatever is on it flies
     if (!it.fixed) { if (h) damageDecal(it, h, 'dent', Math.min(0.2, it.def.size * 0.6)); it.body.wakeUp(); it.body.velocity.set(dir.x * CW.knock, dir.y * CW.knock * 0.5 + 2, dir.z * CW.knock); it.body.angularVelocity.set(rand(-12, 12), rand(-12, 12), rand(-12, 12)); }
     else { const sh = surfaceHit(camera.getWorldPosition(v1), camera.getWorldDirection(v2), CW.reach + 2.5, it.mesh.children); if (sh) addMark(sh.point, sh.normal, 'dent', heavyNow ? 0.45 : 0.3); }
     return;
@@ -1442,7 +1443,7 @@ let rushT = 0, pressT = 0, pressSnd = null, pressHit = false, beltT = 0;
 function updateMachines(dt, now) {
   const live = state === 'play' && !paused;
   if (room.rush && live && now > rushT) { // order up: a bell, and fresh plates land on the pass
-    rushT = now + rand(7000, 10000); const r = room.rush;
+    rushT = now + rand(7000, 10000) * (room.rushFast ? 0.4 : 1); const r = room.rush;
     if (!room.furniture.some(f => f.dead && Math.hypot(f.parts[0].position.x - r.x, f.parts[0].position.z - r.z) < 1)) {
       A.at(r, () => { A.SFX.metal(0.45, 3.2); setTimeout(() => A.SFX.metal(0.3, 3.2), 140); });
       popup('Order up!', { x: r.x, y: r.y + 0.6, z: r.z }, 'small');
@@ -1477,8 +1478,9 @@ function updateMachines(dt, now) {
     for (const it of I.list) { if (it.dead || it.held || it.thrown) continue; const q = it.body.position;
       const b = room.belts.find(b => Math.abs(q.z - b.z) < 0.38 && q.x > b.x1 - 0.2 && q.x < b.x2 + 0.3 && q.y > b.y - 0.05 && q.y < b.y + 0.7); if (!b) continue;
       if (q.x > b.x2) { I.remove(it); continue; }
-      it.body.wakeUp(); it.body.velocity.x = 0.9; it.body.velocity.z *= 0.8; }
-    if (beltT <= 0 && live) { beltT = 1.1; for (const b of room.belts) if (Math.random() < 0.7 && I.list.filter(i => !i.dead && Math.abs(i.body.position.z - b.z) < 0.4 && i.body.position.y > b.y - 0.1).length < 12) { const it = I.add(pick(room.beltKeys), b.x1, b.y, b.z + rand(-0.08, 0.08), rand(0, 6)); it.born = now; } }
+      if (!room.beltKeys.includes(it.key) && it.def.mass >= 2 && !it.jammed) { it.jammed = true; b.jam = now + 5000; banner('Belt jammed!'); A.at(q, () => A.SFX.metal(0.9, 0.5)); emit('jam'); } // something heavy stops the line
+      if (b.jam > now) continue; it.body.wakeUp(); it.body.velocity.x = 0.9 * (room.beltBoost || 1); it.body.velocity.z *= 0.8; }
+    if (beltT <= 0 && live) { beltT = 1.1 / (room.beltBoost || 1); for (const b of room.belts) if (!(b.jam > now) && Math.random() < 0.7 && I.list.filter(i => !i.dead && Math.abs(i.body.position.z - b.z) < 0.4 && i.body.position.y > b.y - 0.1).length < 12) { const it = I.add(pick(room.beltKeys), b.x1, b.y, b.z + rand(-0.08, 0.08), rand(0, 6)); it.born = now; } }
   }
 }
 // ---------- Fire: blasts set wood alight, flames spread to whatever is close, the extinguisher puts them out
@@ -2055,6 +2057,91 @@ Object.assign(STORIES, {
       update(dt, now, E) { const t = (now - E.t0) / 1000; if (driving && driving.speed > 8) E.d.fast += dt; alertBar(driving ? `Keep moving (${Math.round((driving.speed || 0) * 3.6)} km/h)` : 'Get in a car!', 1 - t / 28); },
       end(E, quit) { E.d.siren?.stop(); if (quit) return; if (E.d.fast > 16) { banner('Lost them!'); addScore(250, fwdP(), 'big'); emit('escape'); } else { banner('Pulled over'); addScore(-100, fwdP(), 'big'); } } },
     stop(d) { d.beam && scene.remove(d.beam); },
+  },
+});
+
+Object.assign(STORIES, {
+  museum: {
+    intro: 'Late opening at the museum. The guards are on their break, and the Star of the East sits alone under glass.',
+    jobs: [{ id: 'gem', text: 'Smash the jewel', ev: 'break', need: 1, test: d => d.key === 'gem' },
+      { id: 'busts', text: 'Break 3 busts', ev: 'break', need: 3, test: d => d.key === 'bust' },
+      { id: 'laser', text: 'Trip the laser grid', ev: 'laser', need: 1 }],
+    setup(d) { // the jewel on a plinth, ringed by laser beams
+      const s = freeSpot(3, 1.4) || { x: 0, z: 2 }; const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.05, 0.6), S.mat('stone', 0xe8e4dc)); plinth.position.set(s.x, 0.525, s.z); plinth.castShadow = true; scene.add(plinth); S.outline(plinth, 1.02);
+      const b = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(0.3, 0.525, 0.3)), position: new CANNON.Vec3(s.x, 0.525, s.z) }); world.addBody(b); room.statics.push(plinth); room.obstacles.push([s.x - 0.35, s.x + 0.35, s.z - 0.35, s.z + 0.35]);
+      I.add('gem', s.x, 1.06, s.z, 0).body.sleep(); const red = new THREE.MeshBasicMaterial({ color: 0xff1a1a, transparent: true, opacity: 0.75, toneMapped: false }), beams = [];
+      for (const y of [0.4, 0.9, 1.4]) for (const [dx, dz, w, dd] of [[0, -1.1, 2.2, 0.03], [0, 1.1, 2.2, 0.03], [-1.1, 0, 0.03, 2.2], [1.1, 0, 0.03, 2.2]]) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.03, dd), red); m.position.set(s.x + dx, y, s.z + dz); scene.add(m); beams.push(m); }
+      d.grid = { s, beams, tripped: 0 };
+    },
+    update(dt, now, d) { const G = d.grid; if (!G) return; const on = now > G.tripped + 20000; G.beams.forEach(m => { m.visible = on && Math.random() > 0.03; });
+      const inX = Math.abs(player.x - G.s.x), inZ = Math.abs(player.z - G.s.z); if (on && Math.max(inX, inZ) < 1.12 && Math.max(inX, inZ) > 0.95) { G.tripped = now; startMuseumAlarm(new THREE.Vector3(player.x, 1.2, player.z)); emit('laser'); } },
+    event: { at: 45, dur: 20, start(E) { const c = new THREE.Vector3((room.bounds[0] + room.bounds[1]) / 2, 0, (room.bounds[2] + room.bounds[3]) / 2), L = Math.max(room.bounds[1] - room.bounds[0], room.bounds[3] - room.bounds[2]);
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(L, 0.03, 0.03), new THREE.MeshBasicMaterial({ color: 0xff1a1a, toneMapped: false })); arm.geometry.translate(L / 2 + 0.9, 0, 0); arm.position.set(c.x, 1.0, c.z); scene.add(arm);
+        Object.assign(E.d, { c, arm, a: rand(0, 6.28) }); banner('Security sweep!'); toast('Keep ahead of the red beam, or hug the middle'); },
+      update(dt, now, E) { E.d.a += dt * 0.75; E.d.arm.rotation.y = -E.d.a; const t = (now - E.t0) / 1000; alertBar('Laser sweep', 1 - t / 20);
+        const pa = Math.atan2(player.z - E.d.c.z, player.x - E.d.c.x), r = Math.hypot(player.x - E.d.c.x, player.z - E.d.c.z), da = Math.abs(Math.atan2(Math.sin(pa - E.d.a), Math.cos(pa - E.d.a)));
+        if (r > 0.9 && da < 0.06) { E.d.hit = true; startMuseumAlarm(new THREE.Vector3(player.x, 1.2, player.z)); addScore(-100, fwdP(), 'big'); banner('Caught in the beam!'); return 'end'; } },
+      end(E, quit) { scene.remove(E.d.arm); if (!quit && !E.d.hit) { banner('Slipped past security'); addScore(200, fwdP(), 'big'); emit('sweep'); } } },
+  },
+  supermarket: {
+    intro: 'Ten minutes to closing. The night manager is in the back counting the till, and aisle 3 is full of eggs.',
+    jobs: [{ id: 'eggs', text: 'Clean-up on aisle 3: smash 6 egg boxes', ev: 'break', need: 6, test: d => d.key === 'eggs' },
+      { id: 'bottles', text: 'Break 10 bottles', ev: 'break', need: 10, test: d => d.key === 'bottle' },
+      { id: 'till', text: 'Smash a till', ev: 'break', need: 1, test: d => d.key === 'till' }],
+    setup(d) { for (const x of [-4, 0, 4]) I.add('till', x - 0.4, 0.9, 9.2, Math.PI).body.sleep();
+      for (const t of I.list.filter(i => i.key === 'trolley' && !i.dead)) t.body.addEventListener('collide', e => { const v = t.body.velocity.length(); if (v < 2.2) return; const it = I.list.find(o => o.body === e.body && !o.dead && o.def.hp !== Infinity); if (it) { setTimeout(() => !it.dead && I.shatter(it, new THREE.Vector3(t.body.velocity.x, 0.3, t.body.velocity.z).normalize(), 3, false), 0); emit('ram'); } }); },
+    event: { at: 45, dur: 22, start(E) { banner('"Staff to the tills. We are closing."'); frenzyUntil = performance.now() + 20000; A.SFX.unlock(); toast('Closing-time rush: double points');
+        const [x1, x2, , z2] = room.bounds, sh = new THREE.Mesh(new THREE.PlaneGeometry(x2 - x1 + 1, 3.6), S.mat('metal', 0x8a8f96)); sh.position.set((x1 + x2) / 2, 5.6, z2 + 0.38); sh.rotation.y = Math.PI; scene.add(sh); E.d.sh = sh; },
+      update(dt, now, E) { const t = (now - E.t0) / 1000; E.d.sh.position.y = Math.max(1.8, 5.6 - t * 0.19); alertBar('Closing time: double points', 1 - t / 20); if (Math.random() < dt) A.at(E.d.sh.position, () => A.SFX.metalfall?.(0.15)); },
+      end(E) { frenzyUntil = 0; } },
+  },
+  restaurant: {
+    intro: 'Saturday night, two hundred covers, and the head chef just quit. The orders keep coming anyway.',
+    jobs: [{ id: 'serve', text: 'Serve 3 plates: throw them at the pass', ev: 'break', need: 3, test: d => d.thrown && ['plate', 'platestack', 'bowl'].includes(d.key) && room.rush && Math.hypot(d.p.x - room.rush.x, d.p.z - room.rush.z) < 3.2 },
+      { id: 'special', text: "Smash the chef's special", ev: 'break', need: 1, test: d => d.it?.tag === 'special' },
+      { id: 'wine', text: 'Break 4 wine glasses', ev: 'break', need: 4, test: d => d.key === 'wineglass' }],
+    setup(d) { const r = room.rush; if (!r) return; I.add('teapot', r.x + 1.2, r.y, r.z, 0, { tag: 'special', color: 0xc8a020 }).body.sleep(); const pl = label("CHEF'S SPECIAL", 0.5, 0.15, '#1a1a1a', '#f0c040'); pl.position.set(r.x + 1.2, r.y + 0.03, r.z + 0.35); pl.rotation.x = -Math.PI / 2; scene.add(pl);
+      for (let i = 0; i < 3; i++) I.add('wineglass', r.x - 1 + i * 0.3, r.y, r.z - 0.2, 0).body.sleep(); },
+    event: { at: 40, dur: 18, start(E) { room.rushFast = true; banner('PLATES UP!'); toast('Plates score extra for 18 seconds'); A.SFX.metal(0.5, 3.2); },
+      update(dt, now, E) { alertBar('Plates up: every plate +40', 1 - (now - E.t0) / 18000); },
+      on(ev, d, E) { if (ev === 'break' && ['plate', 'platestack', 'bowl'].includes(d.key)) addScore(40, d.p, 'small'); }, end() { room.rushFast = false; } },
+  },
+  scrapyard: {
+    intro: "The yard's crusher runs all night. The owner pays by the cube, and he's not here to count.",
+    jobs: [{ id: 'crush', text: 'Crush 3 cars', ev: 'crush', need: 3 }, { id: 'cubes', text: 'Make 5 scrap cubes', ev: 'cube', need: 5 }, { id: 'magnet', text: 'Use the magnet crane', ev: 'magnet', need: 1 }],
+    setup(d) { // a magnet crane on a high gantry: hit the control box, it fetches the nearest heavy thing and drops it on the crusher
+      const P = room.press, home = new THREE.Vector3(P.x + 4.5, 4.6, P.z + 4), mag = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.25, 20), S.mat('metal', 0x2a2a2e)); mag.position.copy(home); mag.castShadow = true; scene.add(mag); S.outline(mag, 1.03);
+      const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 6), S.mat('metal', 0x666666)); scene.add(cable);
+      const bx = P.x + 4.5, bz = P.z + 6.5, box = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.1, 0.4), S.mat('paint', 0xe0b020)); box.position.set(bx, 0.55, bz); scene.add(box); S.outline(box, 1.03); room.obstacles.push([bx - 0.3, bx + 0.3, bz - 0.25, bz + 0.25]);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), new THREE.MeshBasicMaterial({ color: 0x40ff60 })); lamp.position.set(bx, 1.15, bz); scene.add(lamp);
+      d.mag = { mag, cable, home, state: 'idle', it: null, lamp };
+      strikes.push({ pos: new THREE.Vector3(bx, 0.9, bz), r: 0.35, hit() { const M = d.mag; if (M.state !== 'idle') return; const cand = I.list.filter(i => !i.dead && !i.fixed && !i.held && i.def.mass >= 3 && Math.hypot(i.body.position.x - P.x, i.body.position.z - P.z) > 3.5).sort((a, b) => a.body.position.distanceTo(player) - b.body.position.distanceTo(player))[0];
+        if (!cand) { toast('Nothing heavy to pick up'); return; } M.it = cand; M.state = 'go'; lamp.material.color.set(0xff3020); A.at(this.pos, () => A.SFX.zap(0.5)); emit('magnet'); } });
+    },
+    update(dt, now, d) { const M = d.mag; if (!M) return; const P = room.press, move = (tx, tz, sp) => { const v = new THREE.Vector3(tx - M.mag.position.x, 0, tz - M.mag.position.z), L = v.length(); if (L < 0.08) return true; M.mag.position.addScaledVector(v.normalize(), Math.min(L, sp * dt)); return false; };
+      if (M.state === 'go') { if (M.it.dead) { M.state = 'back'; } else if (move(M.it.body.position.x, M.it.body.position.z, 5)) { M.state = 'carry'; A.at(M.mag.position, () => A.SFX.metal(0.8, 0.7)); } }
+      else if (M.state === 'carry') { if (M.it.dead) M.state = 'back'; else { const it = M.it; it.body.wakeUp(); it.body.position.set(M.mag.position.x, M.mag.position.y - 0.25 - it.def.size * 0.6, M.mag.position.z); it.body.velocity.set(0, 0, 0); if (move(P.x, P.z, 3.5)) { M.state = 'back'; it.born = 0; toast('Dropped on the bed'); } } }
+      else if (M.state === 'back') { if (move(M.home.x, M.home.z, 5)) { M.state = 'idle'; M.lamp.material.color.set(0x40ff60); } }
+      const top = new THREE.Vector3(M.mag.position.x, 6, M.mag.position.z); M.cable.position.copy(top).lerp(M.mag.position, 0.5); M.cable.scale.y = top.distanceTo(M.mag.position); },
+    event: { at: 50, dur: 14, start(E) { // the crane swings a heavy cube over you and the load starts slipping
+        const ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.25, 40), new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.7, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(player.x, 0.03, player.z); scene.add(ring);
+        const cube = I.add('scrapcube', player.x, 4, player.z, 0, { s: 0.9 }); cube.body.type = CANNON.Body.KINEMATIC; cube.body.updateMassProperties(); Object.assign(E.d, { ring, cube, at: { x: player.x, z: player.z } }); banner('Load slipping!'); toast('Get out from under it!'); A.at(cube.body.position, () => A.SFX.metal(1, 0.5)); },
+      update(dt, now, E) { const t = (now - E.t0) / 1000; alertBar('Get clear!', 1 - t / 4); E.d.ring.material.opacity = 0.4 + 0.4 * Math.abs(Math.sin(now * 0.014)); E.d.cube.body.position.y = 4 + Math.sin(now * 0.02) * 0.05;
+        if (t > 4 && !E.d.dropped) { E.d.dropped = true; const c = E.d.cube.body; c.type = CANNON.Body.DYNAMIC; c.mass = 25; c.updateMassProperties(); c.wakeUp(); scene.remove(E.d.ring);
+          const near = Math.hypot(player.x - E.d.at.x, player.z - E.d.at.z) < 1.3; if (near) { banner('Too close!'); shake = Math.max(shake, 0.8); } else { banner('Clear!'); addScore(100, fwdP(), 'big'); } }
+        if (t > 5.5) return 'end'; },
+      end(E) { scene.remove(E.d.ring); } },
+  },
+  glassworks: {
+    intro: 'Night shift at the bottle plant. The line never stops, and nobody checks the rejects.',
+    jobs: [{ id: 'glass', text: 'Smash 40 glass things', ev: 'break', need: 40, test: d => d.kind === 'glass' },
+      { id: 'jam', text: 'Jam a belt with something heavy', ev: 'jam', need: 1 },
+      { id: 'furnace', text: 'Crack the furnace window', ev: 'furnace', need: 1 }],
+    setup(d) { d.fhp = 4; for (const z of [-3.6, 0, 3.6]) strikes.push({ pos: new THREE.Vector3(-6.45, 1.15, z), r: 0.7, hit() { if (d.fhp <= 0) return; d.fhp--; I.sparks_(this.pos, 14, 0xff8a30); A.at(this.pos, () => A.SFX.glass(0.6, 0.7)); if (d.fhp === 0) { banner('Furnace window cracked!'); explode({ x: -6.2, y: 1.2, z: this.pos.z }); emit('furnace'); } } });
+      const s = wallSpot(0.9, 0.7); if (!s) return; const st = fixture(0.8, 0.9, 0.6, 0x5a5e64, 'metal', s); const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.8, 8), S.mat('metal', 0xb8bcc4)); pipe.rotation.z = Math.PI / 2; pipe.position.set(0, 0.5, 0.1); st.add(pipe);
+      const pl = label('BLOW YOUR OWN', 0.6, 0.2, '#e86a20', '#fff'); pl.position.set(0, 0.2, 0.31); st.add(pl); const n = new THREE.Vector3(Math.sin(s.ry), 0, Math.cos(s.ry));
+      strikes.push({ pos: new THREE.Vector3(s.x, 0.9, s.z), r: 0.45, hit() { const v = I.add(pick(['vase', 'fishbowl', 'jug']), s.x + n.x * 0.7, 0, s.z + n.z * 0.7, rand(0, 6), { color: pick([0x2a8ad8, 0x2ab08a, 0xd84a8a, 0xe8a020, 0x8a4ad8]) }); v.body.sleep(); A.at(this.pos, () => A.SFX.whoosh(false)); popup('Made a vase', { x: s.x, y: 1.5, z: s.z }, 'small'); emit('blow'); } }); },
+    event: { at: 40, dur: 20, start(E) { room.beltBoost = 2.6; banner('LINE SPEEDING UP!'); A.SFX.zap(0.6); }, update(dt, now, E) { alertBar('The line is flying', 1 - (now - E.t0) / 20000); }, end() { room.beltBoost = 1; } },
   },
 });
 
