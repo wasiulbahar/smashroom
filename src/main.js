@@ -261,6 +261,7 @@ function announce(text) {
 
 // a gas can went off: fireball, knock everything back, break what's close (which can set off more cans)
 function explode(p, src) {
+  if (src?.key === 'pump') { const nx = I.list.filter(i => !i.dead && i.key === 'pump' && i !== src).sort((a, b) => a.body.position.distanceTo(p) - b.body.position.distanceTo(p))[0]; if (nx && nx.body.position.distanceTo(p) < 12) setTimeout(() => { if (!nx.dead) { nx.chain = src.chain; I.shatter(nx, new THREE.Vector3(0, 1, 0), 3, false); } }, 650); } // gas pumps go up one after another
   const P = new THREE.Vector3(p.x, p.y, p.z), R = 2.6, now = performance.now(), blast = { n: 0 }, chain = (src && src.chain) || { n: 0 }; chain.n++;
   if (chain.n >= 2 && state === 'play') { banner('Chain reaction x' + chain.n); addScore(20 * chain.n, P, 'big'); maxStat('chainLen', chain.n); }
   for (const f of room.furniture) { if (f.dead) continue; const c = f.parts[0].position, d = c.distanceTo(P); if (d < R + 0.6) { f.hp -= 7 * (1 - d / (R + 0.6)) + 2; if (f.hp <= 0) collapse(f, c.clone().sub(P).setY(0).normalize()); } }
@@ -400,6 +401,7 @@ function clayHit(res, dir) {
 function hitItem(it, dir) {
   const rage = performance.now() < rageUntil, p = it.body.position, kind = it.def.kind;
   if (it.key === 'target') { toast('Throw something at it!'); return; }
+  if (it.key === 'vending' && Math.random() < 0.7) { const q = it.body.position, n = new THREE.Vector3(0, 0, 1).applyQuaternion(it.mesh.quaternion); const can = I.add('bottle', q.x + n.x * 0.6, 0.05, q.z + n.z * 0.6, rand(0, 6), { color: pick([0xc8202a, 0x2a6ad8, 0x2a9a4a, 0xe8c020]) }); can.body.velocity.set(n.x * 2, 1, n.z * 2); popup('Free drink!', { x: q.x, y: q.y + 1, z: q.z }, 'small'); emit('vend'); } // the vending machine coughs up a can
   if (atk === 'held') it.byHeld = true;
   emit('hit');
   kick = Math.min(0.08, kick + (heavyNow ? 0.03 : 0.015)); vibrate(20);
@@ -1680,7 +1682,7 @@ function stopSprinklers() { smoke?.hiss?.stop(); smoke = null; }
 let cityAlarms = [];
 function cityAlarm(c, depth = 0) { // a parked car in the open city starts wailing, and the ones parked nearby join in
   const now = performance.now(); if (c.ai || c === driving || c.dead || (c.alarmUntil || 0) > now) return;
-  c.alarmUntil = now + 9000; cityAlarms.push({ c, until: c.alarmUntil, sound: A.loopAt('alarm', c.body.position, 0.45, rand(0.95, 1.08)) }); addHeat(5);
+  c.alarmUntil = now + 9000; cityAlarms.push({ c, until: c.alarmUntil, sound: A.loopAt('alarm', c.body.position, 0.45, rand(0.95, 1.08)) }); addHeat(5); emit('alarm');
   if (depth < 2) for (const o of cars) if (o !== c && !o.ai && !o.dead && o !== driving && o.body.position.distanceTo(c.body.position) < 14) setTimeout(() => state === 'play' && cityAlarm(o, depth + 1), rand(500, 1500)); // two rings out, not the whole city
 }
 function updateCityAlarms(now) { cityAlarms = cityAlarms.filter(a => { if (now > a.until || a.c.dead) { a.sound?.stop(); return false; } return true; }); }
@@ -1953,6 +1955,108 @@ const STORIES = {
         alertBar('Fire! Put it out', 1 - (now - E.d.lit) / 20000); if (!fires.length) { banner('Saved dinner'); addScore(150, p, 'big'); emit('saved'); return 'end'; } } },
   },
 };
+
+Object.assign(STORIES, {
+  caryard: {
+    intro: "A scrap dealer's yard at dusk. Every car in here is already written off.",
+    jobs: [{ id: 'glass', text: 'Smash 6 car windows', ev: 'break', need: 6, test: d => d.key === 'carglass' },
+      { id: 'alarms', text: 'Set off 3 car alarms', ev: 'alarm', need: 3 },
+      { id: 'cans', text: 'Blow up 2 gas cans', ev: 'break', need: 2, test: d => d.key === 'gascan' }],
+    setup(d) { // a car lift: hit the yellow post, the car goes up, then comes down hard
+      const c = room.cars[0]; if (!c) return; const px = c.x + 1.7, pz = c.z + 1.2;
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.2, 0.2), S.mat('paint', 0xe0b020)); post.position.set(px, 0.6, pz); post.castShadow = true; scene.add(post); S.outline(post, 1.04);
+      const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 12), new THREE.MeshBasicMaterial({ color: 0xff2a2a })); btn.position.set(px, 1.22, pz); scene.add(btn); room.obstacles.push([px - 0.2, px + 0.2, pz - 0.2, pz + 0.2]);
+      d.lift = { g: 0, t: -1 }; strikes.push({ pos: new THREE.Vector3(px, 1.1, pz), r: 0.3, hit() { if (d.lift.t >= 0) return; d.lift.t = 0; d.lift.items = I.list.filter(i => !i.dead && i.group === 0).map(i => [i, i.body.position.y]); A.at(this.pos, () => A.SFX.zap(0.5)); toast('Going up...'); } });
+    },
+    update(dt, now, d) { const L = d.lift; if (!L || L.t < 0) return; L.t += dt; const up = L.t < 1.6 ? L.t / 1.6 * 1.7 : L.t < 3.6 ? 1.7 : Math.max(0, 1.7 - (L.t - 3.6) * 7);
+      for (const [it, y0] of L.items) if (!it.dead) { it.body.position.y = y0 + up; it.mesh.position.y = y0 + up; }
+      if (L.t > 3.6 && up === 0 && !L.dropped) { L.dropped = true; shake = Math.max(shake, 0.5); A.at(room.cars[0], () => { A.SFX.metal(1.3, 0.5); A.SFX.crash?.(1); }); for (const [it] of L.items) if (!it.dead && it.key !== 'carbody') I.shatter(it, new THREE.Vector3(0, -1, 0), 2, false); carAlarm(0); addScore(120, fwdP(), 'big'); emit('drop'); }
+      if (L.t > 6) L.t = -1, L.dropped = false; },
+    event: { at: 40, dur: 22, start(E) { // a security floodlight sweeps the yard: stay out of the beam
+        const [x1, x2, z1, z2] = room.bounds, at = new THREE.Vector3(x2 - 0.5, 5, z1 + 0.5), L = new THREE.SpotLight(0xf4f8ff, S.realistic ? 120 : 40, 30, 0.22, 0.4, 1); L.userData.keep = true; L.position.copy(at); scene.add(L, L.target);
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(2.2, 9, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0xf4f8ff, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide })); scene.add(cone);
+        Object.assign(E.d, { L, cone, at, seen: 0 }); banner('Security light!'); toast('Stay out of the beam'); },
+      update(dt, now, E) { const t = (now - E.t0) / 1000, [x1, x2, z1, z2] = room.bounds, a = Math.sin(t * 0.55) * 0.5 + 0.5, tx = x1 + (x2 - x1) * a, tz = z1 + (z2 - z1) * (0.3 + 0.5 * Math.abs(Math.sin(t * 0.3)));
+        E.d.L.target.position.set(tx, 0, tz); const dir = new THREE.Vector3(tx, 0, tz).sub(E.d.at); E.d.cone.position.copy(E.d.at).addScaledVector(dir, 0.5); E.d.cone.scale.y = dir.length() / 9; E.d.cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir.clone().normalize());
+        const lit = Math.hypot(player.x - tx, player.z - tz) < 2; E.d.seen = lit ? E.d.seen + dt : Math.max(0, E.d.seen - dt); alertBar(lit ? 'You are in the light!' : 'Stay out of the beam', 1 - t / 22);
+        if (E.d.seen > 1) { E.d.caught = true; banner('Spotted!'); addScore(-100, fwdP(), 'big'); A.SFX.buzzer(); return 'end'; } },
+      end(E, quit) { scene.remove(E.d.L, E.d.L.target, E.d.cone); if (!quit && !E.d.caught) { banner('Never saw you'); addScore(200, fwdP(), 'big'); emit('ghostly'); } } },
+  },
+  apartment: {
+    intro: 'The landlord kept your deposit. You still have the keys for one more night.',
+    jobs: [{ id: 'parcel', text: "Break the neighbour's parcel", ev: 'break', need: 1, test: d => d.it?.tag === 'parcel' },
+      { id: 'pipes', text: 'Burst 2 pipes', ev: 'pipe', need: 2 },
+      { id: 'tv', text: 'Smash the old TV', ev: 'break', need: 1, test: d => d.key === 'tv' || d.key === 'crt' }],
+    setup(d) {
+      const s1 = freeSpot(2, 0.5); if (s1) I.add('gift', s1.x, 0, s1.z, rand(0, 6), { tag: 'parcel', color: 0xc8a070 }).body.sleep();
+      if (!I.list.some(i => !i.dead && (i.key === 'tv' || i.key === 'crt'))) { const s2 = freeSpot(2, 0.6); if (s2) I.add('crt', s2.x, 0, s2.z, 0).body.sleep(); }
+      const s = wallSpot(1.3, 0.12); if (!s) return; // a smart TV on the wall: hit it to change channel, keep going and it breaks
+      const cv = document.createElement('canvas'); cv.width = 320; cv.height = 180; const tex = new THREE.CanvasTexture(cv);
+      const scr = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.62), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false })); const fr = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.7, 0.05), S.mat('plastic', 0x111114));
+      const n = new THREE.Vector3(Math.sin(s.ry), 0, Math.cos(s.ry)); fr.position.set(s.x - n.x * 0.04, 1.6, s.z - n.z * 0.04); fr.rotation.y = s.ry; scr.position.set(s.x + n.x * 0.0, 1.6, s.z + n.z * 0.0); scr.rotation.y = s.ry; scene.add(fr, scr);
+      const CH = [['NEWS', '#1a2a6a', '#fff'], ['COOKING', '#e8a040', '#3a1a08'], ['CARTOONS', '#ff4ab0', '#fff8a0'], ['FOOTBALL', '#2a8a3a', '#fff'], ['SHOPPING', '#e83a3a', '#fff']];
+      const draw = i => { const g = cv.getContext('2d'); if (i < 0) { for (let k = 0; k < 900; k++) { g.fillStyle = Math.random() < 0.5 ? '#ddd' : '#222'; g.fillRect(Math.random() * 320, Math.random() * 180, 4, 3); } } else { const [t, bg, fg] = CH[i % CH.length]; g.fillStyle = bg; g.fillRect(0, 0, 320, 180); g.fillStyle = fg; g.font = 'bold 44px Rubik, Arial'; g.textAlign = 'center'; g.fillText(t, 160, 100); g.font = '18px Rubik, Arial'; g.fillText('CH ' + (i + 1), 280, 24); } tex.needsUpdate = true; };
+      draw(0); d.tv = { ch: 0, hits: 0, draw, broken: false };
+      strikes.push({ pos: new THREE.Vector3(s.x, 1.6, s.z), r: 0.5, hit() { const T = d.tv; if (T.broken) return; T.hits++; T.ch++;
+        if (T.hits >= 6) { T.broken = true; const g = cv.getContext('2d'); g.fillStyle = '#050505'; g.fillRect(0, 0, 320, 180); g.strokeStyle = '#bbb'; g.lineWidth = 2; for (let k = 0; k < 14; k++) { g.beginPath(); g.moveTo(140, 80); g.lineTo(rand(0, 320), rand(0, 180)); g.stroke(); } tex.needsUpdate = true; A.at(this.pos, () => { A.SFX.glass(1, 1); A.SFX.zap(0.8); }); I.sparks_(this.pos, 16, 0xffe9a0); addScore(120, this.pos, 'big'); emit('smarttv'); return; }
+        draw(-1); setTimeout(() => !T.broken && draw(T.ch), 160); A.at(this.pos, () => A.SFX.static?.(0.4)); } });
+    },
+    event: { at: 45, dur: 16, start(E) { E.d.bangs = 0; E.d.next = performance.now(); },
+      update(dt, now, E) { const t = (now - E.t0) / 1000;
+        if (t < 4) { if (now > E.d.next && E.d.bangs < 4) { E.d.bangs++; E.d.next = now + 700; shake = Math.max(shake, 0.12); A.at(new THREE.Vector3(room.bounds[0] - 0.4, 1.4, player.z), () => { A.SFX.body(1); A.SFX.wood(0.8, 0.5); }); if (E.d.bangs === 1) banner('BANG BANG BANG'); if (E.d.bangs === 3) toast('"Keep it DOWN in there!"'); } alertBar('The neighbour is banging on the wall', 1); return; }
+        if (!E.d.quiet) { E.d.quiet = now; banner('Quiet for 10 seconds!'); } alertBar('Shh... stay quiet', 1 - (now - E.d.quiet) / 10000); if (now - E.d.quiet > 10000) return 'end'; },
+      on(ev, d, E) { if (ev === 'break' && E.d.quiet && !E.d.loud) { E.d.loud = true; banner('The landlord is called!'); addScore(-100, fwdP(), 'big'); A.SFX.buzzer(); } },
+      end(E, quit) { if (!quit && !E.d.loud) { banner('They gave up'); addScore(150, fwdP(), 'big'); emit('quiet'); } } },
+  },
+  studio: {
+    intro: 'A sculptor walked out on this one halfway through. Finish the job your way.',
+    jobs: [{ id: 'head', text: 'Knock the head off', ev: 'clay', need: 1, test: d => d.lost && d.lost.includes('head') },
+      { id: 'topple', text: 'Topple the statue', ev: 'clay', need: 1, test: d => d.collapsed },
+      { id: 'shelves', text: 'Smash 5 things on the shelves', ev: 'break', need: 5, test: d => d.p && d.p.y > 0.75 }],
+    setup(d) { // a pottery wheel with a pot on it, spinning; hit it to fling the pot
+      const s = wallSpot(0.9, 0.9); if (!s) return; const n = new THREE.Vector3(Math.sin(s.ry), 0, Math.cos(s.ry)), c = { x: s.x + n.x * 0.1, z: s.z + n.z * 0.1 };
+      fixture(0.7, 0.5, 0.7, 0x5a4a3a, 'wood', s, 0.25); const disk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 24), S.mat('stone', 0x8a8680)); disk.position.set(s.x, 0.53, s.z); scene.add(disk);
+      const mark = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.052, 0.25), S.mat('paint', 0x5a3a2a)); mark.position.z = 0.1; disk.add(mark);
+      const pot = I.add('vase', s.x, 0.56, s.z, 0, { color: 0xb87a50 }); d.wheel = { s, disk, pot, sp: 4 };
+      strikes.push({ pos: new THREE.Vector3(s.x, 0.7, s.z), r: 0.4, hit(f) { const W2 = d.wheel; W2.sp = Math.min(30, W2.sp + 8); if (!W2.pot.dead && W2.sp > 18) { W2.pot.body.wakeUp(); W2.pot.thrown = true; W2.pot.body.velocity.set(f.x * 6 + rand(-2, 2), 3, f.z * 6 + rand(-2, 2)); emit('wheel'); toast('Fling!'); } A.at(this.pos, () => A.SFX.wood(0.5, 1.3)); } });
+    },
+    update(dt, now, d) { const W2 = d.wheel; if (!W2) return; W2.sp = Math.max(4, W2.sp - dt * 3); W2.disk.rotation.y += W2.sp * dt;
+      const p = W2.pot; if (!p.dead && !p.held && Math.hypot(p.body.position.x - W2.s.x, p.body.position.z - W2.s.z) < 0.3 && p.body.position.y < 0.9) { p.body.wakeUp(); p.body.angularVelocity.set(0, W2.sp, 0); }
+      if (p.dead || p.body.position.y < 0.3) { if (!W2.next) W2.next = now + 5000; if (now > W2.next) { W2.pot = I.add('vase', W2.s.x, 0.56, W2.s.z, 0, { color: pick([0xb87a50, 0xc89a70, 0x8a5a3a]) }); W2.next = 0; } } },
+    event: { at: 40, dur: 18, start(E) { const s = wallSpot(1, 1, story.d.wheel ? [story.d.wheel.s] : []) || { x: room.bounds[1] - 0.2, z: room.bounds[2] + 1, ry: -Math.PI / 2, hw: 0.5, hd: 0.5 };
+        const k = fixture(1, 1.3, 1, 0x6a6460, 'stone', s, 0.65), glow = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.4), new THREE.MeshBasicMaterial({ color: 0xff4010, transparent: true, opacity: 0.2, toneMapped: false })); glow.position.set(0, 0, 0.51); k.add(glow);
+        const L = new THREE.PointLight(0xff5020, 0, 5, 2); L.userData.keep = true; L.position.set(s.x, 1, s.z); scene.add(L); Object.assign(E.d, { s, k, glow, L, hp: 3 }); banner('The kiln is overheating!'); toast('Hit it 3 times to shut it down');
+        strikes.push(E.d.st = { pos: new THREE.Vector3(s.x, 0.8, s.z), r: 0.6, hit() { if (E.d.hp <= 0) return; E.d.hp--; A.at(this.pos, () => A.SFX.metal(0.9, 0.6)); I.sparks_(this.pos, 10, 0xff8a30); if (E.d.hp === 0) { E.d.saved = true; } } }); },
+      update(dt, now, E) { const t = (now - E.t0) / 1000; E.d.glow.material.opacity = Math.min(1, 0.2 + t / 15); E.d.L.intensity = (S.realistic ? 12 : 4) * t / 15 * (0.8 + Math.random() * 0.4); alertBar(`Kiln heat (${E.d.hp} hits to shut it down)`, t / 15);
+        if (Math.random() < dt * (1 + t)) A.at(E.d.st.pos, () => A.SFX.static?.(0.12)); if (E.d.saved) { banner('Kiln shut down'); addScore(150, E.d.st.pos, 'big'); emit('kiln'); return 'end'; }
+        if (t > 15) { explode({ x: E.d.s.x, y: 1, z: E.d.s.z }); banner('KILN BLEW!'); return 'end'; } },
+      end(E) { strikes = strikes.filter(s => s !== E.d.st); E.d.L && scene.remove(E.d.L); } },
+  },
+  downtown: {
+    intro: 'A dead-end street after closing time. One working camera, and it points the other way.',
+    jobs: [{ id: 'glass', text: 'Smash 8 car windows', ev: 'break', need: 8, test: d => d.key === 'carglass' },
+      { id: 'shops', text: 'Break 3 shop windows', ev: 'break', need: 3, test: d => d.key === 'window' },
+      { id: 'hydrant', text: 'Knock over a hydrant', ev: 'break', need: 1, test: d => d.key === 'hydrant' }],
+    event: { at: 40, dur: 26, start(E) { E.d.n = 0; E.d.siren = A.loopAt('siren', null, 0.12, 1); banner('Police on the way!'); toast('Smash 8 things before they get here'); },
+      update(dt, now, E) { const left = timeLeftIn(E, 25, now); E.d.siren?.set(0.12 + (1 - left / 25) * 0.4); alertBar(`Smash ${Math.max(0, 8 - E.d.n)} more before they arrive`, left / 25);
+        if (E.d.n >= 8) { banner('Gone before they got here'); addScore(250, fwdP(), 'big'); emit('escape'); return 'end'; } if (left <= 0) { banner('Fined!'); addScore(-150, fwdP(), 'big'); addHeat(20); return 'end'; } },
+      on(ev, d, E) { if (ev === 'break') E.d.n++; }, end(E) { E.d.siren?.stop(); } },
+  },
+  city: {
+    intro: 'A whole city, no rules. Grab a car: there are deliveries to make, and plenty to wreck on the way.',
+    jobs: [{ id: 'deliver', text: 'Make 3 deliveries (drive through the light)', ev: 'delivery', need: 3 },
+      { id: 'alarms', text: 'Set off 5 car alarms', ev: 'alarm', need: 5 },
+      { id: 'street', text: 'Smash 10 things in the street', ev: 'break', need: 10 }],
+    setup(d) { const beam = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 40, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0x40ff90, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })); scene.add(beam); d.beam = beam; d.place = () => {
+        const L = [-100, -50, 0, 50, 100]; for (let i = 0; i < 20; i++) { const along = Math.random() < 0.5, x = along ? pick(L) : rand(-95, 95), z = along ? rand(-95, 95) : pick(L); if (Math.hypot(x - player.x, z - player.z) > 60) { beam.position.set(x, 20, z); return; } } }; d.place(); },
+    update(dt, now, d) { if (!d.beam) return; d.beam.material.opacity = 0.16 + 0.08 * Math.sin(now * 0.004); const p = driving ? driving.body.position : player; if (Math.hypot(p.x - d.beam.position.x, p.z - d.beam.position.z) < 4) {
+        if (!driving) { if (!d.warned) { d.warned = true; toast('Deliveries need a car'); } return; } d.warned = false; banner('Delivered!'); addScore(120, fwdP(), 'big'); A.SFX.unlock(); emit('delivery'); d.place(); } },
+    event: { at: 60, dur: 28, start(E) { E.d.fast = 0; E.d.siren = A.loopAt('siren', null, 0.35, 1); banner('Police chase!'); toast('Drive fast to lose them'); },
+      update(dt, now, E) { const t = (now - E.t0) / 1000; if (driving && driving.speed > 8) E.d.fast += dt; alertBar(driving ? `Keep moving (${Math.round((driving.speed || 0) * 3.6)} km/h)` : 'Get in a car!', 1 - t / 28); },
+      end(E, quit) { E.d.siren?.stop(); if (quit) return; if (E.d.fast > 16) { banner('Lost them!'); addScore(250, fwdP(), 'big'); emit('escape'); } else { banner('Pulled over'); addScore(-100, fwdP(), 'big'); } } },
+    stop(d) { d.beam && scene.remove(d.beam); },
+  },
+});
 
 // ---------- Domino runs: a snaking line across the floor that ends at gas cans
 function dominoRun() {
