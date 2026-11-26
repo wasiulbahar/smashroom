@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=27';
-import { itemModel, fitInto } from './models.js?v=27';
+import { canvasTex } from './style.js?v=28';
+import { itemModel, fitInto } from './models.js?v=28';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);

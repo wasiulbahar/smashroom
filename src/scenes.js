@@ -1,9 +1,10 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=27';
-import { buildCity } from './city.js?v=27';
-import { loadModel, fitInto } from './models.js?v=27';
+import { canvasTex } from './style.js?v=28';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildCity } from './city.js?v=28';
+import { loadModel, fitInto } from './models.js?v=28';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -500,11 +501,12 @@ export const SCENES = {
       sand.wrapS = sand.wrapT = THREE.RepeatWrapping; sand.repeat.set(5, 5);
       K.box(W, 0.2, D, S.mat('plastic', 0xffffff, { map: sand }), 0, -0.1, 0, { cast: false });
       K.bounds = [-W / 2 + 0.6, W / 2 - 0.6, -D / 2 + 0.6, D / 2 - 0.6];
-      const bamboo = S.mat('paint', K.v(0x8a9a4a, 0x9aae58)), node = S.mat('paint', 0x6a7a34);
+      const bamboo = S.mat('paint', K.v(0x8a9a4a, 0x9aae58)), node = S.mat('paint', 0x6a7a34), stalks = [], knots = [];
       for (const [x0, z0, x1, z1] of [[-W / 2, -D / 2, W / 2, -D / 2], [-W / 2, D / 2, W / 2, D / 2], [-W / 2, -D / 2, -W / 2, D / 2], [W / 2, -D / 2, W / 2, D / 2]]) {
         const L = Math.hypot(x1 - x0, z1 - z0), n = Math.round(L / 0.16);
-        for (let i = 0; i <= n; i++) { const t = i / n, h = rand(2.1, 2.5); K.cyl(0.07, h, i % 3 ? bamboo : node, x0 + (x1 - x0) * t, h / 2, z0 + (z1 - z0) * t, { outline: false, phys: false }); }
+        for (let i = 0; i <= n; i++) { const t = i / n, h = rand(2.1, 2.5), gq = new THREE.CylinderGeometry(0.07, 0.07, h, 7); gq.translate(x0 + (x1 - x0) * t, h / 2, z0 + (z1 - z0) * t); (i % 3 ? stalks : knots).push(gq); } // merged below: one draw call instead of hundreds
         K.box(Math.abs(x1 - x0) || 0.3, 2.4, Math.abs(z1 - z0) || 0.3, S.mat('plastic', 0), (x0 + x1) / 2, 1.2, (z0 + z1) / 2).visible = false; }
+      for (const [geos, mat] of [[stalks, bamboo], [knots, node]]) { const mm = new THREE.Mesh(mergeGeometries(geos), mat); mm.castShadow = true; mm.receiveShadow = true; scene.add(mm); geos.forEach(q => q.dispose()); }
       const sky = canvasTex(4, 256, (g, w, h) => { const s = g.createLinearGradient(0, 0, 0, h); s.addColorStop(0, '#8a96a4'); s.addColorStop(1, '#d4d8d8'); g.fillStyle = s; g.fillRect(0, 0, w, h); });
       scene.background = sky; scene.fog = new THREE.Fog(0xc8ccd0, 12, 32);
       // a pond with stepping stones, raked rings around three rocks, stone lanterns, a low wooden deck

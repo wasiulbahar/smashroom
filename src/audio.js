@@ -3,7 +3,7 @@ const rand = (a, b) => a + Math.random() * (b - a);
 let musicStyle = 'heavy';
 export const setMusicStyle = m => { musicStyle = m; };
 let cur = null, master, muffle, conv, wet, ringBus, muffled = false;
-const vol = { master: 1, music: 1, sfx: 1 };
+const vol = { master: 1, music: 1, sfx: 1, amb: 1 };
 const B = () => cur || sfx; // where a sound goes: the current 3D position, or straight to the effects bus
 let ac, sfx, music, amb, noiseBuf, musicOn = true, playing = false, nextBeat = 0, beat = 0, ambNodes = [], ambTimers = [];
 
@@ -16,7 +16,7 @@ export function initAudio() {
   muffle = ac.createBiquadFilter(); muffle.type = 'lowpass'; muffle.frequency.value = 20000; muffle.connect(master); // closes during slow motion and after a blast
   sfx = ac.createGain(); sfx.gain.value = vol.sfx; sfx.connect(muffle);
   music = ac.createGain(); music.gain.value = 0; music.connect(muffle);
-  amb = ac.createGain(); amb.gain.value = 0.5; amb.connect(muffle);
+  amb = ac.createGain(); amb.gain.value = 0.5 * vol.amb; amb.connect(muffle);
   conv = ac.createConvolver(); wet = ac.createGain(); wet.gain.value = 0; sfx.connect(conv); conv.connect(wet); wet.connect(muffle);
   ringBus = ac.createGain(); ringBus.connect(master);
   noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
@@ -61,7 +61,7 @@ export function setRoom(kind) {
 export function setMuffle(on) { if (!ac || on === muffled) return; muffled = on; muffle.frequency.setTargetAtTime(on ? 650 : 20000, ac.currentTime, on ? 0.03 : 0.25); }
 export function setVolume(v) {
   Object.assign(vol, v); if (!ac) return;
-  master.gain.setTargetAtTime(0.8 * vol.master, ac.currentTime, 0.05); sfx.gain.setTargetAtTime(vol.sfx, ac.currentTime, 0.05); setMusic(musicOn);
+  master.gain.setTargetAtTime(0.8 * vol.master, ac.currentTime, 0.05); sfx.gain.setTargetAtTime(vol.sfx, ac.currentTime, 0.05); amb.gain.setTargetAtTime(0.5 * (vol.amb ?? 1), ac.currentTime, 0.05); setMusic(musicOn);
 }
 export const tap = () => { const d = ac.createMediaStreamDestination(); master.connect(d); return d.stream; }; // test hook: record what the game plays
 export const audioState = () => ac && ac.state;

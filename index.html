@@ -118,6 +118,8 @@ body.zen #tr,body.zen #combo,body.zen #rage{display:none}
 #jobs{position:absolute;left:14px;top:120px;max-width:min(260px,44vw);background:rgba(20,13,31,.72);border:2px solid var(--ink);border-radius:10px;padding:8px 10px;font-family:Rubik,sans-serif;font-size:13px}
 #jobs .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px}#jobs .job{margin:3px 0}#jobs .job b{color:var(--yellow);font-weight:600}#jobs .done{color:#7fd88a;text-decoration:line-through}#jobs .failed{color:#e87a7a;text-decoration:line-through}
 #alert{position:absolute;left:50%;top:84px;transform:translateX(-50%);width:min(380px,72vw);text-align:center;font-family:Rubik,sans-serif;font-weight:700;color:#ffd0c0;text-shadow:2px 2px 0 var(--ink)}#alert>div{height:8px;margin-top:4px;border:2px solid var(--ink);border-radius:6px;background:rgba(0,0,0,.4);overflow:hidden}#alertFill{height:100%;background:linear-gradient(90deg,#ff5a3a,var(--yellow))}
+.extras{flex-basis:100%;border:2px solid var(--ink);border-radius:10px;padding:6px 12px;background:rgba(0,0,0,.18)}.extras summary{cursor:pointer;color:var(--text);font-weight:600}.extras summary span{color:var(--yellow);font-weight:400;font-size:13px;margin-left:6px}
+.extraGrid{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:8px}
 #banner{position:absolute;left:0;right:0;top:26%;text-align:center;font-size:clamp(36px,8vw,72px);color:var(--yellow);text-shadow:4px 4px 0 var(--pink),7px 7px 0 var(--ink);opacity:0}
 #banner.show{animation:ban 1.2s ease-out}
 @keyframes ban{0%{opacity:0;transform:scale(2)}15%{opacity:1;transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:translateY(-20px)}}
@@ -276,14 +278,19 @@ details.about p{margin:6px 0}
     <div class="row">
       <div class="opts">
         <label class="tog"><input type="checkbox" id="music" checked> Music</label>
+        <details class="extras" id="extras"><summary>Extras <span id="extrasOn"></span></summary><div class="extraGrid">
         <label class="tog">Pet <select id="pet"><option value="none">None</option><option value="cat">Cat</option><option value="dog">Dog</option></select></label>
-        <label class="tog" title="Bouncy everything, big chunks, cartoon sounds"><input type="checkbox" id="silly"> Silly physics</label>
-        <label class="tog" title="Indoor rooms only: rain, lightning, thunder, and the power can go out"><input type="checkbox" id="storm"> Thunderstorm</label>
-        <label class="tog" title="Shout into your mic to fill the rage meter. Nothing is recorded or sent."><input type="checkbox" id="mic"> Scream to rage (mic)</label>
         <label class="tog">Holiday
           <select id="season"><option value="auto">Auto</option><option value="halloween">Halloween</option><option value="christmas">Christmas</option><option value="newyear">New Year</option><option value="off">Off</option></select>
         </label>
+        <label class="tog" title="Bouncy everything, big chunks, cartoon sounds"><input type="checkbox" id="silly"> Silly physics</label>
+        <label class="tog" title="Indoor rooms only: rain, lightning, thunder, and the power can go out"><input type="checkbox" id="storm"> Thunderstorm</label>
+        <label class="tog" title="Shout into your mic to fill the rage meter. Nothing is recorded or sent."><input type="checkbox" id="mic"> Scream to rage (mic)</label>
         <label class="tog hidden" id="darkTog"><input type="checkbox" id="dark"> Blackout (flashlight)</label>
+        <label class="tog hidden" id="goldTog"><input type="checkbox" id="goldSkin"> Gold weapons</label>
+        <label class="tog hidden" id="outfitTog">Outfit <select id="outfit"></select></label>
+        <label class="tog hidden" id="discoTog"><input type="checkbox" id="disco"> Disco version of this room</label>
+        </div></details>
         <label class="tog" id="qualityRow">Quality
           <select id="quality"><option value="auto">Auto</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
         </label>
@@ -294,6 +301,7 @@ details.about p{margin:6px 0}
         <label>Volume <input type="range" class="vol" data-v="master" min="0" max="100"></label>
         <label>Effects <input type="range" class="vol" data-v="sfx" min="0" max="100"></label>
         <label>Music <input type="range" class="vol" data-v="music" min="0" max="100"></label>
+        <label>Ambience <input type="range" class="vol" data-v="amb" min="0" max="100"></label>
       </div>
     <div class="vols sets">
         <label>Mouse speed <input type="range" class="set" data-k="sens" min="0.3" max="2.5" step="0.05"></label>
@@ -324,6 +332,7 @@ details.about p{margin:6px 0}
         <label>Volume <input type="range" class="vol" data-v="master" min="0" max="100"></label>
         <label>Effects <input type="range" class="vol" data-v="sfx" min="0" max="100"></label>
         <label>Music <input type="range" class="vol" data-v="music" min="0" max="100"></label>
+        <label>Ambience <input type="range" class="vol" data-v="amb" min="0" max="100"></label>
       </div>
     <div class="row" style="justify-content:center">
       <button class="btn" id="resume">Keep smashing</button>
@@ -360,6 +369,6 @@ details.about p{margin:6px 0}
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=27"></script>
+<script type="module" src="src/main.js?v=28"></script>
 </body>
 </html>

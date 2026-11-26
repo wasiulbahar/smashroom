@@ -31,6 +31,8 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Toys.** A ball cannon that fires heavy iron balls, plus ramps (8) and trampolines (9) you can drop anywhere. Walk onto a trampoline and you bounce too.
 - **Breakable floors.** Ground pound the same spot three times and you crash through into a basement full of old stuff. A ladder takes you back up.
 - **Thunderstorms.** Tick Thunderstorm in the lobby: rain, lightning, real thunder, and now and then the power cuts out and you carry on by flashlight.
+- **Progress and rewards.** Clearing all three side jobs in a room ticks it off in the lobby and unlocks a disco version of that room. Clear 5 rooms for gold weapon skins; side jobs unlock outfits for your character (10, 25, 40 and 60 jobs).
+- **Extras panel.** Pet, holiday, silly physics, thunderstorm, scream to rage, blackout and your rewards live under one Extras panel in the lobby. There is an ambience volume slider next to music and effects.
 - **Every room has a story.** Each one opens with a line of context, gives you three side jobs (with a bonus for each, and a bigger one for clearing all three), throws one timed event at you partway through, and has something only it has. A few examples:
   - Classic: a punching bag that counts your hits, and a lights-out frenzy with double points.
   - Haunted house: cursed dolls, a piano, and a ghost light that drifts toward you until you swing at it.

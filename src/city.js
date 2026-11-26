@@ -3,7 +3,7 @@
 // the third-person view and the mini-map; the sky, sun, street lights and rain run here as a room update.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { canvasTex } from './style.js?v=27';
+import { canvasTex } from './style.js?v=28';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);

@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=27';
-import { SCENES } from './scenes.js?v=27';
-import { createItems, DEFS } from './items.js?v=27';
-import * as A from './audio.js?v=27';
-import { preloadItemModels } from './models.js?v=27';
-import { createClayFigure, preloadClayBody } from './clay.js?v=27';
-import { createReplay } from './replay.js?v=27';
-import { clayBody } from './clay.js?v=27';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=28';
+import { SCENES } from './scenes.js?v=28';
+import { createItems, DEFS } from './items.js?v=28';
+import * as A from './audio.js?v=28';
+import { preloadItemModels } from './models.js?v=28';
+import { createClayFigure, preloadClayBody } from './clay.js?v=28';
+import { createReplay } from './replay.js?v=28';
+import { clayBody } from './clay.js?v=28';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const $ = id => document.getElementById(id);
@@ -23,7 +23,7 @@ const gpu = detectGPU(renderer);
 // ---------- saved progress (this browser only)
 const SAVE_KEY = 'smashroom.v2';
 const save = (() => { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { return {}; } })();
-save.points ??= 0; save.smashed ??= 0; save.best ??= {}; save.vol ??= { master: 1, music: 1, sfx: 1 }; save.set ??= {}; save.set = { sens: 1, invert: false, fov: 72, shake: true, ...save.set }; save.stats ??= {}; save.ach ??= {}; save.words ??= ''; save.view ??= 'fp';
+save.points ??= 0; save.smashed ??= 0; save.best ??= {}; save.vol ??= { master: 1, music: 1, sfx: 1 }; save.vol.amb ??= 1; save.done ??= {}; save.set ??= {}; save.set = { sens: 1, invert: false, fov: 72, shake: true, ...save.set }; save.stats ??= {}; save.ach ??= {}; save.words ??= ''; save.view ??= 'fp';
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
 
 const WEAPONS = {
@@ -81,6 +81,9 @@ function build() {
   I.photo = photoTex;
   room = def.build({ scene, world, S, items: I });
   world.gravity.set(0, room.gravity ?? -9.82, 0); // the space station floats
+  { // light budget: below High quality only the strongest few point and spot lights stay on (each one costs on every pixel)
+    const cap = S.quality === 'high' ? 99 : S.quality === 'medium' ? 8 : 4, ls = []; scene.traverse(o => { if (o.isPointLight || o.isSpotLight) ls.push(o); });
+    ls.sort((a, b) => b.intensity - a.intensity).slice(cap).forEach(l => { l.visible = false; }); }
   figure = room.clay ? createClayFigure({ scene, world, S, items: I, ...room.clay, onLoose: c => I.chunks.push(c) }) : null;
   S.setup(scene, camera, def);
   pivot = new THREE.Group(); camera.add(pivot); equip(opts.weapon);
@@ -145,7 +148,22 @@ function buildWeapon(key) {
   g.traverse(m => { if (m.isMesh) m.castShadow = false; });
   return S.outline(g, key === 'hands' ? 1.04 : 1.08);
 }
-function equip(key) { toolStop(); if (weaponMesh) pivot.remove(weaponMesh); opts.weapon = key; W = WEAPONS[key]; weaponMesh = buildWeapon(key); pivot.add(weaponMesh); }
+// ---------- Rewards for clearing rooms and side jobs
+const OUTFITS = { classic: ['Classic', 0xffffff, 0], red: ['Red tracksuit', 0xff8a7a, 10], hivis: ['Hi-vis', 0xdfff5a, 25], night: ['Night shift', 0x8a9ad8, 40], gold: ['All gold', 0xffd070, 60] };
+const roomsDone = () => Object.keys(save.done || {}).filter(k => SCENES[k]).length;
+const goldOk = () => roomsDone() >= 5;
+function rewardText() { const r = roomsDone(), j = save.stats.jobs || 0, next = Object.values(OUTFITS).find(o => o[2] > j);
+  return `Rooms cleared ${r}/${Object.keys(STORIES).length} · Side jobs ${j}` + (r < 5 ? ` · Gold weapons at 5 rooms` : '') + (next ? ` · Next outfit at ${next[2]} jobs` : ''); }
+function goldify(g) { g.traverse(m => { if (m.isMesh && !m.userData.ol && !m.userData.hl) m.material = S.mat('metal', 0xd4a530); }); }
+function startDisco() {
+  if (!opts.disco || !save.done[opts.scene] || room.open) return; scene.traverse(o => { if (o.isLight && !o.userData.keep) o.intensity *= o.isHemisphereLight ? 0.35 : 0.25; });
+  const [x1, x2, z1, z2] = room.bounds, c = new THREE.Vector3((x1 + x2) / 2, 2.8, (z1 + z2) / 2), ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 1), S.mat('metal', 0xe8e8f0)); ball.position.copy(c); scene.add(ball);
+  const spots = [0xff3a8a, 0x3ad8ff, 0xffd03a, 0x8a4aff].map((col, i) => { const L = new THREE.SpotLight(col, S.realistic ? 120 : 45, 20, 0.45, 0.4, 1); L.userData.keep = true; L.position.copy(c); scene.add(L, L.target); return L; });
+  disco = { ball, spots, c };
+}
+let disco = null;
+function updateDisco(now) { if (!disco) return; disco.ball.rotation.y = now * 0.0006; disco.spots.forEach((L, i) => { const a = now * 0.0009 + i * Math.PI / 2; L.target.position.set(disco.c.x + Math.cos(a) * 3.5, 0, disco.c.z + Math.sin(a * 1.3) * 3.5); }); }
+function equip(key) { toolStop(); if (weaponMesh) pivot.remove(weaponMesh); opts.weapon = key; W = WEAPONS[key]; weaponMesh = buildWeapon(key); if (opts.goldSkin && goldOk()) goldify(weaponMesh); pivot.add(weaponMesh); }
 
 // ---------- game state
 let state = 'menu', paused = false, timeLeft = SESSION, score = 0, smashed = 0, combo = 0, bestCombo = 0, comboTimer = 0, throws = 0;
@@ -404,7 +422,7 @@ function hitItem(it, dir) {
   if (it.key === 'vending' && Math.random() < 0.7) { const q = it.body.position, n = new THREE.Vector3(0, 0, 1).applyQuaternion(it.mesh.quaternion); const can = I.add('bottle', q.x + n.x * 0.6, 0.05, q.z + n.z * 0.6, rand(0, 6), { color: pick([0xc8202a, 0x2a6ad8, 0x2a9a4a, 0xe8c020]) }); can.body.velocity.set(n.x * 2, 1, n.z * 2); popup('Free drink!', { x: q.x, y: q.y + 1, z: q.z }, 'small'); emit('vend'); } // the vending machine coughs up a can
   if (atk === 'held') it.byHeld = true;
   emit('hit');
-  kick = Math.min(0.08, kick + (heavyNow ? 0.03 : 0.015)); vibrate(20);
+  kick = Math.min(0.08, kick + (heavyNow ? 0.03 : 0.015)); vibrate(20); if (opts.goldSkin && goldOk()) I.sparks_(it.body.position, 6, 0xffd060);
   const h = itemHitPoint(it), at = h ? h.point : p, lv = 0.8 + chargeK * 0.5, hw = Math.min(1.2, Math.max(0.15, it.def.size * 1.4 + (CW.power || 1) * 0.12 + (heavyNow ? 0.3 : 0))); // how hard the hit should feel: big things and heavy blows land harder
   if (it.def.hp === Infinity) { // metal: it rings, dents and flies, but never breaks
     A.at(at, () => { A.SFX.metal(lv, Math.max(0.7, 1.3 - it.def.size)); if (opts.weapon === 'pan') A.SFX.metal(0.8); });
@@ -1314,7 +1332,7 @@ function loadHuman() { // CC0 animated human by Quaternius; the clay mannequin s
 function humanPlay(name, fade = 0.2) { const a = human.acts[name]; if (!a || human.cur === a) return; a.reset().play(); if (human.cur) human.cur.crossFadeTo(a, fade, false); human.cur = a; }
 function ensureAvatar() {
   if (human.src) { // dress it for this look, hand it the weapon
-    if (avatar !== human.src) { avatar?.removeFromParent(); avatar = human.src; scene.add(avatar); avatar.traverse(m => { if (m.isMesh) m.material = S.mat('plastic', 0xffffff, { map: m.userData.tex }); }); human.weapon = null; }
+    if (avatar !== human.src) { avatar?.removeFromParent(); avatar = human.src; scene.add(avatar); avatar.traverse(m => { if (m.isMesh) m.material = S.mat('plastic', (OUTFITS[opts.outfit] || OUTFITS.classic)[1], { map: m.userData.tex }); }); human.weapon = null; }
     if (human.weapon !== opts.weapon) { const hand = avatar.getObjectByName('RightHand'); hand?.children.filter(c => c.userData.held).forEach(c => hand.remove(c));
       if (hand && !W.hands) { avatar.updateMatrixWorld(true); const ws = hand.getWorldScale(new THREE.Vector3()).x || 1; const wm = buildWeapon(opts.weapon); wm.userData.held = true; wm.scale.setScalar(1 / ws); wm.rotation.set(Math.PI / 2, 0, 0); wm.position.set(0, 0.08 / ws, 0.02 / ws); hand.add(wm); } human.weapon = opts.weapon; } // the bones carry their own scale: size the weapon from the hand's real size
     return avatar;
@@ -1840,7 +1858,7 @@ function storyEmit(ev, d) {
 }
 function failJob(id) { const j = story?.jobs.find(q => q.id === id); if (j && !j.done && !j.failed) { j.failed = true; toast('Side job failed: ' + j.text); renderJobs(); } }
 function passJob(id) { const j = story?.jobs.find(q => q.id === id); if (j && !j.done && !j.failed) { j.n = j.need; jobDone(j); checkJobs(); } }
-function checkJobs() { renderJobs(); if (!story.all && story.jobs.every(j => j.done)) { story.all = true; setTimeout(() => { if (state === 'play') { banner('Room complete!'); addScore(300, fwdP(), 'big'); addStat('roomsDone'); A.SFX.unlock(); } }, 1400); } }
+function checkJobs() { renderJobs(); if (!story.all && story.jobs.every(j => j.done)) { story.all = true; setTimeout(() => { if (state === 'play') { banner('Room complete!'); addScore(300, fwdP(), 'big'); addStat('roomsDone'); A.SFX.unlock(); if (!save.done[opts.scene]) { save.done[opts.scene] = true; persist(); toast(`Unlocked: the disco version of ${SCENES[opts.scene].name}`); } } }, 1400); } }
 function updateStory(dt, now) {
   if (!story || state !== 'play' || paused) return; const D = story.def;
   try { D.update?.(dt, now, story.d); } catch (e) { console.warn('story update', e); }
@@ -1851,6 +1869,11 @@ function updateStory(dt, now) {
 }
 function endStory() { if (story?.ev && !story.ev.over) { story.ev.over = true; try { story.def.event.end?.(story.ev, true); } catch (e) {} } story?.def.stop?.(story.d); story = null; strikes = []; alertBar(null); $('jobs').classList.add('hidden'); $('intro').classList.add('hidden'); if (dimmed) dimLights(1); }
 const hiddenSpot = () => { const [x1, x2, z1, z2] = room.bounds; for (let i = 0; i < 30; i++) { const x = Math.random() < 0.5 ? x1 + 0.2 : x2 - 0.2, z = rand(z1 + 0.3, z2 - 0.3); if (!room.obstacles.some(([a, b, c, d]) => x > a - 0.3 && x < b + 0.3 && z > c - 0.3 && z < d + 0.3) && Math.hypot(x - room.start.x, z - room.start.z) > 3) return { x, z }; } return freeSpot(2, 0.4); };
+function ensure(key, n) { // top a room up so a side job can always be finished
+  let have = I.list.filter(i => !i.dead && i.key === key).length; const slots = room.slots.filter(s => s.k === 'table' || s.k === 'shelf').sort(() => Math.random() - 0.5);
+  for (const s of slots) { if (have >= n) break; if (I.list.some(i => !i.dead && Math.hypot(i.body.position.x - s.x, i.body.position.z - s.z) < 0.3 && Math.abs(i.body.position.y - s.y) < 0.4)) continue; I.add(key, s.x, s.y, s.z, rand(0, 6)).body.sleep(); have++; }
+  while (have < n) { const f = freeSpot(1.5, 0.4); if (!f) break; I.add(key, f.x, 0, f.z, rand(0, 6)).body.sleep(); have++; }
+}
 const timeLeftIn = (E, secs, now) => Math.max(0, secs - (now - E.t0) / 1000);
 
 const STORIES = {
@@ -1903,8 +1926,8 @@ const STORIES = {
       { id: 'piano', text: 'Play the piano', ev: 'piano', need: 3 },
       { id: 'clocks', text: 'Stop the clocks: break 2', ev: 'break', need: 2, test: d => d.key === 'clock' }],
     setup(d) {
-      for (let i = 0; i < 3; i++) { const s = freeSpot(2, 0.4); if (s) I.add('doll', s.x, 0, s.z, rand(0, 6)).body.sleep(); }
-      for (let i = 0; i < 2; i++) { const s = freeSpot(2, 0.4); if (s) I.add('clock', s.x, 0, s.z, rand(0, 6)).body.sleep(); }
+      ensure('doll', 6);
+      ensure('clock', 3);
       const s = wallSpot(1.5, 0.6); if (!s) return; const piano = fixture(1.5, 1.1, 0.6, 0x1a1210, 'wood', s); const keys = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 0.18), S.mat('plastic', 0xf2eee4)); keys.position.set(0, 0.2, 0.36); piano.add(keys);
       const NOTES = [[110, 130.8, 155.6], [116.5, 138.6, 164.8], [103.8, 123.5, 146.8], [98, 116.5, 138.6]]; // minor, unsettling clusters
       strikes.push({ pos: new THREE.Vector3(s.x, 0.9, s.z), r: 0.7, hit() { const ch = pick(NOTES); A.at(this.pos, () => ch.forEach((f, i) => A.tone(f * (CW.power > 2 ? 0.5 : 1), 2.2, 0.08, i * 0.02))); emit('piano'); shake = Math.max(shake, 0.05); } });
@@ -1945,6 +1968,7 @@ const STORIES = {
       { id: 'micro', text: 'Smash the microwave', ev: 'break', need: 1, test: d => d.key === 'microwave' },
       { id: 'glass', text: 'Break 8 glass things', ev: 'break', need: 8, test: d => d.kind === 'glass' }],
     setup(d) { // a gas hob on the counter: hit it to light it, and whatever sits on it catches fire
+      ensure('platestack', 3);
       const sl = room.slots.filter(s => s.k === 'table' && s.y > 0.8 && s.y < 1.0); const s = pick(sl.length ? sl : room.slots); if (!s) return;
       const hob = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.03, 0.45), S.mat('metal', 0x15151a)); hob.position.set(s.x, s.y + 0.015, s.z); scene.add(hob);
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.012, 6, 20), new THREE.MeshBasicMaterial({ color: 0x4a8aff, transparent: true, opacity: 0, toneMapped: false })); ring.rotation.x = Math.PI / 2; ring.position.set(s.x, s.y + 0.04, s.z); scene.add(ring);
@@ -2067,7 +2091,7 @@ Object.assign(STORIES, {
       { id: 'busts', text: 'Break 3 busts', ev: 'break', need: 3, test: d => d.key === 'bust' },
       { id: 'laser', text: 'Trip the laser grid', ev: 'laser', need: 1 }],
     setup(d) { // the jewel on a plinth, ringed by laser beams
-      const s = freeSpot(3, 1.4) || { x: 0, z: 2 }; const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.05, 0.6), S.mat('stone', 0xe8e4dc)); plinth.position.set(s.x, 0.525, s.z); plinth.castShadow = true; scene.add(plinth); S.outline(plinth, 1.02);
+      ensure('bust', 5); const s = freeSpot(3, 1.4) || { x: 0, z: 2 }; const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.05, 0.6), S.mat('stone', 0xe8e4dc)); plinth.position.set(s.x, 0.525, s.z); plinth.castShadow = true; scene.add(plinth); S.outline(plinth, 1.02);
       const b = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(0.3, 0.525, 0.3)), position: new CANNON.Vec3(s.x, 0.525, s.z) }); world.addBody(b); room.statics.push(plinth); room.obstacles.push([s.x - 0.35, s.x + 0.35, s.z - 0.35, s.z + 0.35]);
       I.add('gem', s.x, 1.06, s.z, 0).body.sleep(); const red = new THREE.MeshBasicMaterial({ color: 0xff1a1a, transparent: true, opacity: 0.75, toneMapped: false }), beams = [];
       for (const y of [0.4, 0.9, 1.4]) for (const [dx, dz, w, dd] of [[0, -1.1, 2.2, 0.03], [0, 1.1, 2.2, 0.03], [-1.1, 0, 0.03, 2.2], [1.1, 0, 0.03, 2.2]]) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.03, dd), red); m.position.set(s.x + dx, y, s.z + dz); scene.add(m); beams.push(m); }
@@ -2088,7 +2112,7 @@ Object.assign(STORIES, {
     jobs: [{ id: 'eggs', text: 'Clean-up on aisle 3: smash 6 egg boxes', ev: 'break', need: 6, test: d => d.key === 'eggs' },
       { id: 'bottles', text: 'Break 10 bottles', ev: 'break', need: 10, test: d => d.key === 'bottle' },
       { id: 'till', text: 'Smash a till', ev: 'break', need: 1, test: d => d.key === 'till' }],
-    setup(d) { for (const x of [-4, 0, 4]) I.add('till', x - 0.4, 0.9, 9.2, Math.PI).body.sleep();
+    setup(d) { ensure('bottle', 14); for (const x of [-4, 0, 4]) I.add('till', x - 0.4, 0.9, 9.2, Math.PI).body.sleep();
       for (const t of I.list.filter(i => i.key === 'trolley' && !i.dead)) t.body.addEventListener('collide', e => { const v = t.body.velocity.length(); if (v < 2.2) return; const it = I.list.find(o => o.body === e.body && !o.dead && o.def.hp !== Infinity); if (it) { setTimeout(() => !it.dead && I.shatter(it, new THREE.Vector3(t.body.velocity.x, 0.3, t.body.velocity.z).normalize(), 3, false), 0); emit('ram'); } }); },
     event: { at: 45, dur: 22, start(E) { banner('"Staff to the tills. We are closing."'); frenzyUntil = performance.now() + 20000; A.SFX.unlock(); toast('Closing-time rush: double points');
         const [x1, x2, , z2] = room.bounds, sh = new THREE.Mesh(new THREE.PlaneGeometry(x2 - x1 + 1, 3.6), S.mat('metal', 0x8a8f96)); sh.position.set((x1 + x2) / 2, 5.6, z2 + 0.38); sh.rotation.y = Math.PI; scene.add(sh); E.d.sh = sh; },
@@ -2216,7 +2240,7 @@ Object.assign(STORIES, {
   beach: {
     intro: 'A beach shack at sunset, nobody around for miles. Build a sandcastle. Then stomp it.',
     jobs: [{ id: 'build', text: 'Build a sandcastle (E on the marked sand, 3 times)', ev: 'build', need: 3 }, { id: 'stomp', text: 'Stomp the sandcastle', ev: 'castle', need: 1 }, { id: 'bottles', text: 'Smash 5 bottles', ev: 'break', need: 5, test: d => d.key === 'bottle' }],
-    setup(d) { const s = freeSpot(2.5, 1) || { x: 1.5, z: 1.5 }; const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.62, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(s.x, 0.02, s.z); scene.add(ring);
+    setup(d) { ensure('bottle', 7); const s = freeSpot(2.5, 1) || { x: 1.5, z: 1.5 }; const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.62, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(s.x, 0.02, s.z); scene.add(ring);
       d.castle = { s, stage: 0, parts: [], ring }; const ball = I.add('beachball', s.x + 1.5, 0, s.z + 0.5, 0); ball.body.sleep();
       strikes.push({ pos: new THREE.Vector3(s.x, 0.3, s.z), r: 0.5, hit() { if (d.castle.stage >= 3) stompCastle(d); } }); },
     use(d) { const C = d.castle; if (!C || Math.hypot(player.x - C.s.x, player.z - C.s.z) > 1.6 || C.stage >= 3) return false; const sand = S.mat('stone', 0xe8d4a0);
@@ -2288,7 +2312,7 @@ function stayInside() { // keep the player in the room, or in any space opened u
   player.x = best[0]; player.z = best[1];
 }
 function updateRooms(dt, now) {
-  updateBoss(now); updateMachines(dt, now); updateFire(dt, now); updateTramps(now); updateFloor(dt, now); updateStorm(now); updateHot(now); updateDraw(); updateSprinklers(dt, now); updateCityAlarms(now); updatePet(dt, now); updateZen(dt, now); updateStory(dt, now); updateFireworks(dt, now); updateMic(dt, now);
+  updateBoss(now); updateMachines(dt, now); updateFire(dt, now); updateTramps(now); updateFloor(dt, now); updateStorm(now); updateHot(now); updateDraw(); updateSprinklers(dt, now); updateCityAlarms(now); updatePet(dt, now); updateZen(dt, now); updateStory(dt, now); updateDisco(now); updateFireworks(dt, now); updateMic(dt, now);
   if (museumAlarm) { museumAlarm.light.intensity = Math.floor(now / 300) % 2 ? (S.realistic ? 60 : 25) : 0; if (now > museumAlarm.until) { museumAlarm.sound?.stop(); museumAlarm.light.intensity = 0; museumAlarm.done = true; } }
   for (const B of breaches) {
     if (now > B.until) { if (B.sound) { B.sound.stop(); B.sound = null; banner('Breach sealed'); } continue; }
@@ -2341,7 +2365,7 @@ async function startSession() {
   if (!save.tut || tutAgain) { tutAgain = false; startTut(); }
   for (const id of ['modeScreen', 'lobby', 'end', 'pause', 'achScreen']) $(id).classList.add('hidden');
   $('hud').classList.remove('hidden'); if (isTouch) $('touch').classList.remove('hidden');
-  A.setMusicStyle(opts.gm === 'zen' || room.calm ? 'calm' : 'heavy'); A.setMusic(opts.music, true); A.startAmbience(room.amb); startStorm(); startStory();
+  A.setMusicStyle(opts.gm === 'zen' || room.calm ? 'calm' : 'heavy'); A.setMusic(opts.music, true); A.startAmbience(room.amb); startStorm(); startStory(); disco = null; startDisco();
   banner({ classic: 'Go!', zen: 'Relax', attack: 'Clear the room!', targets: 'Hit the targets!', build: 'Build it, then break it' }[opts.gm]);
   $('palette').classList.toggle('hidden', opts.gm !== 'build'); if (W.tool === 'broom') spawnBin();
   if (!isTouch) lockMouse();
@@ -2381,8 +2405,13 @@ function playReplay() {
   replay.play(c, `+${replay.best.peak} in 1.5 seconds`).then(() => { b.disabled = !replay.clip; b.textContent = replay.clip ? 'Save clip' : 'Clip not available'; });
 }
 function lockMouse() { try { const r = $('c').requestPointerLock?.(); r && r.catch && r.catch(() => {}); } catch (e) {} }
+let pausedAt = 0;
+function shiftClocks(dt) { // timed events run on game time: a pause shouldn't eat into a countdown or set one off
+  if (frenzyUntil) frenzyUntil += dt; if (!story) return; story.evAt += dt; story.t0 += dt; const E = story.ev; if (!E) return; const t0 = E.t0; E.t0 += dt;
+  for (const [k, v] of Object.entries(E.d)) if (typeof v === 'number' && v > t0 - 1000 && v < pausedAt + 120000) E.d[k] = v + dt;
+  if (E.d.B?.until) E.d.B.until += dt; }
 function setPaused(p) {
-  if (state !== 'play') return; paused = p; mouseHeld = false; charging = false;
+  if (state !== 'play') return; if (p && !paused) pausedAt = performance.now(); if (!p && paused && pausedAt) shiftClocks(performance.now() - pausedAt); paused = p; mouseHeld = false; charging = false;
   $('pause').classList.toggle('hidden', !p); p ? A.suspend() : A.resume();
 }
 function toLobby() {
@@ -2402,15 +2431,20 @@ function renderLobby() {
   $('gmodes').innerHTML = Object.entries(GMODES).map(([k, m]) => card(k === opts.gm, `<b>${m.name}</b><small>${m.desc}</small>`, `data-g="${k}"`)).join('');
   $('scenes').innerHTML = Object.entries(SCENES).map(([k, s]) => { const b = save.best[bestKey(k)]?.[0];
     const best = b ? (opts.gm === 'attack' ? `Best: ${fmtTime(b.time)}` : `Best: ${b.score.toLocaleString()}`) : '';
-    return card(k === opts.scene, `<b>${s.name}</b><small>${s.desc}</small>${best ? `<small class="best">${best}</small>` : ''}`, `data-s="${k}"`); }).join('');
+    return card(k === opts.scene, `<b>${save.done[k] ? '✓ ' : ''}${s.name}</b><small>${s.desc}</small>${best ? `<small class="best">${best}</small>` : ''}`, `data-s="${k}"`); }).join('');
   $('weapons').innerHTML = Object.entries(WEAPONS).map(([k, w]) => { const ok = unlocked(k);
     return card(k === opts.weapon, `<b>${ok ? '' : '🔒 '}${w.name}</b><small>${ok ? w.desc : 'Unlock: ' + unlockText(w.unlock)}</small>`, `data-w="${k}"`, !ok); }).join('');
   $('qualityRow').classList.toggle('hidden', opts.mode !== 'realistic');
   $('quality').value = opts.quality;
   $('music').checked = opts.music;
   $('darkTog').classList.toggle('hidden', !save.ach.lamps);
+  $('goldTog').classList.toggle('hidden', !goldOk()); $('goldSkin').checked = !!opts.goldSkin;
+  const jobs = save.stats.jobs || 0, outs = Object.entries(OUTFITS).filter(([, o]) => jobs >= o[2]); $('outfitTog').classList.toggle('hidden', outs.length < 2);
+  $('outfit').innerHTML = outs.map(([k, o]) => `<option value="${k}"${k === opts.outfit ? ' selected' : ''}>${o[0]}</option>`).join('');
+  $('discoTog').classList.toggle('hidden', !save.done[opts.scene]); $('disco').checked = !!opts.disco;
+  const on = [opts.pet && opts.pet !== 'none' && 'pet', opts.silly && 'silly', opts.storm && 'storm', opts.mic && 'mic', opts.dark && 'blackout', opts.goldSkin && goldOk() && 'gold', opts.disco && save.done[opts.scene] && 'disco'].filter(Boolean); $('extrasOn').textContent = on.length ? '(' + on.join(', ') + ')' : '';
   $('achBtn').textContent = `Achievements ${ACH.filter(a => save.ach[a.id]).length}/${ACH.length}`;
-  $('lifetime').textContent = `Lifetime: ${save.points.toLocaleString()} points · ${save.smashed.toLocaleString()} things smashed`;
+  $('lifetime').textContent = `Lifetime: ${save.points.toLocaleString()} points · ${save.smashed.toLocaleString()} things smashed · ${rewardText()}`;
   $('photoName').textContent = photoTex ? 'Photo added. It shows up on cut-outs and picture frames.' : 'Optional. Stays on your device and is never uploaded.';
   $('photoClear').classList.toggle('hidden', !photoTex);
 }
@@ -2453,7 +2487,11 @@ $('saveClip').onclick = () => replay.download();
 $('quality').onchange = e => { opts.quality = e.target.value; build(); };
 $('mic').onchange = e => { opts.mic = e.target.checked; };
 $('storm').onchange = e => { opts.storm = e.target.checked; };
-$('silly').onchange = e => { opts.silly = e.target.checked; };
+$('silly').onchange = e => { opts.silly = e.target.checked; renderLobby(); };
+$('goldSkin').onchange = e => { opts.goldSkin = e.target.checked; equip(opts.weapon); renderLobby(); };
+$('outfit').onchange = e => { opts.outfit = e.target.value; };
+$('extras').addEventListener('change', () => setTimeout(renderLobby, 0)); // keep the Extras summary line current
+$('disco').onchange = e => { opts.disco = e.target.checked; renderLobby(); };
 $('pet').onchange = e => { opts.pet = e.target.value; };
 $('season').onchange = e => { opts.season = e.target.value; build(); };
 $('music').onchange = e => { opts.music = e.target.checked; A.setMusic(opts.music, state === 'play'); };
