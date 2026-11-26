@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=18';
-import { SCENES } from './scenes.js?v=18';
-import { createItems, DEFS } from './items.js?v=18';
-import * as A from './audio.js?v=18';
-import { preloadItemModels } from './models.js?v=18';
-import { createClayFigure, preloadClayBody } from './clay.js?v=18';
-import { createReplay } from './replay.js?v=18';
-import { clayBody } from './clay.js?v=18';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=19';
+import { SCENES } from './scenes.js?v=19';
+import { createItems, DEFS } from './items.js?v=19';
+import * as A from './audio.js?v=19';
+import { preloadItemModels } from './models.js?v=19';
+import { createClayFigure, preloadClayBody } from './clay.js?v=19';
+import { createReplay } from './replay.js?v=19';
+import { clayBody } from './clay.js?v=19';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const $ = id => document.getElementById(id);
@@ -75,6 +75,7 @@ function build() {
   I = createItems({ scene, world, S, onBreak, onClink });
   I.photo = photoTex;
   room = def.build({ scene, world, S, items: I });
+  world.gravity.set(0, room.gravity ?? -9.82, 0); // the space station floats
   figure = room.clay ? createClayFigure({ scene, world, S, items: I, ...room.clay, onLoose: c => I.chunks.push(c) }) : null;
   S.setup(scene, camera, def);
   pivot = new THREE.Group(); camera.add(pivot); equip(opts.weapon);
@@ -84,7 +85,7 @@ function build() {
   spawnPhotos();
   boomLight = new THREE.PointLight(0xffa040, 0, 12, 2); scene.add(boomLight); fx = [];
   applyBlackout();
-  held = null; hlTarget = null; hlMeshes = []; charging = false; swingT = -1; marks = []; puffs = []; smokers = []; recoil = 0; swingHold = 0; loose = []; wallHits = []; pipes.forEach(P => P.sound?.stop()); pipes = []; resetHeat(); resetTools(); setupOpenWorld();
+  held = null; hlTarget = null; hlMeshes = []; charging = false; swingT = -1; marks = []; puffs = []; smokers = []; recoil = 0; swingHold = 0; loose = []; wallHits = []; pipes.forEach(P => P.sound?.stop()); pipes = []; resetHeat(); resetTools(); setupOpenWorld(); museumAlarm?.sound?.stop(); museumAlarm = null; breaches.forEach(b => b.sound?.stop()); breaches = [];
 }
 const batchSize = () => room.batch ? (S.quality === 'low' ? 40 : room.batch) : Math.min(S.quality === 'low' ? 24 : 36, Math.max(16, Math.ceil(room.slots.length * 0.5))); // bigger rooms hold more
 function spawnPhotos() {
@@ -218,6 +219,8 @@ function onBreak(it, fromHit) {
   smashed++; byKind[d.kind] = (byKind[d.kind] || 0) + 1;
   emit('break', { kind: d.kind, key: it.key, thrown: !!it.thrown, held: !!it.byHeld, size: d.size });
   afterBreak(it, { x: p.x, y: p.y, z: p.z });
+  if (room.museum && !museumAlarm) startMuseumAlarm(p);
+  if (room.space && it.key === 'window') hullBreach(it);
   if (room.heat) addHeat(it.group != null ? 5 : it.key === 'window' ? 7 : it.fixed ? 6 : d.size > 0.45 ? 3 : 1.6);
   if (it.group != null) carAlarm(it.group);
   if (it.key === 'hydrant') burstPipe(new THREE.Vector3(p.x, p.y + 0.2, p.z), new THREE.Vector3(0, 1, 0), true);
@@ -535,7 +538,7 @@ const ACH = [
   ['collapse', 'Bring the house down', 'Wreck 5 shelves or tables', 'collapses', 5], ['lamps', 'Lights out', 'Smash 10 lights', 'lamps', 10],
   ['holes', 'Wall puncher', 'Smash 5 holes in walls', 'holes', 5], ['car', 'Car wrecker', 'Break every window and light on the car in one round', 'carclear', 1],
   ['combo', 'Unstoppable', 'Reach a 20x combo', 'combo', 20], ['menace', 'Absolute menace', 'Smash 45 things in one round', 'round', 45],
-  ['missions', 'Mission ace', 'Complete 20 missions', 'missions', 20], ['wanted', 'Most wanted', 'Reach five stars of heat Downtown', 'stars', 5], ['letgo', 'Let it go', 'Smash 25 things with your own words on them', 'words', 25], ['tidy', 'Spotless', 'Sweep a whole room clean', 'spotless', 1], ['builder', 'Architect', 'Set up 20 builds in Build & smash', 'builds', 20], ['wrecker', 'Demolition derby', 'Wreck 5 cars in the open city', 'wrecks', 5],
+  ['missions', 'Mission ace', 'Complete 20 missions', 'missions', 20], ['wanted', 'Most wanted', 'Reach five stars of heat Downtown', 'stars', 5], ['letgo', 'Let it go', 'Smash 25 things with your own words on them', 'words', 25], ['tidy', 'Spotless', 'Sweep a whole room clean', 'spotless', 1], ['builder', 'Architect', 'Set up 20 builds in Build & smash', 'builds', 20], ['wrecker', 'Demolition derby', 'Wreck 5 cars in the open city', 'wrecks', 5], ['strike', 'Strike!', 'Bowl a strike in the bowling alley', 'strikes', 1],
 ].map(([id, name, desc, stat, need]) => ({ id, name, desc, stat, need }));
 const REWARD = { collapse: 'Fire axe', missions: 'Golden bat', lamps: 'Blackout mode (any room, by flashlight)' };
 let achQueue = [], achUntil = 0, persistT = 0;
@@ -768,7 +771,7 @@ function applyWords() {
 }
 
 // ---------- what a break leaves behind: settling debris you can hear, spills that spread, dust that hangs in the air
-const SPILL = { bottle: [0x5a1020, 0xc89030, 0x9cc8e8], beermug: [0xd8a040], wineglass: [0x6a1020], fishbowl: [0x9cc8e8], watercooler: [0x9cc8e8], jug: [0x9cc8e8, 0xf0ece0], mug: [0x4a2a14], cup: [0x9cc8e8, 0x6a3a1a], teapot: [0x8a5a2a], jar: [0xc87a1a, 0x9a2030] };
+const SPILL = { eggs: [0xf0c020], pumpkin: [0xe8862a], bottle: [0x5a1020, 0xc89030, 0x9cc8e8], beermug: [0xd8a040], wineglass: [0x6a1020], fishbowl: [0x9cc8e8], watercooler: [0x9cc8e8], jug: [0x9cc8e8, 0xf0ece0], mug: [0x4a2a14], cup: [0x9cc8e8, 0x6a3a1a], teapot: [0x8a5a2a], jar: [0xc87a1a, 0x9a2030] };
 let spills = [];
 function afterBreak(it, p) {
   const d = it.def, k = d.kind === 'explosive' ? 'metal' : d.kind, n = Math.round(2 + Math.min(1, d.size) * 7);
@@ -1230,6 +1233,43 @@ function drawMinimap(now) {
   g.save(); g.translate(tx(player.x), tz(player.z)); g.rotate(-player.yaw); g.fillStyle = '#ff4f9a'; g.beginPath(); g.moveTo(0, -7); g.lineTo(5, 5); g.lineTo(0, 2); g.lineTo(-5, 5); g.closePath(); g.fill(); g.restore();
 }
 
+// ---------- the new rooms: museum alarm, hull breaches, bowling scores, trolleys
+let museumAlarm = null, breaches = [];
+function startMuseumAlarm(p) {
+  if (state !== 'play') return; const light = new THREE.PointLight(0xff1a1a, 0, 30); light.position.set(0, 3.8, 1); scene.add(light);
+  museumAlarm = { light, sound: A.loopAt('alarm', { x: 0, y: 3.5, z: 1 }, 0.45), until: performance.now() + 20000 };
+  banner('ALARM!'); toast('Security is on the way. Smash what you can'); addScore(100, p, 'big'); emit('alarm');
+}
+function hullBreach(it) { // a broken window drags everything loose toward the hole and out into space
+  const p = it.body.position, at = new THREE.Vector3(p.x, p.y, p.z), n = new THREE.Vector3(0, 0, 1).applyQuaternion(new THREE.Quaternion(it.body.quaternion.x, it.body.quaternion.y, it.body.quaternion.z, it.body.quaternion.w));
+  const sound = A.loopAt('spray', at, 0.6, 0.55); breaches.push({ at, n, until: performance.now() + 5000, sound });
+  banner('HULL BREACH!'); shake = Math.max(shake, 0.4); A.at(at, () => A.SFX.boom()); emit('breach');
+}
+function pushTrolleys(dx, dz, len) { // walking into a trolley rolls it ahead of you
+  if (len < 0.1) return;
+  for (const it of I.list) if (it.key === 'trolley' && !it.dead && !it.held) { const q = it.body.position; if (Math.hypot(q.x - player.x, q.z - player.z) < 0.85) { it.body.wakeUp(); it.body.velocity.x = dx * 4.4 / len; it.body.velocity.z = dz * 4.4 / len; } }
+}
+function updateRooms(dt, now) {
+  if (museumAlarm) { museumAlarm.light.intensity = Math.floor(now / 300) % 2 ? (S.realistic ? 60 : 25) : 0; if (now > museumAlarm.until) { museumAlarm.sound?.stop(); museumAlarm.light.intensity = 0; museumAlarm.done = true; } }
+  for (const B of breaches) {
+    if (now > B.until) { if (B.sound) { B.sound.stop(); B.sound = null; banner('Breach sealed'); } continue; }
+    const pull = (body, k) => { const d = B.at.clone().sub(body.position), L = d.length(); if (L > 9) return; body.wakeUp(); d.normalize().multiplyScalar(k * dt * (1 - L / 10)); body.velocity.x += d.x; body.velocity.y += d.y; body.velocity.z += d.z; };
+    for (const it of I.list) if (!it.dead && !it.fixed && !it.held) { pull(it.body, 22 / Math.sqrt(Math.max(0.3, it.def.mass))); if (it.body.position.distanceTo(B.at) < 0.7) { I.shatter(it, B.n.clone().negate(), 4, false); addScore(5, B.at, 'small'); } }
+    for (const c of [...I.chunks]) { pull(c.body, 26); if (c.body.position.distanceTo(B.at) < 0.6) { world.removeBody(c.body); scene.remove(c.mesh); I.chunks.splice(I.chunks.indexOf(c), 1); } }
+    puff(B.at.clone().addScaledVector(B.n, 0.4), 0xd8e8ff, 1, 0.3, 0, 0.35, 0.6, B.n.clone().multiplyScalar(-4));
+  }
+  if (room.bowling && room.lanes) for (const L of room.lanes) { // after a roll, count what is down, then reset the pins
+    const ballNear = balls.some(b => Math.abs(b.body.position.x - L.x) < 0.7 && b.body.position.z < -8.5);
+    if (ballNear) L.rolled = true;
+    if (!L.rolled) continue; L.wait += dt; if (L.wait < 3.2) continue;
+    const down = L.pins.filter(p => p.dead || new THREE.Vector3(0, 1, 0).applyQuaternion(p.mesh.quaternion).y < 0.8 || p.body.position.y < -0.2).length;
+    const at = { x: L.x, y: 1.2, z: -10.5 };
+    if (down === 10) { banner('STRIKE!'); addScore(300, at, 'big'); A.SFX.unlock(); addStat('strikes'); emit('strike'); } else if (down > 0) { popup(`${down} pins`, at, 'big'); addScore(down * 15, at, 'small'); }
+    room.rack(L); A.at(at, () => A.SFX.wood(0.5, 0.8));
+    balls = balls.filter(b => { const gone = Math.abs(b.body.position.x - L.x) < 0.7 && b.body.position.z < -8.5; if (gone) { world.removeBody(b.body); scene.remove(b.mesh); } return !gone; }); // the ball comes back
+  }
+}
+
 // ---------- blackout: any room in the dark with a flashlight (unlocked by "Lights out")
 function applyBlackout() {
   if (!opts.dark || !save.ach.lamps) return;
@@ -1277,7 +1317,7 @@ function endSession() {
   if ((!attack || cleared) && !['build', 'clean'].includes(opts.gm)) { list.push(entry); list.sort((a, b) => attack ? a.time - b.time : b.score - a.score); save.best[key] = list.slice(0, 5); }
   persist();
   const fresh = Object.keys(WEAPONS).filter(k => unlocked(k) && !before.includes(k));
-  if (siren) { siren.stop(); siren = null; } alarms.forEach(a => a.sound?.stop()); toolStop(); if (driving) exitCar(); cars.forEach(c => { c.alarm?.stop(); c.alarm = null; }); A.setRain(0); $('palette').classList.add('hidden');
+  if (siren) { siren.stop(); siren = null; } alarms.forEach(a => a.sound?.stop()); toolStop(); if (driving) exitCar(); museumAlarm?.sound?.stop(); breaches.forEach(b => { b.sound?.stop(); b.sound = null; }); cars.forEach(c => { c.alarm?.stop(); c.alarm = null; }); A.setRain(0); $('palette').classList.add('hidden');
   $('cleanBtn').classList.toggle('hidden', opts.gm === 'clean' || I.chunks.length < 12);
   $('rating').textContent = opts.gm === 'clean' ? (I.chunks.length === 0 ? 'Spotless. Feel better?' : `Swept ${swept} pieces`) : busted ? 'Busted! The cops got you' : attack ? (cleared ? `Cleared in ${fmtTime(elapsed)}` : 'Room not cleared')
     : opts.gm === 'zen' ? 'Feeling better?' : opts.gm === 'targets' ? `${targetsHit} targets hit`
@@ -1338,7 +1378,7 @@ document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
   opts.mode = b.dataset.mode; $('modeScreen').classList.add('hidden'); renderLobby(); $('lobby').classList.remove('hidden'); build();
   if (opts.mode === 'realistic') modelsReady = modelsReady || preloadItemModels().then(() => { if (state === 'menu' && opts.mode === 'realistic') build(); });
 });
-$('scenes').onclick = e => { const b = e.target.closest('.card'); if (!b) return; opts.scene = b.dataset.s; if (opts.scene === 'studio') opts.weapon = 'hands'; if (opts.scene === 'city' && opts.gm === 'classic') opts.gm = 'zen'; renderLobby(); build(); };
+$('scenes').onclick = e => { const b = e.target.closest('.card'); if (!b) return; opts.scene = b.dataset.s; if (opts.scene === 'studio') opts.weapon = 'hands'; if (opts.scene === 'bowling') opts.weapon = 'bowling'; if (opts.scene === 'city' && opts.gm === 'classic') opts.gm = 'zen'; renderLobby(); build(); };
 $('weapons').onclick = e => { const b = e.target.closest('.card'); if (!b || b.classList.contains('locked')) return; opts.weapon = b.dataset.w; renderLobby(); equip(opts.weapon); };
 $('words').value = save.words;
 $('words').oninput = () => { save.words = $('words').value.slice(0, 120); persist(); };
@@ -1458,7 +1498,7 @@ function updatePlayer(dt) {
       player.x += push[0]; player.z += push[1];
     }
   }
-  pushOutOfCars();
+  pushOutOfCars(); pushTrolleys(mx * c + mz * s, -mx * s + mz * c, len);
   if (len > 0.1) {
     player.bob += dt * 9;
     const ph = Math.floor(player.bob / Math.PI);
@@ -1505,7 +1545,7 @@ function frame(now) {
     if (!tut) timeLeft -= rdt; // the clock waits while you learn
     if (driving) updateDriving(rdt); else updatePlayer(rdt);
     updateCars(rdt, now); if (room.follow) { room.follow.x = player.x; room.follow.z = player.z; A.setRain(room.day ? room.day.rain : 0); }
-    updateTut(); updateMission(now); updateLamps(now); updatePipes(dt, now); updateHeat(rdt, now); updateTools(rdt, now); updateSpills(rdt);
+    updateTut(); updateMission(now); updateLamps(now); updatePipes(dt, now); updateHeat(rdt, now); updateTools(rdt, now); updateSpills(rdt); updateRooms(rdt, now);
     if (mouseHeld && swingT < 0) startSwing();
     if (swingT >= 0) {
       // holding the button pauses a weapon swing at the top to wind up a heavy hit
@@ -1532,7 +1572,7 @@ function frame(now) {
     else if (!rageUntil) rageMeter = Math.max(0, rageMeter - rdt * 3);
     if (!['attack', 'build', 'clean'].includes(opts.gm) && !restocking && I.list.filter(i => !i.dead && !i.fixed).length <= 2) {
       restocking = true; banner('Restock!'); A.SFX.restock();
-      setTimeout(() => { if (state === 'play') { I.batch(room.pool, room.slots, batchSize()); if (Math.random() < 0.5) I.pyramid(room.slots); spawnPhotos(); applyWords(); } restocking = false; }, 700);
+      setTimeout(() => { if (state === 'play') { if (room.restock) room.restock(); I.batch(room.pool, room.slots, batchSize()); if (Math.random() < 0.5) I.pyramid(room.slots); spawnPhotos(); applyWords(); } restocking = false; }, 700);
     }
     if (timeLeft <= 0) endSession();
     // automatic quality: step down if it runs slow

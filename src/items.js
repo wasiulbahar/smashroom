@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=18';
-import { itemModel, fitInto } from './models.js?v=18';
+import { canvasTex } from './style.js?v=19';
+import { itemModel, fitInto } from './models.js?v=19';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -212,6 +212,38 @@ export const DEFS = {
       for (const [x, z] of [[-0.47, -0.47], [0.47, -0.47], [-0.47, 0.47], [0.47, 0.47]]) g.add(m(bx(0.06, 2.1, 0.06), red, x, 0, z));
       for (const [x, z, ry] of [[0, -0.47, 0], [-0.47, 0, Math.PI / 2], [0.47, 0, Math.PI / 2], [0, 0.47, 0]]) g.add(m(bx(0.86, 1.7, 0.012), M('glass', c), x, 0.05, z, 0, ry));
       g.add(m(bx(0.3, 0.4, 0.12), M('metal', 0x2a2a30), 0, 0.2, -0.38)); return { mesh: g, shape: boxS(0.5, 1.15, 0.5), halfH: 1.15 }; } },
+  // museum: marble busts on pedestals
+  bust: { kind: 'stone', hp: 2, pts: 60, mass: 14, bv: 5.5, size: 0.45, spots: ['shelf'], colors: [0xf2eee8, 0xe8e0d4, 0xd8d0c4],
+    make: (M, c) => { const s = M('stone', c); return { mesh: grp(m(bx(0.28, 0.1, 0.26), s, 0, -0.28), m(bx(0.44, 0.26, 0.22), s, 0, -0.1), m(cyl(0.055, 0.07, 0.12, 16), s, 0, 0.07),
+      m(new THREE.SphereGeometry(0.105, 20, 16).scale(1, 1.22, 1.08), s, 0, 0.21), m(new THREE.SphereGeometry(0.03, 8, 6), s, 0, 0.19, 0.11)), shape: boxS(0.22, 0.33, 0.13), halfH: 0.33 }; } },
+  // supermarket: egg boxes and trolleys
+  eggs: { kind: 'ceramic', hp: 1, pts: 15, mass: 0.4, bv: 2.6, size: 0.28, spots: SMALL, colors: [0xc8c0b0, 0x9ab0c8],
+    make: (M, c) => { const g = grp(m(bx(0.3, 0.06, 0.12), M('plastic', c), 0, -0.01)); for (let i = 0; i < 6; i++) g.add(m(new THREE.SphereGeometry(0.023, 12, 10).scale(1, 1.25, 1), M('ceramic', 0xf6efe0), -0.1 + (i % 3) * 0.1, 0.03, i < 3 ? -0.03 : 0.03)); return { mesh: g, shape: boxS(0.15, 0.05, 0.06), halfH: 0.05 }; } },
+  trolley: { kind: 'metal', hp: Infinity, pts: 5, mass: 12, bv: 99, size: 0.9, spots: [], colors: [0xb8bcc4],
+    make: (M, c) => { const w = M('metal', c), d = M('plastic', 0x1a1a1e), g = grp(m(bx(0.56, 0.02, 0.86), w, 0, 0.12));
+      for (const [x, z, w2, d2] of [[-0.28, 0, 0.02, 0.86], [0.28, 0, 0.02, 0.86], [0, -0.43, 0.56, 0.02], [0, 0.43, 0.56, 0.02]]) g.add(m(bx(w2, 0.44, d2), w, x, 0.34, z));
+      g.add(m(bx(0.6, 0.03, 0.03), M('plastic', 0xc8202a), 0, 0.62, -0.5)); for (const x of [-0.24, 0.24]) for (const z of [-0.36, 0.36]) g.add(m(cyl(0.045, 0.045, 0.03, 12), d, x, -0.43, z, 0, 0, Math.PI / 2));
+      for (const x of [-0.24, 0.24]) g.add(m(bx(0.02, 0.5, 0.02), w, x, -0.18, -0.4)); return { mesh: g, shape: boxS(0.3, 0.48, 0.45), halfH: 0.48 }; } },
+  // tiny town: you are a giant
+  mini: { kind: 'stone', hp: 1, pts: 12, mass: 2, bv: 2.4, size: 0.6, spots: [], colors: [0xc8b8a0, 0xa8b8c8, 0xd8a890, 0xb8c8a8, 0xe8e0d0, 0x8a98a8],
+    make: (M, c, o) => { const w = o.w || 0.3, h = o.h || 0.6, d = o.d || 0.3, tex = miniWindows(); const mat = M('plastic', c, { map: tex });
+      const g = grp(m(bx(w, h, d), mat), m(bx(w + 0.02, 0.025, d + 0.02), M('plastic', 0x5a5650), 0, h / 2 + 0.012)); return { mesh: g, shape: boxS(w / 2, h / 2, d / 2), halfH: h / 2 }; } },
+  toycar: { kind: 'plastic', hp: 1, pts: 8, mass: 0.25, bv: 3, size: 0.12, spots: [], colors: [0xd01820, 0x1a5ad8, 0xf0c020, 0x2ab04a, 0xf0f0f0],
+    make: (M, c) => ({ mesh: grp(m(bx(0.08, 0.035, 0.18), M('paint', c), 0, -0.005), m(bx(0.07, 0.03, 0.08), M('glass', 0x9fb7c4), 0, 0.027, -0.01)), shape: boxS(0.04, 0.03, 0.09), halfH: 0.03 }) },
+  minitree: { kind: 'wood', hp: 1, pts: 4, mass: 0.2, bv: 3, size: 0.2, spots: [], colors: [0x3f6a2a, 0x4f7a34],
+    make: (M, c) => ({ mesh: grp(m(cyl(0.012, 0.014, 0.08, 6), M('wood', 0x5a3a24), 0, -0.07), m(new THREE.ConeGeometry(0.07, 0.17, 8), M('fabric', c), 0, 0.04)), shape: boxS(0.05, 0.11, 0.05), halfH: 0.11 }) },
+  // bowling pins: knocked over, not broken (a bat can still break one)
+  pin: { kind: 'plastic', hp: 6, pts: 10, mass: 1.5, bv: 99, size: 0.38, spots: [], colors: [0xf6f4ee],
+    make: (M, c) => { const prof = [[0, -0.19], [0.03, -0.19], [0.055, -0.1], [0.06, -0.04], [0.045, 0.04], [0.025, 0.09], [0.028, 0.13], [0.035, 0.16], [0.02, 0.19], [0, 0.19]].map(([r, y]) => new THREE.Vector2(r, y));
+      return { mesh: grp(m(new THREE.LatheGeometry(prof, 20), M('plastic', c)), m(cyl(0.029, 0.027, 0.02, 20), M('plastic', 0xc8202a), 0, 0.105), m(cyl(0.027, 0.026, 0.012, 20), M('plastic', 0xc8202a), 0, 0.075)), shape: boxS(0.05, 0.19, 0.05), halfH: 0.19 }; } },
+  // seasonal: pumpkins at Halloween, baubles and presents at Christmas
+  pumpkin: { kind: 'ceramic', hp: 1, pts: 25, mass: 3, bv: 3.4, size: 0.34, spots: ['floor', 'table'], colors: [0xe87a18, 0xd8661a],
+    make: (M, c) => { const g = grp(m(new THREE.SphereGeometry(0.17, 20, 14).scale(1, 0.78, 1), M('ceramic', c)), m(cyl(0.015, 0.02, 0.07, 8), M('wood', 0x4a5a24), 0, 0.15));
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.14), M('photo', 0xffffff, { map: lanternFace() })); face.position.set(0, 0.0, 0.168); g.add(face); return { mesh: g, shape: boxS(0.16, 0.13, 0.16), halfH: 0.13 }; } },
+  bauble: { kind: 'glass', hp: 1, pts: 15, mass: 0.1, bv: 2.8, size: 0.12, spots: SMALL, colors: [0xd01820, 0xd8b030, 0x1a8a4a, 0x2a5ad8, 0xc0c0c8],
+    make: (M, c) => ({ mesh: grp(m(new THREE.SphereGeometry(0.055, 20, 16), M('metal', c)), m(cyl(0.012, 0.012, 0.02, 10), M('metal', 0xd8b030), 0, 0.06)), shape: boxS(0.05, 0.06, 0.05), halfH: 0.06 }) },
+  gift: { kind: 'wood', hp: 1, pts: 20, mass: 0.8, bv: 3.5, size: 0.3, spots: ['floor', 'table'], colors: [0xc8202a, 0x1a6a3a, 0x2a4ab8, 0xd8b030],
+    make: (M, c) => ({ mesh: grp(m(bx(0.26, 0.2, 0.26), M('paint', c)), m(bx(0.04, 0.205, 0.265), M('paint', 0xf0e0a0)), m(bx(0.265, 0.205, 0.04), M('paint', 0xf0e0a0)), m(new THREE.TorusGeometry(0.04, 0.012, 6, 12), M('paint', 0xf0e0a0), 0, 0.11, 0, Math.PI / 2)), shape: boxS(0.13, 0.1, 0.13), halfH: 0.1 }) },
   // the city's gas station: pumps that blow up when they break
   pump: { kind: 'explosive', hp: 2, pts: 80, mass: 0, bv: 99, size: 0.8, spots: [], colors: [0xd8d8dc, 0xc8202a],
     fixed: true, make: (M, c) => ({ mesh: grp(m(bx(0.7, 1.8, 0.5), M('paint', c)), m(bx(0.5, 0.35, 0.02), M('emissive', 0x1a3a2a), 0, 0.45, 0.26), m(bx(0.72, 0.25, 0.52), M('paint', 0xc8202a), 0, 0.82),
@@ -282,14 +314,24 @@ function splitPoly(poly, pl, front, back) {
   if (f.length >= 3) front.push(f); if (b.length >= 3) back.push(b);
 }
 // returns [{ group, centroid (root-local), half, verts }]
-function fracture(root, impact, nPlanes, ds) {
+let _miniWin = null, _face = null;
+function miniWindows() { // a tiny building's facade: rows of little lit and dark windows
+  if (_miniWin) return _miniWin; const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 128, 128); for (let r = 0; r < 8; r++) for (let k = 0; k < 4; k++) { g.fillStyle = Math.random() < 0.3 ? '#ffe6a0' : '#4a5a6a'; g.fillRect(8 + k * 30, 6 + r * 15, 18, 9); }
+  _miniWin = new THREE.CanvasTexture(c); _miniWin.colorSpace = THREE.SRGBColorSpace; _miniWin.wrapS = _miniWin.wrapT = THREE.RepeatWrapping; return _miniWin;
+}
+function lanternFace() { if (_face) return _face; const c = document.createElement('canvas'); c.width = 128; c.height = 96; const g = c.getContext('2d'); g.clearRect(0, 0, 128, 96); g.fillStyle = '#ffd24a';
+  for (const x of [32, 96]) { g.beginPath(); g.moveTo(x - 16, 40); g.lineTo(x, 14); g.lineTo(x + 16, 40); g.fill(); }
+  g.beginPath(); g.moveTo(14, 58); for (let i = 0; i <= 8; i++) g.lineTo(14 + i * 12.5, i % 2 ? 72 : 60); g.lineTo(114, 64); g.quadraticCurveTo(64, 96, 14, 58); g.fill();
+  _face = new THREE.CanvasTexture(c); _face.colorSpace = THREE.SRGBColorSpace; return _face; }
+function fracture(root, impact, nPlanes, ds, cut) { // cut: one exact plane (a katana slice) instead of random ones
   const { parts, count } = collectTris(root); if (!count) return [];
   if (count > 60000) nPlanes = Math.min(nPlanes, 2);
   const box = new THREE.Box3(); for (const part of parts) for (const poly of part.polys) for (const q of poly) box.expandByPoint(new THREE.Vector3(q[0], q[1], q[2]));
   const ext = box.getSize(new THREE.Vector3()).length() / 2, at = impact ? impact.clone().clamp(box.min, box.max) : box.getCenter(new THREE.Vector3());
   let cells = [parts.map(q => q.polys)];
   for (let j = 0; j < nPlanes; j++) {
-    const nrm = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize(), pt = at.clone().add(new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(ext * (j ? 0.3 : 0.06)));
+    const nrm = cut && j === 0 ? cut.clone().normalize() : new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize(), pt = cut && j === 0 ? at.clone() : at.clone().add(new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(ext * (j ? 0.3 : 0.06)));
     const pl = [nrm.x, nrm.y, nrm.z, nrm.dot(pt)], next = [];
     for (const cell of cells) {
       const f = cell.map(() => []), b = cell.map(() => []);
@@ -406,14 +448,14 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
   // shatter: the object comes apart into pieces of itself (smaller near the hit), plus a little grit. Reports via onBreak.
   const MAXFR = { low: 6, medium: 10, high: 14 };
   api.remove = it => remove(it);
-  api.shatter = (it, dir, force, fromHit, hitPoint, chunky) => { // chunky: a sledgehammer knocks it into fewer, bigger pieces
+  api.shatter = (it, dir, force, fromHit, hitPoint, chunky, cut) => { // cut: a world-space plane normal for a clean two-piece slice // chunky: a sledgehammer knocks it into fewer, bigger pieces
     if (it.dead) return;
     const d = it.def, p = it.body.position, vel = it.fixed ? V(0, 0, 0) : it.body.velocity, root = it.mesh;
     let made = 0;
     try {
       root.updateMatrixWorld(true);
       const hitW = hitPoint ? hitPoint.clone() : new THREE.Vector3(p.x - dir.x * d.size * 0.3, p.y, p.z - dir.z * d.size * 0.3);
-      const frags = fracture(root, root.worldToLocal(hitW.clone()), (d.size > 0.45 ? 4 : 3) - (S.quality === 'low' ? 1 : 0) - (chunky ? 1 : 0), ds).slice(0, MAXFR[S.quality] || 10);
+      const frags = fracture(root, root.worldToLocal(hitW.clone()), cut ? 1 : (d.size > 0.45 ? 4 : 3) - (S.quality === 'low' ? 1 : 0) - (chunky ? 1 : 0), ds, cut && cut.clone().transformDirection(root.matrixWorld.clone().invert())).slice(0, MAXFR[S.quality] || 10);
       const total = frags.reduce((a, f) => a + f.half.x * f.half.y * f.half.z, 0) || 1, q = root.getWorldQuaternion(new THREE.Quaternion()), sc = root.getWorldScale(new THREE.Vector3());
       for (const f of frags) {
         const w = root.localToWorld(f.centroid.clone()), out = w.clone().sub(hitW), dist = out.length() || 0.01; out.multiplyScalar(1 / dist);
@@ -430,7 +472,7 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
       }
     } catch (e) { console.warn('fracture failed, using plain shards', e); }
     remove(it);
-    const n = Math.round((SHARD[d.kind].n + d.size * 8) * (d.shards || 1) * (made ? 0.4 : 1) * (chunky ? 0.5 : 1));
+    const n = Math.round((SHARD[d.kind].n + d.size * 8) * (d.shards || 1) * (made ? 0.4 : 1) * (chunky ? 0.5 : 1) * (cut ? 0.15 : 1));
     const map = d.kind === 'photo' ? api.photo : null;
     for (let i = 0; i < n; i++) {
       const col = d.kind === 'electronics' ? pick([it.color, it.color, 0x222233, 0x1fae5b, 0xcfcfd8]) : (Math.random() < 0.85 ? it.color : 0xffffff);

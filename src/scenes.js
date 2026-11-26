@@ -1,9 +1,9 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=18';
-import { buildCity } from './city.js?v=18';
-import { loadModel, fitInto } from './models.js?v=18';
+import { canvasTex } from './style.js?v=19';
+import { buildCity } from './city.js?v=19';
+import { loadModel, fitInto } from './models.js?v=19';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -565,6 +565,124 @@ export const SCENES = {
       K.floor([[-1, 2.6], [1.2, -1.2], [-3.6, -1.6], [3.8, -1.2], [0.4, 3.4], [3.6, 3.6]]);
       K.bounds = [-W / 2 + 0.4, W / 2 - 0.4, -D / 2 + 0.4, D / 2 - 0.5];
       return { ...K, calm: true, pool: ['bottle', 'bottle', 'bottle', 'beermug', 'wineglass', 'cup', 'jar', 'jar', 'plate', 'bowl', 'lamp', 'vase', 'flowerpot', 'fishbowl', 'chair', 'stool', 'crate', 'mug'], start: { x: 0, z: 2.8 }, amb: 'beach', photoSpots: [[-1.4, -2.8, 0.3], [1.4, -2.8, -0.3]] };
+    },
+  },
+  museum: {
+    name: 'Museum', desc: 'Priceless vases, marble busts and paintings behind glass. Break the first one and the alarm goes off.', exposure: 1, env: 0.6, museum: true,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx);
+      K.room(14, 18, 4.4, 'tiles', 'plaster', 'plaster', { t: 1.4, floorTint: K.v(0xf4f0e8, 0xe8e0f0), wallTint: K.v(0xe8dcc8, 0xd8cce8), ceilTint: K.v(0xd8d0c0, undefined), oz: 2 });
+      scene.background = new THREE.Color(K.v(0x18161a, 0x231a33)); scene.fog = new THREE.Fog(K.v(0x18161a, 0x231a33), 16, 34);
+      const marble = S.mat('stone', 0xf2eee8), brass = S.mat('metal', 0xc8a040), velvet = S.mat('fabric', 0x8a1a2a);
+      for (const x of [-4, 0, 4]) for (const z of [-4, 1, 6]) {
+        K.box(0.7, 1.0, 0.7, marble, x, 0.5, z, { outline: true }); K.obstacles.push([x - 0.45, x + 0.45, z - 0.45, z + 0.45]); K.slots.push({ x, y: 1.0, z, k: 'shelf', max: 0.5 });
+        if (z === 1) { for (const [dx, dz, ry] of [[0, 0.36, 0], [0, -0.36, 0], [0.36, 0, Math.PI / 2], [-0.36, 0, Math.PI / 2]]) K.fixed('window', x + dx, 1.42, z + dz, ry, { w: 0.7, h: 0.84 });
+          K.fixed('window', x, 1.86, z, 0, { w: 0.74, h: 0.74, rx: -Math.PI / 2 }); }
+      }
+      for (const z of [-6.93]) for (let x = -4.5; x <= 4.6; x += 3) K.fixed('portrait', x, 2.3, z, 0);
+      for (const s of [-1, 1]) for (let z = -3.5; z <= 8.6; z += 4) K.fixed('portrait', s * 6.93, 2.3, z, -s * Math.PI / 2);
+      for (const z of [-2, 3.5, 8]) for (const s of [-1, 1]) { K.cyl(0.03, 0.9, brass, s * 2, 0.45, z, { phys: false, outline: false }); }
+      for (const z of [-2, 3.5, 8]) { const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 4, 8), velvet); rope.rotation.z = Math.PI / 2; rope.position.set(0, 0.8, z); scene.add(rope); }
+      K.floor([[-6, -5.6], [6, -5.6], [-6, 9.6], [6, 9.6], [-2, -5.8], [2, -5.8]]);
+      K.decal(sign([['ANCIENT', 64, 160], ['WONDERS', 64, 240], ['Please do not touch', 26, 320]], '#1a1612', '#e8d8b0'), 2.4, 1.8, 0, 3.2, -6.95, 0);
+      K.hemi(0xfff4e6, 0x4a4236, K.v(0.5, 1)); K.light('spot', 0xfff0dc, K.v(40, 22), 0, 4.3, 2, { target: [0, 1, 1], angle: 1.1, pen: 0.7, shadow: true });
+      for (const z of [-4, 1, 6]) K.light('point', 0xffe8c8, K.v(8, 4), 0, 3.6, z, { dist: 10 });
+      return { ...K, museum: true, pool: ['vase', 'vase', 'vase', 'bust', 'bust', 'bust', 'pot', 'jug', 'plate', 'platestack', 'teapot', 'bowl', 'clock', 'lamp', 'frame'], start: { x: 0, z: 9.6 }, amb: 'museum', photoSpots: [[-3, -6.2, 0.3], [3, -6.2, -0.3]] };
+    },
+  },
+  supermarket: {
+    name: 'Supermarket', desc: 'Aisles of bottles, jars and eggs, a freezer wall and trolleys to ram into the displays.', exposure: 1, env: 0.55,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx);
+      K.room(16, 22, 4, 'tiles', 'plaster', 'plaster', { t: 1.2, floorTint: K.v(0xe8e8e4, 0xe0e0e8), wallTint: K.v(0xf0ece0, 0xd8e0e8), oz: 3 });
+      scene.background = new THREE.Color(K.v(0x202428, 0x2a3040)); scene.fog = new THREE.Fog(K.v(0x202428, 0x2a3040), 18, 36);
+      const board = S.mat('paint', 0xe8e8ec), post = S.mat('metal', 0x8a9098);
+      for (const x of [-5.2, -1.7, 1.8, 5.3]) K.shelf(x, 0, 11, 0.55, [0.42, 0.95, 1.5], board, post, 'z');
+      for (const x of [-6.2, -3.8, -1.4, 1, 3.4, 5.8]) { K.fixed('fridge', x, 0.9, -7.55, 0); K.obstacles.push([x - 0.4, x + 0.4, -7.95, -7.15]); }
+      for (const x of [-4, 0, 4]) { K.table(x, 9.2, 1.8, 0.7, 0.9, S.mat('plastic', 0x2a2a30), S.mat('plastic', 0x2a2a30), { solid: true }); }
+      for (const [x, z, ry] of [[-6.6, 7, 0.3], [6.6, 6, -0.4], [0, 6.5, 1.2], [-3.4, 5.6, 0.1], [3.6, 7.6, -0.2]]) K.fixed('trolley', x, 0, z, ry);
+      for (const [t, x, c] of [['FRESH', -4, '#2ab04a'], ['SALE', 0, '#e8202c'], ['FROZEN', 4, '#2a8ad8']]) K.decal(sign([[t, 90, 220]], '#f8f8f4', c, 512, 320), 2.2, 1.3, x, 3.1, -7.95, 0);
+      for (const z of [-4, 1, 6]) for (const x of [-3.5, 0, 3.5]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.3), S.mat('emissive', 0xf4f8ff)); p.rotation.x = Math.PI / 2; p.position.set(x, 3.98, z); scene.add(p); }
+      K.light('spot', 0xf4f8ff, K.v(36, 20), 0, 3.9, 1, { target: [0, 0, 0], angle: 1.2, pen: 0.8, shadow: true });
+      for (const z of [-4, 4]) K.light('point', 0xf0f4ff, K.v(10, 4), 0, 3.6, z, { dist: 14 });
+      K.hemi(0xf0f4ff, 0x404448, K.v(0.55, 1));
+      K.floor([[-3.5, 7.2], [3.5, 5.4], [-6.6, -6], [6.6, -6]]);
+      return { ...K, batch: 70, pool: ['bottle', 'bottle', 'bottle', 'bottle', 'jar', 'jar', 'jar', 'eggs', 'eggs', 'eggs', 'mug', 'cup', 'wineglass', 'beermug', 'microwave', 'speaker', 'flowerpot', 'plate', 'platestack', 'kettle', 'bowl'], start: { x: -6.6, z: 10.8 }, amb: 'store', photoSpots: [[-3.4, 8, 0], [3.4, 8, 0]] };
+    },
+  },
+  tinytown: {
+    name: 'Tiny town', desc: 'You are a giant. A whole miniature city at your feet: stomp it, kick it, swing at the skyscrapers.', exposure: 1.05, env: 0.6,
+    build(ctx) {
+      const { scene, S, items } = ctx, K = kit(ctx), W = 14;
+      K.box(W + 6, 0.2, W + 6, S.mat('fabric', K.v(0x5a8a3a, 0x6aaa4a)), 0, -0.1, 0, { cast: false });
+      for (const [x, z, w, d] of [[0, -(W / 2 + 2), W + 6, 0.3], [0, W / 2 + 2, W + 6, 0.3], [-(W / 2 + 2), 0, 0.3, W + 6], [W / 2 + 2, 0, 0.3, W + 6]]) K.box(w, 2, d, S.mat('plastic', 0), x, 1, z).visible = false;
+      K.bounds = [-W / 2 - 1.5, W / 2 + 1.5, -W / 2 - 1.5, W / 2 + 1.5];
+      const road = S.mat('plastic', 0x3a3a40); for (const c of [-4.8, -1.6, 1.6, 4.8]) { K.plane(0.5, W, road, c, 0.004, 0, 0, -Math.PI / 2); K.plane(0.5, W, road, 0, 0.005, c, Math.PI / 2, -Math.PI / 2); }
+      const sky = canvasTex(4, 256, (g, w, h) => { const s = g.createLinearGradient(0, 0, 0, h); s.addColorStop(0, '#5a9ae0'); s.addColorStop(1, '#d8ecf8'); g.fillStyle = s; g.fillRect(0, 0, w, h); });
+      scene.background = sky; scene.fog = new THREE.Fog(0xc8e0f0, 14, 40);
+      const spawn = () => { // a fresh town: towers downtown, houses at the edges, trees and toy cars
+        for (const bx of [-6.4, -3.2, 0, 3.2, 6.4]) for (const bz of [-6.4, -3.2, 0, 3.2, 6.4]) {
+          const core = Math.hypot(bx, bz) < 4;
+          for (const [dx, dz] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) { if (Math.random() < 0.15) continue;
+            const w = rand(0.32, 0.62), d = rand(0.32, 0.62), h = core ? rand(0.7, 1.9) : rand(0.2, 0.6);
+            items.add('mini', bx + dx + rand(-0.08, 0.08), 0, bz + dz + rand(-0.08, 0.08), pick([0, Math.PI / 2]), { w, h, d }).body.sleep(); }
+          if (!core && Math.random() < 0.6) items.add('minitree', bx + rand(-0.9, 0.9), 0, bz + rand(-0.9, 0.9), 0).body.sleep();
+        }
+        for (let i = 0; i < 18; i++) { const c = pick([-4.8, -1.6, 1.6, 4.8]), t = rand(-6.5, 6.5), along = Math.random() < 0.5; items.add('toycar', along ? c + 0.1 : t, 0, along ? t : c + 0.1, along ? 0 : Math.PI / 2).body.sleep(); }
+      };
+      spawn();
+      K.hemi(0xdfeaff, 0x5a7a40, K.v(0.8, 1.1)); K.light('dir', 0xfff0d8, K.v(3.2, 1.4), 8, 12, 6, { target: [0, 0, 0], shadow: true, size: 10 });
+      return { ...K, pool: [], restock: spawn, start: { x: 0, z: 8.5 }, amb: 'town', photoSpots: [] };
+    },
+  },
+  space: {
+    name: 'Space station', desc: 'Low gravity: everything drifts when it breaks. Smash a window and the air rushes out into space.', exposure: 1, env: 0.6, space: true,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx);
+      K.room(12, 14, 3.4, 'steel', 'steel', 'steel', { t: 1.2, wallTint: K.v(0xc8ccd4, 0x9aa4b8), ceilTint: K.v(0x8a909a, 0x7a8498), oz: 1 });
+      scene.background = new THREE.Color(0x05060c); scene.fog = new THREE.Fog(0x05060c, 16, 34);
+      const stars = canvasTex(1024, 512, (g, w, h) => { g.fillStyle = '#02030a'; g.fillRect(0, 0, w, h); for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(255,255,255,${Math.random()})`; g.fillRect(Math.random() * w, Math.random() * h, Math.random() < 0.1 ? 2 : 1, 1); }
+        const gr = g.createRadialGradient(w * 0.7, h * 1.15, h * 0.4, w * 0.7, h * 1.15, h * 0.75); gr.addColorStop(0, '#2a6ac8'); gr.addColorStop(0.7, '#3a8ae0'); gr.addColorStop(0.95, '#a8d0ff'); gr.addColorStop(1, 'rgba(168,208,255,0)'); g.fillStyle = gr; g.beginPath(); g.arc(w * 0.7, h * 1.15, h * 0.75, 0, 7); g.fill(); });
+      const starMat = new THREE.MeshBasicMaterial({ map: stars, fog: false });
+      for (const x of [-3.5, 0, 3.5]) { K.plane(2.6, 1.4, starMat, x, 1.8, -5.985); K.fixed('window', x, 1.8, -5.93, 0, { w: 2.6, h: 1.4 }); K.box(2.8, 0.12, 0.1, S.mat('metal', 0x5a606a), x, 2.55, -5.95, { phys: false }); K.box(2.8, 0.12, 0.1, S.mat('metal', 0x5a606a), x, 1.05, -5.95, { phys: false }); }
+      for (const s of [-1, 1]) { K.plane(1.6, 1.2, starMat, s * 5.985, 1.8, 2, -s * Math.PI / 2); K.fixed('window', s * 5.93, 1.8, 2, -s * Math.PI / 2, { w: 1.6, h: 1.2 }); }
+      const panel = S.mat('electronics', 0x2a3040);
+      K.table(0, -3, 4, 1, 0.95, panel, S.mat('metal', 0x5a606a), { solid: true }); K.table(-4, 2.5, 1.2, 3, 0.9, panel, S.mat('metal', 0x5a606a));
+      K.table(4, 4.5, 1.6, 1, 0.9, panel, S.mat('metal', 0x5a606a)); K.shelf(4.7, -1.5, 3, 0.45, [0.8, 1.45, 2.1], S.mat('metal', 0x8a909a), S.mat('metal', 0x5a606a), 'z');
+      for (const z of [-3, 1, 5]) { const st = new THREE.Mesh(new THREE.PlaneGeometry(6, 0.25), S.mat('emissive', 0xd8ecff)); st.rotation.x = Math.PI / 2; st.position.set(0, 3.38, z); scene.add(st); }
+      K.decal(sign([['DECK 3', 70, 150], ['Keep windows intact', 28, 230]], '#1a2030', '#d8e8ff'), 1.8, 1.1, -5.98, 2.2, -2.5, Math.PI / 2);
+      K.hemi(0xd8e8ff, 0x202430, K.v(0.5, 1)); K.light('spot', 0xe8f0ff, K.v(30, 18), 0, 3.3, 1, { target: [0, 0, -1], angle: 1.15, pen: 0.8, shadow: true });
+      K.light('point', 0x6a9aff, K.v(6, 3), 0, 2, -5, { dist: 10 });
+      K.floor([[-2, 5.5], [2, 6.2], [-4.5, -4.2], [0.5, 2.5]]);
+      return { ...K, space: true, gravity: -1.62, pool: ['monitor', 'monitor', 'laptop', 'keyboard', 'crt', 'speaker', 'phone', 'mug', 'bottle', 'lamp', 'clock', 'crate', 'jar', 'gascan'], start: { x: 0, z: 6.5 }, amb: 'space', photoSpots: [[-2, -4.4, 0.3], [2, -4.4, -0.3]] };
+    },
+  },
+  bowling: {
+    name: 'Bowling alley', desc: 'Three lanes of real pins. Roll the bowling ball for strikes, or just wreck the place.', exposure: 1, env: 0.55, bowling: true,
+    build(ctx) {
+      const { scene, S, items } = ctx, K = kit(ctx);
+      K.room(12, 28, 3.6, 'carpet', 'plaster', 'plaster', { t: 1.6, wallTint: K.v(0x3a2a4a, 0x4a3a6a), floorTint: K.v(0x8a6a9a, undefined), oz: 2 });
+      scene.background = new THREE.Color(K.v(0x100c18, 0x1a1028)); scene.fog = new THREE.Fog(K.v(0x100c18, 0x1a1028), 18, 40);
+      const wood = S.surface('wood', 1, 8, K.v(0xf0d0a0, 0xe8c890)), rail = S.mat('plastic', 0x2a2a30), lanes = [];
+      for (const x of [-3.2, 0, 3.2]) {
+        K.box(1.1, 0.02, 20, wood, x, 0.01, -2, { cast: false });
+        for (const s of [-1, 1]) K.box(0.08, 0.09, 20, rail, x + s * 0.62, 0.045, -2);
+        const arrows = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.4), new THREE.MeshBasicMaterial({ map: canvasTex(128, 64, g => { g.clearRect(0, 0, 128, 64); g.fillStyle = '#5a3a1a'; for (let i = 0; i < 5; i++) { const ax = 14 + i * 25; g.beginPath(); g.moveTo(ax, 50); g.lineTo(ax + 7, 20); g.lineTo(ax + 14, 50); g.fill(); } }), transparent: true, depthWrite: false }));
+        arrows.rotation.x = -Math.PI / 2; arrows.position.set(x, 0.022, 3); scene.add(arrows);
+        lanes.push({ x, pins: [], wait: 0, rolled: false });
+      }
+      K.box(12, 1.4, 0.4, S.mat('plastic', 0x101014), 0, 2.9, -11.4, { phys: false }); // masking unit over the pins
+      K.decal(sign([['STRIKE', 80, 150]], '#101014', '#ff4f9a', 512, 256), 3, 1.2, 0, 2.95, -11.18, 0);
+      K.box(12, 0.6, 1.2, S.mat('plastic', 0x15151a), 0, 0.3, -12.6); // the pit
+      const rack = lane => { lane.pins.forEach(p => !p.dead && items.remove(p)); lane.pins = []; let k = 0;
+        for (let row = 0; row < 4; row++) for (let c = 0; c <= row; c++) { const p = items.add('pin', lane.x + (c - row / 2) * 0.3, 0.02, -10 - row * 0.26, 0); p.body.sleep(); lane.pins.push(p); k++; } lane.rolled = false; lane.wait = 0; };
+      lanes.forEach(rack);
+      for (const [x, z] of [[-4.6, 9.5], [0, 10.2], [4.6, 9.5]]) K.table(x, z, 1.2, 0.8, 0.76, S.mat('plastic', 0xe8e0d0), S.mat('metal', 0x5a606a));
+      K.table(-5.4, 4, 0.7, 3, 0.95, S.mat('plastic', 0x3a2a4a), S.mat('plastic', 0x3a2a4a), { solid: true });
+      for (const x of [-3.2, 0, 3.2]) K.light('spot', 0xfff0dc, K.v(18, 10), x, 3.5, -8, { target: [x, 0, -10.5], angle: 0.6, pen: 0.5, shadow: x === 0 });
+      K.light('point', 0xb06aff, K.v(8, 6), 0, 3.2, 6, { dist: 14 }); K.hemi(0xe0d8ff, 0x302030, K.v(0.4, 0.9));
+      K.floor([[-5.4, 7], [5.4, 7], [-2, 11], [2, 11]]);
+      return { ...K, bowling: true, lanes, rack, restock: () => lanes.forEach(rack), pool: ['bottle', 'bottle', 'beermug', 'cup', 'wineglass', 'mug', 'jar', 'plate', 'speaker', 'lamp'], start: { x: 0, z: 8.5 }, amb: 'bowling', photoSpots: [[-5, 1, 0.5], [5, 1, -0.5]] };
     },
   },
   studio: {

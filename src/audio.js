@@ -271,6 +271,11 @@ export function startAmbience(kind) {
     every(16000, () => far('door', 0.22, { lp: 900, rate: rand(0.8, 0.95) }));
     every(13000, () => far('keys', 0.08, { lp: 2500 }));
     every(9000, () => far('clink', 0.08, { lp: 2000 })); }
+  if (kind === 'museum') { loopNoise('lowpass', 500, 0.3, 0.02); every(7000, () => { const n = 3 + Math.floor(rand(0, 3)); for (let k = 0; k < n; k++) setTimeout(() => far('stepstone', 0.08, { lp: 1800, rate: rand(0.9, 1) }), k * 620); }); every(16000, () => far('door', 0.18, { lp: 1200, rate: 0.8 })); }
+  if (kind === 'store') { loopNoise('lowpass', 600, 0.3, 0.025); every(5000, t => { tn(t, 1760, 0.09, 0.03, 'sine', amb); }); every(7000, () => far('metalfall', 0.08, { lp: 2000 })); every(9000, () => far('clink', 0.1, { lp: 3000 })); }
+  if (kind === 'town') { ambLoop('birds', 0.35, 9000); every(9000, t => nz(t, 3, 'bandpass', rand(300, 600), 0.6, 0.04, amb, rand(200, 400))); }
+  if (kind === 'space') { loopNoise('lowpass', 300, 0.4, 0.04); every(8000, () => far('door', 0.15, { lp: 700, rate: 0.6 })); every(11000, () => far('keys', 0.05, { lp: 2500 })); }
+  if (kind === 'bowling') { loopNoise('lowpass', 500, 0.3, 0.03); every(5000, () => far('roll', 0.12, { lp: 1200 })); every(6000, () => { far('woodfall', 0.14, { lp: 2500 }); far('wood', 0.1, { lp: 2500 }); }); }
   if (kind === 'greenhouse') { // birdsong outside and a light shower pattering on the glass
     ambLoop('birds', 0.45, 9000); ambLoop('rain', 0.14, 5000);
     every(9000, t => nz(t, 3.5, 'bandpass', rand(300, 600), 0.6, 0.04, amb, rand(200, 400))); }
