@@ -25,6 +25,7 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Chain reactions.** Gas cans set off the ones next to them, and some rooms start with a domino run snaking across the floor that ends at a gas can.
 - **Break through walls.** Keep hitting the same spot and a wall gives way into a hidden room behind it, stocked with more things to smash.
 - **Bosses.** Every so often a giant version of something in the room drops in. It takes a lot of hits, has a health bar, and is worth 300 points.
+- **Phones and offline.** Touch controls with separate Grab, Throw (hold to throw harder) and Pound buttons; push the stick all the way to run. Install it to your home screen or desktop, and after the first visit it keeps working without a connection.
 - **Holidays.** Pumpkins at Halloween, baubles and gifts at Christmas, and fireworks over the outdoor scenes at New Year. Picked by date, or choose one in the lobby.
 - **Scream to rage.** Optional: tick it in the lobby and shouting into your microphone fills the rage meter. The sound is only measured for loudness, never recorded or sent anywhere.
 - **Smash your stress.** Type what's bothering you in the lobby; the words are written on plates, TVs and the clay figure for you to smash. They never leave the device.

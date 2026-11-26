@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=22';
-import { SCENES } from './scenes.js?v=22';
-import { createItems, DEFS } from './items.js?v=22';
-import * as A from './audio.js?v=22';
-import { preloadItemModels } from './models.js?v=22';
-import { createClayFigure, preloadClayBody } from './clay.js?v=22';
-import { createReplay } from './replay.js?v=22';
-import { clayBody } from './clay.js?v=22';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=23';
+import { SCENES } from './scenes.js?v=23';
+import { createItems, DEFS } from './items.js?v=23';
+import * as A from './audio.js?v=23';
+import { preloadItemModels } from './models.js?v=23';
+import { createClayFigure, preloadClayBody } from './clay.js?v=23';
+import { createReplay } from './replay.js?v=23';
+import { clayBody } from './clay.js?v=23';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const $ = id => document.getElementById(id);
@@ -625,7 +625,7 @@ function startTut() {
     W.hands ? { id: 'kick', text: isTouch ? 'Tap Kick to kick' : 'Press Space to kick' } : { id: 'heavy', text: isTouch ? 'Hold Smash to wind up a heavy swing, then let go' : 'Hold the click to wind up a heavy swing, then let go' },
     { id: 'grab', text: isTouch ? 'Tap Grab to pick up the highlighted thing' : 'Press E or right-click to grab the highlighted thing' },
     { id: 'heldhit', text: isTouch ? 'Tap Smash to hit with what you are holding' : 'Click to hit things with what you are holding' },
-    { id: 'throw', text: isTouch ? 'Tap Throw to throw it' : 'Press E to throw it' }] };
+    { id: 'throw', text: isTouch ? 'Tap Throw to throw it (hold it to throw harder)' : 'Press E to throw it' }] };
   showTut();
 }
 function showTut() { $('tut').classList.remove('hidden'); $('tutStep').textContent = `Tutorial ${tut.i + 1} of ${tut.steps.length}`; $('tutText').textContent = tut.steps[tut.i].text; }
@@ -1699,7 +1699,12 @@ $('photoInput').onchange = e => {
   img.src = URL.createObjectURL(f); e.target.value = '';
 };
 $('photoClear').onclick = () => { photoTex = null; renderLobby(); build(); };
-if (isTouch) $('keysDesk').textContent = 'Left thumb moves, right thumb looks. Smash swings, hold it to wind up a heavy hit. Grab picks things up, tap it again to throw.';
+if (isTouch) $('keysDesk').textContent = 'Left thumb moves (push all the way to run), right thumb looks. Smash swings, hold it to wind up a heavy hit. Grab picks things up; hold Throw to throw harder. Pound slams the ground.';
+// installable app: offline play after the first visit
+if ('serviceWorker' in navigator && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) navigator.serviceWorker.register('sw.js').catch(() => {});
+let installEvt = null; addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('installBtn').classList.remove('hidden'); });
+$('installBtn').onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; $('installBtn').classList.add('hidden'); };
+addEventListener('appinstalled', () => $('installBtn').classList.add('hidden'));
 
 // ---------- input
 document.addEventListener('pointerlockchange', () => { if (state === 'play' && !isTouch) setPaused(!document.pointerLockElement); });
@@ -1733,9 +1738,13 @@ addEventListener('keyup', e => keys[e.code] = false);
 let joyId = null, joyO = null, lookId = null, lookLast = null;
 const tl = $('touch');
 tl.addEventListener('pointerdown', e => {
-  if (e.target.id === 'smashBtn') { mouseHeld = true; startSwing(); return; }
-  if (e.target.id === 'grabBtn') { if (!carKey()) grabOrThrow(); return; }
-  if (e.target.id === 'kickBtn') { startSwing('kick'); return; }
+  const id = e.target.id; if (id && id.endsWith('Btn')) { vibrate(8); try { e.target.setPointerCapture(e.pointerId); } catch (_) {} } // the finger can slide off and the release still counts
+  if (id === 'smashBtn') { mouseHeld = true; startSwing(); return; }
+  if (id === 'grabBtn') { if (grav) gravDrop(); else if (held) dropHeld(); else if (!carKey()) grab(hlTarget || findGrabTarget()); return; }
+  if (id === 'throwBtn') { if (held) { charging = true; chargeT = 0; } return; } // hold to throw harder
+  if (id === 'kickBtn') { startSwing('kick'); return; }
+  if (id === 'poundBtn') { groundPound(); return; }
+  if (id === 'viewBtn') { toggleView(); return; }
   if (e.clientX < innerWidth * 0.45 && joyId === null) { joyId = e.pointerId; joyO = { x: e.clientX, y: e.clientY }; const j = $('joy'); j.style.left = e.clientX + 'px'; j.style.top = e.clientY + 'px'; j.classList.remove('hidden'); }
   else if (lookId === null) { lookId = e.pointerId; lookLast = { x: e.clientX, y: e.clientY }; }
 });
@@ -1746,6 +1755,7 @@ tl.addEventListener('pointermove', e => {
 });
 const tEnd = e => {
   if (e.target.id === 'smashBtn') mouseHeld = false;
+  if (e.target.id === 'throwBtn' && charging && held) { throwHeld(Math.max(0.55, Math.min(1, chargeT / 0.8))); charging = false; }
   if (e.pointerId === joyId) { joyId = null; joy.x = joy.y = 0; $('joy').classList.add('hidden'); $('knob').style.transform = ''; }
   if (e.pointerId === lookId) lookId = null;
 };
@@ -1757,7 +1767,7 @@ function updatePlayer(dt) {
   if (keys.KeyW || keys.ArrowUp) mz -= 1; if (keys.KeyS || keys.ArrowDown) mz += 1;
   if (keys.KeyA || keys.ArrowLeft) mx -= 1; if (keys.KeyD || keys.ArrowRight) mx += 1;
   const len = Math.hypot(mx, mz); if (len > 1) { mx /= len; mz /= len; }
-  const s = Math.sin(player.yaw), c = Math.cos(player.yaw), sp = (keys.ShiftLeft ? 5 : 3.6) * dt;
+  const s = Math.sin(player.yaw), c = Math.cos(player.yaw), sp = (keys.ShiftLeft || Math.hypot(joy.x, joy.y) > 0.92 ? 5 : 3.6) * dt; // push the stick all the way to run
   player.x += (mx * c + mz * s) * sp; player.z += (-mx * s + mz * c) * sp;
   stayInside();
   const R = 0.3;
@@ -1894,7 +1904,7 @@ function frame(now) {
     $('hint').textContent = hint;
     const wind = swingHold > 0.12 && !hitDone;
     $('charge').style.opacity = charging || wind ? 1 : 0; $('chargeFill').style.width = Math.min(100, (wind ? (swingHold - 0.12) / 0.55 : chargeT / 0.8) * 100) + '%';
-    $('grabBtn').textContent = held ? 'Throw' : 'Grab';
+    $('grabBtn').textContent = grav ? 'Drop' : held ? 'Drop' : driving ? 'Exit' : 'Grab'; $('throwBtn').classList.toggle('hidden', !held); $('viewBtn').classList.toggle('hidden', !room.open); $('poundBtn').classList.toggle('hidden', !!driving);
   }
   showAch(now);
   A.listener(camera.position, camera.getWorldDirection(v2)); A.setMuffle(state === 'play' && (now < slowUntil || now < deafUntil));

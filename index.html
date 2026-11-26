@@ -7,6 +7,8 @@
 <link rel="icon" href="assets/icons/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="SMASHROOM">
 <meta name="description" content="SMASHROOM is a free online rage room you play in your browser. Smash glass, plates, TVs, furniture and a whole car with a bat or sledgehammer. No download, works on PC and phone.">
 <link rel="canonical" href="https://wasiulbahar.com/smashroom/">
 <meta name="robots" content="index,follow,max-image-preview:large">
@@ -168,6 +170,10 @@ details.about p{margin:6px 0}
 #smashBtn{bottom:56px;width:96px;height:96px;font-size:16px;background:var(--pink)}
 #grabBtn{bottom:166px;width:74px;height:74px;font-size:13px;background:var(--teal);color:var(--ink)}
 #kickBtn{bottom:66px;right:130px;width:70px;height:70px;font-size:13px;background:var(--yellow);color:var(--ink)}
+#throwBtn{bottom:150px;right:128px;width:80px;height:80px;font-size:13px;background:#f08a2a;color:var(--ink)}
+.tbtn.sm{width:56px;height:56px;font-size:10px;background:var(--yellow);color:var(--ink);box-shadow:3px 3px 0 var(--ink);border-width:3px}#poundBtn{bottom:262px}#viewBtn{bottom:262px;right:90px;background:#d8d0e8}
+.tbtn:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink)}
+#installBtn{margin-right:8px}
 #touchHint{position:absolute;left:16px;bottom:90px;color:var(--muted);font-size:12px;max-width:40vw}
 </style>
 <script type="importmap">{"imports":{
@@ -201,6 +207,9 @@ details.about p{margin:6px 0}
   <div id="joy" class="hidden"><div id="knob"></div></div>
   <div id="touchHint">Left side: move · Right side: look</div>
   <button class="tbtn" id="grabBtn">Grab</button>
+  <button class="tbtn hidden" id="throwBtn">Throw</button>
+  <button class="tbtn sm" id="poundBtn">Pound</button>
+  <button class="tbtn sm hidden" id="viewBtn">View</button>
   <button class="tbtn hidden" id="kickBtn">Kick</button>
   <button class="tbtn" id="smashBtn">Smash</button>
 </div>
@@ -267,7 +276,7 @@ details.about p{margin:6px 0}
           <select id="quality"><option value="auto">Auto</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
         </label>
       </div>
-      <button class="btn" id="start">Start smashing</button>
+      <button class="btn alt hidden" id="installBtn">Install app</button><button class="btn" id="start">Start smashing</button>
     </div>
     <div class="vols">
         <label>Volume <input type="range" class="vol" data-v="master" min="0" max="100"></label>
@@ -339,6 +348,6 @@ details.about p{margin:6px 0}
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=22"></script>
+<script type="module" src="src/main.js?v=23"></script>
 </body>
 </html>
