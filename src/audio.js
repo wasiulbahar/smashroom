@@ -80,7 +80,8 @@ function tn(t, f, dur, g, type = 'sine', bus = B(), f2) {
   o.connect(gn).connect(bus); o.start(t); o.stop(t + dur + 0.05);
 }
 const now = () => ac.currentTime;
-export const play = (set, g = 1, rate = 1) => smp(set, g, rate); // a recording at the current A.at() position
+export const play = (set, g = 1, rate = 1) => smp(set, g, rate);
+export function tone(f, dur, g, delay = 0) { if (!ac) return; const t0 = now() + delay; tn(t0, f, dur, g, 'triangle'); tn(t0, f * 2, dur * 0.6, g * 0.3, 'sine'); tn(t0, f * 3, dur * 0.3, g * 0.12, 'sine'); } // a struck string, roughly // a recording at the current A.at() position
 // a smoke detector: a piezo beeper, three short beeps
 export function smokeBeep() { if (!ac) return; const t = now(); for (let k = 0; k < 3; k++) tn(t + k * 0.5, 3150, 0.28, 0.05, 'square', B()); }
 // silly mode: cartoon sounds, made on purpose to sound like a cartoon

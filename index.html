@@ -113,6 +113,11 @@ kbd{background:var(--bg);border:2px solid var(--ink);border-radius:5px;padding:0
 #rage span{position:absolute;inset:0;text-align:center;font-size:12px;line-height:16px;color:var(--text);text-shadow:1px 1px 0 var(--ink)}
 #boss{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:min(360px,70vw);text-align:center;font-weight:800;color:#fff;text-shadow:2px 2px 0 var(--ink);font-size:14px}#boss>div{height:10px;margin-top:4px;border:2px solid var(--ink);border-radius:6px;background:rgba(0,0,0,.4);overflow:hidden}#bossFill{height:100%;width:100%;background:linear-gradient(90deg,var(--pink),var(--yellow));transition:width .15s}
 body.zen #tr,body.zen #combo,body.zen #rage{display:none}
+#intro{position:absolute;left:50%;top:30%;transform:translateX(-50%);width:min(560px,86vw);text-align:center;background:rgba(20,13,31,.82);border:3px solid var(--ink);border-radius:14px;padding:16px 20px;transition:opacity 1s}
+#intro.fade{opacity:0}#introName{font-family:Bungee,Impact,sans-serif;color:var(--yellow);font-size:22px;margin-bottom:6px}#introText{font-family:Rubik,sans-serif;font-size:16px;line-height:1.4}
+#jobs{position:absolute;left:14px;top:120px;max-width:min(260px,44vw);background:rgba(20,13,31,.72);border:2px solid var(--ink);border-radius:10px;padding:8px 10px;font-family:Rubik,sans-serif;font-size:13px}
+#jobs .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px}#jobs .job{margin:3px 0}#jobs .job b{color:var(--yellow);font-weight:600}#jobs .done{color:#7fd88a;text-decoration:line-through}#jobs .failed{color:#e87a7a;text-decoration:line-through}
+#alert{position:absolute;left:50%;top:84px;transform:translateX(-50%);width:min(380px,72vw);text-align:center;font-family:Rubik,sans-serif;font-weight:700;color:#ffd0c0;text-shadow:2px 2px 0 var(--ink)}#alert>div{height:8px;margin-top:4px;border:2px solid var(--ink);border-radius:6px;background:rgba(0,0,0,.4);overflow:hidden}#alertFill{height:100%;background:linear-gradient(90deg,#ff5a3a,var(--yellow))}
 #banner{position:absolute;left:0;right:0;top:26%;text-align:center;font-size:clamp(36px,8vw,72px);color:var(--yellow);text-shadow:4px 4px 0 var(--pink),7px 7px 0 var(--ink);opacity:0}
 #banner.show{animation:ban 1.2s ease-out}
 @keyframes ban{0%{opacity:0;transform:scale(2)}15%{opacity:1;transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:translateY(-20px)}}
@@ -196,6 +201,9 @@ details.about p{margin:6px 0}
   <div id="cross"></div><div id="hint"></div><div id="charge"><div id="chargeFill"></div></div>
   <div id="rage"><div id="rageFill"></div><span id="rageTxt">Rage</span></div><div id="micLvl" class="hidden" title="Mic level"><div id="micFill"></div></div>
   <div id="banner"></div>
+  <div id="intro" class="hidden"><div id="introName"></div><div id="introText"></div></div>
+  <div id="jobs" class="hidden"></div>
+  <div id="alert" class="hidden"><span id="alertText"></span><div><div id="alertFill"></div></div></div>
   <div id="boss" class="hidden"><span id="bossName"></span><div><div id="bossFill"></div></div></div>
   <div id="announce"></div>
   <div id="mission" class="hidden"><div class="lbl">Mission</div><div id="missionText"></div><div id="missionBar"><div id="missionFill"></div></div></div>
@@ -352,6 +360,6 @@ details.about p{margin:6px 0}
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=25"></script>
+<script type="module" src="src/main.js?v=26"></script>
 </body>
 </html>

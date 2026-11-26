@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=25';
-import { itemModel, fitInto } from './models.js?v=25';
+import { canvasTex } from './style.js?v=26';
+import { itemModel, fitInto } from './models.js?v=26';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -381,7 +381,7 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
     body.quaternion.setFromEuler(o.rx || 0, ry, 0);
     body.sleepSpeedLimit = 0.15; body.angularDamping = 0.2; body.linearDamping = 0.02;
     world.addBody(body);
-    const it = { key, def, mesh: r.mesh, body, color, hp: def.hp * (o.hpMul || 1), born: performance.now(), pop: 0, dead: false, fixed: !!(def.fixed || o.fixed), group: o.group };
+    const it = { key, def, mesh: r.mesh, body, color, hp: def.hp * (o.hpMul || 1), born: performance.now(), pop: 0, dead: false, fixed: !!(def.fixed || o.fixed), group: o.group, tag: o.tag };
     if (it.fixed) { r.mesh.position.copy(body.position); r.mesh.quaternion.copy(body.quaternion); }
     body.addEventListener('collide', e => {
       if (it.dead || it.queued || it.held) return;

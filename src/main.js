@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=25';
-import { SCENES } from './scenes.js?v=25';
-import { createItems, DEFS } from './items.js?v=25';
-import * as A from './audio.js?v=25';
-import { preloadItemModels } from './models.js?v=25';
-import { createClayFigure, preloadClayBody } from './clay.js?v=25';
-import { createReplay } from './replay.js?v=25';
-import { clayBody } from './clay.js?v=25';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=26';
+import { SCENES } from './scenes.js?v=26';
+import { createItems, DEFS } from './items.js?v=26';
+import * as A from './audio.js?v=26';
+import { preloadItemModels } from './models.js?v=26';
+import { createClayFigure, preloadClayBody } from './clay.js?v=26';
+import { createReplay } from './replay.js?v=26';
+import { clayBody } from './clay.js?v=26';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const $ = id => document.getElementById(id);
@@ -86,7 +86,7 @@ function build() {
   pivot = new THREE.Group(); camera.add(pivot); equip(opts.weapon);
   const sea = season(); if (sea && room.pool.length) room.pool = room.pool.concat(SEASON_ITEMS[sea]); // holiday things mixed into the room
   I.batch(room.pool, room.slots, opts.gm === 'build' ? 10 : batchSize());
-  applyWords(); fireworks = []; fwT = 0; room.extra = []; broken = 0; fires = []; fireSnd?.stop(); fireSnd = null; fireLight = null; toys = 0; jumpT = 0; floorHits = []; basement = null; floorY = 0; fall = null; storm = null; hot = []; drawDom = null; stopSprinklers(); cityAlarms.forEach(a => a.sound?.stop()); cityAlarms = [];
+  applyWords(); fireworks = []; fwT = 0; room.extra = []; broken = 0; fires = []; fireSnd?.stop(); fireSnd = null; fireLight = null; toys = 0; jumpT = 0; floorHits = []; basement = null; floorY = 0; fall = null; storm = null; hot = []; drawDom = null; if (story) endStory(); stopSprinklers(); cityAlarms.forEach(a => a.sound?.stop()); cityAlarms = [];
   I.silly = !!opts.silly; if (opts.silly) { world.defaultContactMaterial.restitution = 0.72; if (!room.gravity) world.gravity.set(0, -7.5, 0); }
   spawnPet(); setupZen(); rushT = performance.now() + 4000; pressT = 0; pressSnd?.stop(); pressSnd = null; beltT = 0; boss = null; bossAt = performance.now() + 25000; $('boss').classList.add('hidden');
   I.onBossHit = it => { it.pop = 1; A.at(it.body.position, () => A.SFX[it.def.kind]?.(0.5, 0.7)); shake = Math.max(shake, 0.08); };
@@ -234,7 +234,7 @@ function onBreak(it, fromHit) {
     setTimeout(() => { if (state === 'play') spawnTarget(); }, 600); return;
   }
   smashed++; byKind[d.kind] = (byKind[d.kind] || 0) + 1;
-  emit('break', { kind: d.kind, key: it.key, thrown: !!it.thrown, held: !!it.byHeld, size: d.size });
+  emit('break', { kind: d.kind, key: it.key, thrown: !!it.thrown, held: !!it.byHeld, size: d.size, it, p: it.body.position });
   afterBreak(it, { x: p.x, y: p.y, z: p.z });
   if (room.museum && !museumAlarm) startMuseumAlarm(p);
   if (room.space && it.key === 'window') hullBreach(it);
@@ -335,7 +335,7 @@ function heldImpact(hit) {
   if (it.hp <= 0) { held = null; it.held = false; it.body.type = CANNON.Body.DYNAMIC; it.byHeld = true; popup('Broke it!', it.body.position, 'small'); I.shatter(it, camera.getWorldDirection(v2), 3, true); }
 }
 function startSwing(type = defaultAttack()) {
-  if (zen) ringChimes();
+  if (zen) ringChimes(); if (strikes.length) setTimeout(strikeFixtures, 110);
   if (swingT >= 0 || state !== 'play' || paused || driving) return;
   if (held) { atk = 'held'; CW = heldStats(held); swingT = 0; hitDone = false; swingHold = 0; A.SFX.whoosh(CW.heavy); return; }
   if (W.tool) { atk = 'tool'; CW = W; swingT = 0; hitDone = true; swingHold = 0; useTool(); return; } // tools fire on the press; foam and broom keep going while held
@@ -544,7 +544,7 @@ function markNear(p, type, size, color) {
 
 // ---------- scoring helpers
 function startRage() { rageMeter = 0; rageUntil = performance.now() + 8000; banner('Rage mode'); A.SFX.rage(); slowUntil = performance.now() + 400; document.body.classList.add('rage'); }
-function addScore(n, p, cls) { if (state !== 'play' || room.zen) return; /* the zen garden keeps no score */ score += n; replay.mark(n); popup('+' + n, p, cls); }
+function addScore(n, p, cls) { if (state !== 'play' || room.zen) return; /* the zen garden keeps no score */ if (performance.now() < frenzyUntil) n *= 2; score += n; replay.mark(n); popup('+' + n, p, cls); }
 function popup(text, p, cls = '') {
   v1.set(p.x, p.y + 0.15, p.z).project(camera); if (v1.z > 1) return;
   const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = text;
@@ -603,7 +603,7 @@ function emit(ev, d = {}) {
   if (ev === 'clay') { if (d.lost.includes('head')) addStat('heads'); if (d.collapsed) addStat('statues'); }
   if (ev === 'combo') maxStat('combo', d.n);
   if (ev === 'collapse') addStat('collapses'); if (ev === 'lamp') addStat('lamps'); if (ev === 'hole') addStat('holes');
-  tutEvent(ev);
+  tutEvent(ev); storyEmit(ev, d);
   if (!mission || state !== 'play' || mission.def.ev !== ev || (mission.def.test && !mission.def.test(d))) return;
   mission.count = mission.def.max ? Math.max(mission.count, d.n || 0) : mission.count + 1;
   if (mission.count >= mission.def.need) {
@@ -1791,6 +1791,169 @@ function makeCube(P) {
   addScore(pts, cube.body.position, 'big'); popup('Scrap cube!', { x, y: y + 1.2, z }, 'small'); addStat('cubes'); emit('cube');
   A.at(cube.body.position, () => { A.SFX.metal(1, 0.55); A.SFX.metalfall?.(0.6); }); puff(new THREE.Vector3(x, 0.3, z), 0x8a8478, 5, 0.5, 0.2, 0.5);
 }
+// ---------- Room stories: an intro line, three side jobs, one timed event and one thing only that room has
+let story = null, strikes = [], frenzyUntil = 0, dimmed = null;
+const fwdP = (d = 1.5) => camera.getWorldPosition(new THREE.Vector3()).addScaledVector(camera.getWorldDirection(new THREE.Vector3()), d);
+function wallSpot(len, depth, avoid = []) { // somewhere along a wall with nothing in the way; ry turns a fixture to face the room
+  const [x1, x2, z1, z2] = room.bounds, out = [], free = (cx, cz, hw, hd) => cx - hw > x1 - 0.45 && cx + hw < x2 + 0.45 && cz - hd > z1 - 0.45 && cz + hd < z2 + 0.45
+    && !room.obstacles.some(([a, b, c, d]) => cx + hw > a && cx - hw < b && cz + hd > c && cz - hd < d) && !avoid.some(p => Math.hypot(p.x - cx, p.z - cz) < 1.5)
+    && !I.list.some(i => !i.dead && Math.abs(i.body.position.x - cx) < hw + 0.2 && Math.abs(i.body.position.z - cz) < hd + 0.2) && Math.hypot(cx - room.start.x, cz - room.start.z) > 1.5;
+  for (let t = 0.15; t < 0.9; t += 0.07) {
+    const zx = z1 + (z2 - z1) * t, xz = x1 + (x2 - x1) * t;
+    out.push({ x: x1 - 0.4 + depth / 2, z: zx, ry: Math.PI / 2, hw: depth / 2, hd: len / 2 }, { x: x2 + 0.4 - depth / 2, z: zx, ry: -Math.PI / 2, hw: depth / 2, hd: len / 2 }, { x: xz, z: z1 - 0.4 + depth / 2, ry: 0, hw: len / 2, hd: depth / 2 });
+  }
+  return out.sort(() => Math.random() - 0.5).find(s => free(s.x, s.z, s.hw, s.hd)) || null;
+}
+function fixture(w, h, d, color, kind, s, y = h / 2) { // a static box placed at a wall spot, solid to the player
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), S.mat(kind, color)); m.position.set(s.x, y, s.z); m.rotation.y = s.ry; m.castShadow = m.receiveShadow = true; scene.add(m); S.outline(m, 1.02);
+  const b = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2)), position: new CANNON.Vec3(s.x, y, s.z) }); b.quaternion.setFromEuler(0, s.ry, 0); world.addBody(b); m.userData.body = b;
+  room.obstacles.push([s.x - s.hw, s.x + s.hw, s.z - s.hd, s.z + s.hd]); return m;
+}
+function label(text, w, h, bg, fg) { return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: textTex(text, bg, fg), transparent: true })); }
+function textTex(text, bg, fg) { const c = document.createElement('canvas'); c.width = 256; c.height = 96; const g = c.getContext('2d'); g.fillStyle = bg; g.fillRect(0, 0, 256, 96); g.fillStyle = fg; g.font = 'bold 40px Rubik, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 128, 50); return new THREE.CanvasTexture(c); }
+function strikeFixtures() { // a swing also lands on room fixtures that aren't items: the punching bag, the piano, the kiln...
+  if (!strikes.length || state !== 'play') return; const o = camera.getWorldPosition(new THREE.Vector3()), f = camera.getWorldDirection(new THREE.Vector3()), reach = (CW.reach || 1.4) + 0.5;
+  for (const s of strikes) { if (s.off) continue; const v = s.pos.clone().sub(o), d = v.length(); if (d < reach + (s.r || 0.3) && v.normalize().dot(f) > 0.72) { s.hit(f.clone()); vibrate(25); } }
+}
+function dimLights(k) { if (!dimmed) { dimmed = []; scene.traverse(o => { if (o.isLight && !o.userData.keep) dimmed.push([o, o.intensity]); }); } dimmed.forEach(([o, i]) => { o.intensity = i * k; }); if (k === 1) dimmed = null; }
+function alertBar(text, frac) { const a = $('alert'); if (!text) { a.classList.add('hidden'); return; } a.classList.remove('hidden'); $('alertText').textContent = text; $('alertFill').style.width = Math.max(0, Math.min(1, frac)) * 100 + '%'; }
+function startStory() {
+  story = null; strikes = []; frenzyUntil = 0; dimmed = null; alertBar(null); $('jobs').classList.add('hidden');
+  const D = STORIES[opts.scene]; if (!D) return;
+  story = { def: D, jobs: D.jobs.map(j => ({ ...j, n: 0, done: false, failed: false })), evAt: performance.now() + (D.event ? D.event.at * 1000 : Infinity), ev: null, all: false, t0: performance.now(), d: {} };
+  try { D.setup?.(story.d); } catch (e) { console.warn('story setup', e); }
+  $('introName').textContent = SCENES[opts.scene].name; $('introText').textContent = D.intro; const el = $('intro'); el.classList.remove('hidden', 'fade'); void el.offsetWidth;
+  setTimeout(() => el.classList.add('fade'), 4200); setTimeout(() => el.classList.add('hidden'), 5200); renderJobs();
+}
+function renderJobs() { if (!story) return; $('jobs').innerHTML = '<div class="lbl">Side jobs</div>' + story.jobs.map(j => `<div class="job${j.done ? ' done' : j.failed ? ' failed' : ''}">${j.done ? '✓' : j.failed ? '✗' : '○'} ${j.text}${j.need > 1 && !j.done && !j.failed ? ` <b>${Math.min(j.n, j.need)}/${j.need}</b>` : ''}</div>`).join(''); $('jobs').classList.remove('hidden'); }
+function jobDone(j) { j.done = true; addScore(150, fwdP(), 'big'); banner('Job done!'); A.SFX.unlock(); addStat('jobs'); }
+function storyEmit(ev, d) {
+  if (!story || state !== 'play') return; let ch = false;
+  if (story.ev && !story.ev.over) story.def.event.on?.(ev, d, story.ev);
+  for (const j of story.jobs) { if (j.done || j.failed || j.ev !== ev || (j.test && !j.test(d, story.d))) continue;
+    j.n = j.max ? Math.max(j.n, d.n || 0) : j.n + 1; ch = true; if (j.n >= j.need) jobDone(j); }
+  if (ch) checkJobs();
+}
+function failJob(id) { const j = story?.jobs.find(q => q.id === id); if (j && !j.done && !j.failed) { j.failed = true; toast('Side job failed: ' + j.text); renderJobs(); } }
+function passJob(id) { const j = story?.jobs.find(q => q.id === id); if (j && !j.done && !j.failed) { j.n = j.need; jobDone(j); checkJobs(); } }
+function checkJobs() { renderJobs(); if (!story.all && story.jobs.every(j => j.done)) { story.all = true; setTimeout(() => { if (state === 'play') { banner('Room complete!'); addScore(300, fwdP(), 'big'); addStat('roomsDone'); A.SFX.unlock(); } }, 1400); } }
+function updateStory(dt, now) {
+  if (!story || state !== 'play' || paused) return; const D = story.def;
+  try { D.update?.(dt, now, story.d); } catch (e) { console.warn('story update', e); }
+  if (!D.event) return;
+  if (!story.ev && now > story.evAt) { story.ev = { t0: now, d: {} }; D.event.start?.(story.ev); }
+  const E = story.ev; if (!E || E.over) return;
+  const r = D.event.update?.(dt, now, E); if (r === 'end' || (D.event.dur && now - E.t0 > D.event.dur * 1000)) { E.over = true; D.event.end?.(E); alertBar(null); }
+}
+function endStory() { if (story?.ev && !story.ev.over) { story.ev.over = true; try { story.def.event.end?.(story.ev, true); } catch (e) {} } story?.def.stop?.(story.d); story = null; strikes = []; alertBar(null); $('jobs').classList.add('hidden'); $('intro').classList.add('hidden'); if (dimmed) dimLights(1); }
+const hiddenSpot = () => { const [x1, x2, z1, z2] = room.bounds; for (let i = 0; i < 30; i++) { const x = Math.random() < 0.5 ? x1 + 0.2 : x2 - 0.2, z = rand(z1 + 0.3, z2 - 0.3); if (!room.obstacles.some(([a, b, c, d]) => x > a - 0.3 && x < b + 0.3 && z > c - 0.3 && z < d + 0.3) && Math.hypot(x - room.start.x, z - room.start.z) > 3) return { x, z }; } return freeSpot(2, 0.4); };
+const timeLeftIn = (E, secs, now) => Math.max(0, secs - (now - E.t0) / 1000);
+
+const STORIES = {
+  classic: {
+    intro: 'Two minutes in a room full of things bought to be broken. Nobody is watching. Go.',
+    jobs: [{ id: 'high', text: 'Break 6 things up high', ev: 'break', need: 6, test: d => d.p && d.p.y > 1.05 },
+      { id: 'combo', text: 'Land a 10-hit combo', ev: 'combo', need: 10, max: true },
+      { id: 'throw', text: 'Break 3 things with throws', ev: 'break', need: 3, test: d => d.thrown }],
+    setup(d) { // a punching bag on a chain from the ceiling
+      const s = freeSpot(2.2, 0.9) || { x: 2.5, z: 5 }, top = 3.5, anchor = new CANNON.Body({ mass: 0, position: new CANNON.Vec3(s.x, top, s.z) }); world.addBody(anchor);
+      const body = new CANNON.Body({ mass: 30, shape: new CANNON.Cylinder(0.22, 0.22, 1.1, 10), position: new CANNON.Vec3(s.x, top - 1.6, s.z), angularDamping: 0.6, linearDamping: 0.15 }); world.addBody(body);
+      const con = new CANNON.DistanceConstraint(body, anchor, 1.6); world.addConstraint(con);
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 18), S.mat('fabric', 0x8a1a1a)); mesh.castShadow = true; scene.add(mesh); S.outline(mesh, 1.04);
+      const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1, 5), S.mat('metal', 0x888888)); scene.add(chain);
+      d.bag = { body, mesh, chain, top, x: s.x, z: s.z, hits: 0 }; room.obstacles.push([s.x - 0.3, s.x + 0.3, s.z - 0.3, s.z + 0.3]);
+      strikes.push({ get pos() { return new THREE.Vector3(body.position.x, body.position.y, body.position.z); }, r: 0.35, hit(f) {
+        body.velocity.x += f.x * 3.5 * (CW.power || 1); body.velocity.z += f.z * 3.5 * (CW.power || 1); d.bag.hits++; popup(String(d.bag.hits), { x: body.position.x, y: body.position.y + 0.8, z: body.position.z }, 'small');
+        A.at(body.position, () => A.play('bag', 0.9, 0.9)); addScore(3, body.position, 'small'); bumpCombo(); emit('bag', { n: d.bag.hits }); } });
+    },
+    update(dt, now, d) { const B = d.bag; if (!B) return; const p = B.body.position; B.mesh.position.set(p.x, p.y, p.z); B.mesh.quaternion.set(B.body.quaternion.x, B.body.quaternion.y, B.body.quaternion.z, B.body.quaternion.w);
+      const a = new THREE.Vector3(B.x, B.top, B.z), q = new THREE.Vector3(p.x, p.y + 0.55, p.z); B.chain.position.copy(a).lerp(q, 0.5); B.chain.scale.y = a.distanceTo(q); B.chain.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), a.clone().sub(q).normalize()); },
+    event: { at: 45, dur: 24, start(E) { E.d.flick = 1.2; A.SFX.zap(0.6); toast('The lights are going...'); },
+      update(dt, now, E) { if (E.d.flick > 0) { E.d.flick -= dt; dimLights(Math.random() < 0.5 ? 0.15 : 1); if (E.d.flick <= 0) { dimLights(1); frenzyUntil = now + 20000; banner('FRENZY! Double points'); A.SFX.rage(); } return; }
+        alertBar('Frenzy: double points', (frenzyUntil - now) / 20000); },
+      end() { frenzyUntil = 0; dimLights(1); } },
+  },
+  abandoned: {
+    intro: 'An empty block due for demolition next week. Somebody hid their stash in here.',
+    jobs: [{ id: 'radios', text: 'Find and smash the 3 hidden radios', ev: 'break', need: 3, test: d => d.it?.tag === 'hidden' },
+      { id: 'tvs', text: 'Smash 4 old TVs', ev: 'break', need: 4, test: d => ['tv', 'crt', 'monitor'].includes(d.key) },
+      { id: 'hole', text: 'Smash a hole in a wall', ev: 'hole', need: 1 }],
+    setup(d) {
+      for (let i = 0; i < 3; i++) { const s = hiddenSpot(); if (s) I.add('speaker', s.x, 0, s.z, rand(0, 6), { tag: 'hidden' }).body.sleep(); }
+      const s = wallSpot(1.6, 0.3); if (!s) return; const lift = fixture(1.5, 2.4, 0.2, 0x6a6e72, 'metal', s); // a dead lift: force the doors and find what's inside
+      const tag = label('OUT OF ORDER', 0.8, 0.3, '#e8d8a0', '#1a1a1a'); tag.position.set(0, 0.5, 0.11); lift.add(tag);
+      d.lift = { s, hp: 4 }; strikes.push({ pos: new THREE.Vector3(s.x, 1.2, s.z), r: 0.7, hit() { if (d.lift.hp <= 0) return; d.lift.hp--; A.at(this.pos, () => A.SFX.metal(1, 0.6)); I.sparks_(this.pos, 8, 0xffd27a); shake = Math.max(shake, 0.15);
+        if (d.lift.hp <= 0) { lift.scale.x = 0.25; lift.position.x += Math.cos(s.ry) * 0.55; banner('The lift doors give!'); addScore(80, this.pos, 'big'); emit('lift');
+          const n = new THREE.Vector3(Math.sin(s.ry), 0, Math.cos(s.ry)); for (let k = 0; k < 6; k++) I.add(pick(['tv', 'crt', 'bottle', 'jar', 'gascan', 'vase']), s.x + n.x * 0.9 + rand(-0.5, 0.5), 0, s.z + n.z * 0.9 + rand(-0.5, 0.5), rand(0, 6)); } } });
+    },
+    event: { at: 42, dur: 9, start(E) { // the floor creaks under you: get off it
+        const P = new THREE.Vector3(player.x, 0.02, player.z); E.d.P = P; const ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.25, 40), new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.7, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.copy(P); scene.add(ring); E.d.ring = ring;
+        banner('The floor is creaking!'); toast('Get off it before it goes'); A.at(P, () => A.SFX.wood(1, 0.4)); },
+      update(dt, now, E) { const left = timeLeftIn(E, 6, now); alertBar('Floor giving way', left / 6); E.d.ring.material.opacity = 0.4 + 0.4 * Math.abs(Math.sin(now * 0.012)); if (Math.random() < dt * 2) A.at(E.d.P, () => A.SFX.wood(0.6, rand(0.35, 0.5)));
+        if (left <= 0) { scene.remove(E.d.ring); const near = Math.hypot(player.x - E.d.P.x, player.z - E.d.P.z) < 1.3; if (!near) { addScore(150, E.d.P, 'big'); toast('Close call!'); } breakFloor(E.d.P); return 'end'; } },
+      end(E) { E.d.ring && scene.remove(E.d.ring); } },
+  },
+  haunted: {
+    intro: 'The house at the end of the road. They say the dolls move when you look away.',
+    jobs: [{ id: 'dolls', text: 'Smash 5 cursed dolls', ev: 'break', need: 5, test: d => d.key === 'doll' },
+      { id: 'piano', text: 'Play the piano', ev: 'piano', need: 3 },
+      { id: 'clocks', text: 'Stop the clocks: break 2', ev: 'break', need: 2, test: d => d.key === 'clock' }],
+    setup(d) {
+      for (let i = 0; i < 3; i++) { const s = freeSpot(2, 0.4); if (s) I.add('doll', s.x, 0, s.z, rand(0, 6)).body.sleep(); }
+      for (let i = 0; i < 2; i++) { const s = freeSpot(2, 0.4); if (s) I.add('clock', s.x, 0, s.z, rand(0, 6)).body.sleep(); }
+      const s = wallSpot(1.5, 0.6); if (!s) return; const piano = fixture(1.5, 1.1, 0.6, 0x1a1210, 'wood', s); const keys = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 0.18), S.mat('plastic', 0xf2eee4)); keys.position.set(0, 0.2, 0.36); piano.add(keys);
+      const NOTES = [[110, 130.8, 155.6], [116.5, 138.6, 164.8], [103.8, 123.5, 146.8], [98, 116.5, 138.6]]; // minor, unsettling clusters
+      strikes.push({ pos: new THREE.Vector3(s.x, 0.9, s.z), r: 0.7, hit() { const ch = pick(NOTES); A.at(this.pos, () => ch.forEach((f, i) => A.tone(f * (CW.power > 2 ? 0.5 : 1), 2.2, 0.08, i * 0.02))); emit('piano'); shake = Math.max(shake, 0.05); } });
+    },
+    event: { at: 40, dur: 28, start(E) { // a ghost light drifts toward you; swing at it to banish it, or it puts the lights out
+        const [x1, x2, z1, z2] = room.bounds, g = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTex(), color: 0x9ad8ff, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false }));
+        g.scale.set(0.7, 1, 1); g.position.set(x1 + 0.5, 1.5, z1 + 0.5); const L = new THREE.PointLight(0x9ad8ff, S.realistic ? 6 : 2.5, 6, 2); L.userData.keep = true; g.add(L); scene.add(g); E.d.g = g;
+        banner('Something is in the room...'); A.SFX.whoosh(true);
+        strikes.push(E.d.st = { get pos() { return g.position.clone(); }, r: 0.5, hit() { if (E.d.gone) return; E.d.gone = true; banner('Banished!'); addScore(200, g.position, 'big'); emit('ghost'); A.SFX.zap(1); } }); },
+      update(dt, now, E) { const g = E.d.g; if (E.d.gone) return 'end'; const to = new THREE.Vector3(player.x, 1.5, player.z).sub(g.position), d = to.length(); g.position.addScaledVector(to.normalize(), Math.min(d, dt * 0.7)); g.position.y = 1.4 + Math.sin(now * 0.003) * 0.2;
+        g.material.opacity = 0.6 + Math.random() * 0.4; alertBar('Swing at the light to banish it', 1 - (now - E.t0) / 28000);
+        if (d < 0.9 && !E.d.dark) { E.d.dark = now; dimLights(0.05); toast('It touched you. The lights died'); A.SFX.zap(0.8); }
+        if (E.d.dark && now - E.d.dark > 6000) { dimLights(1); E.d.dark = 0; g.position.set(room.bounds[1] - 0.5, 1.5, room.bounds[3] - 0.5); } },
+      end(E) { scene.remove(E.d.g); strikes = strikes.filter(s => s !== E.d.st); if (E.d.dark) dimLights(1); } },
+  },
+  office: {
+    intro: "Friday, 6 pm. You've just been let go. The office is empty, and the printer is still jammed.",
+    jobs: [{ id: 'printer', text: 'Destroy the printer', ev: 'break', need: 1, test: d => d.key === 'printer' },
+      { id: 'mug', text: "Smash the boss's mug", ev: 'break', need: 1, test: d => d.it?.tag === 'boss' },
+      { id: 'screens', text: 'Smash 5 screens or keyboards', ev: 'break', need: 5, test: d => ['monitor', 'keyboard', 'laptop', 'crt'].includes(d.key) }],
+    setup(d) {
+      const sl = room.slots.filter(s => s.k === 'table'); const t = pick(sl.length ? sl : room.slots);
+      if (!I.list.some(i => i.key === 'printer' && !i.dead)) { const s2 = pick(sl); I.add('printer', s2.x, s2.y, s2.z, 0).body.sleep(); }
+      if (t) { const mug = I.add('mug', t.x, t.y, t.z, 0, { tag: 'boss', color: 0xf2f0ea }); mug.body.sleep(); const pl = label("BOSS", 0.3, 0.11, '#1a1a1a', '#e8c040'); pl.position.set(t.x, t.y + 0.07, t.z + 0.18); pl.rotation.x = -0.6; scene.add(pl); d.plate = pl; }
+      const s = wallSpot(0.6, 0.5); if (!s) return; const cm = fixture(0.5, 1.5, 0.45, 0x2a2a2e, 'metal', s); const sc = label('COFFEE', 0.3, 0.1, '#3a2010', '#f0d8a0'); sc.position.set(0, 0.45, 0.235); cm.add(sc);
+      d.cm = 3; strikes.push({ pos: new THREE.Vector3(s.x, 1, s.z), r: 0.4, hit() { const n = new THREE.Vector3(Math.sin(s.ry), 0, Math.cos(s.ry)); puff(this.pos.clone().addScaledVector(n, 0.3), 0x4a2a14, 4, 0.3, -0.2, 0.7, 1, n.clone().multiplyScalar(3));
+        A.at(this.pos, () => { A.SFX.metal(0.6, 0.9); A.SFX.splash?.(0.3); }); addMark(new THREE.Vector3(s.x + n.x * 0.7, 0.012, s.z + n.z * 0.7), new THREE.Vector3(0, 1, 0), 'paint', 0.8, 0x3a2010); addScore(15, this.pos, 'small'); if (--d.cm === 0) { toast('No more coffee. Ever.'); emit('coffee'); } } });
+    },
+    event: { at: 45, dur: 14, start(E) { E.d.caught = false; E.d.steps = 0; banner('Footsteps in the corridor...'); toast("Someone's coming. Freeze, or get caught in the act"); },
+      update(dt, now, E) { const t = (now - E.t0) / 1000; alertBar(t < 4 ? 'Someone is coming' : 'Stay still...', 1 - t / 14);
+        if ((E.d.steps -= dt) < 0) { E.d.steps = 0.55; A.at(new THREE.Vector3(room.bounds[0], 0, room.bounds[2]), () => A.play('stepwood', Math.min(0.9, 0.2 + t * 0.07), 0.7)); } },
+      on(ev, d, E) { if (ev === 'break' && (performance.now() - E.t0) > 4000 && !E.d.caught) { E.d.caught = true; banner('Caught red-handed!'); toast('Worth it'); addScore(250, fwdP(), 'big'); emit('caught'); } },
+      end(E, quit) { if (!quit && !E.d.caught) { banner('He walked right past'); addScore(150, fwdP(), 'big'); } } },
+  },
+  kitchen: {
+    intro: 'Your flatmate never washes up. Tonight, nobody washes up.',
+    jobs: [{ id: 'stacks', text: 'Smash 2 plate stacks', ev: 'break', need: 2, test: d => d.key === 'platestack' },
+      { id: 'micro', text: 'Smash the microwave', ev: 'break', need: 1, test: d => d.key === 'microwave' },
+      { id: 'glass', text: 'Break 8 glass things', ev: 'break', need: 8, test: d => d.kind === 'glass' }],
+    setup(d) { // a gas hob on the counter: hit it to light it, and whatever sits on it catches fire
+      const sl = room.slots.filter(s => s.k === 'table' && s.y > 0.8 && s.y < 1.0); const s = pick(sl.length ? sl : room.slots); if (!s) return;
+      const hob = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.03, 0.45), S.mat('metal', 0x15151a)); hob.position.set(s.x, s.y + 0.015, s.z); scene.add(hob);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.012, 6, 20), new THREE.MeshBasicMaterial({ color: 0x4a8aff, transparent: true, opacity: 0, toneMapped: false })); ring.rotation.x = Math.PI / 2; ring.position.set(s.x, s.y + 0.04, s.z); scene.add(ring);
+      d.hob = { s, ring, on: false }; strikes.push({ pos: new THREE.Vector3(s.x, s.y + 0.1, s.z), r: 0.35, hit() { d.hob.on = !d.hob.on; ring.material.opacity = d.hob.on ? 0.85 : 0; A.at(this.pos, () => A.SFX[d.hob.on ? 'zap' : 'metal'](0.4, 1.4)); toast(d.hob.on ? 'Gas on' : 'Gas off'); } });
+    },
+    update(dt, now, d) { const H = d.hob; if (!H || !H.on) return; H.ring.scale.setScalar(0.9 + Math.random() * 0.2); for (const it of I.list) if (!it.dead && !it.fire && Math.hypot(it.body.position.x - H.s.x, it.body.position.z - H.s.z) < 0.25 && Math.abs(it.body.position.y - H.s.y) < 0.4) ignite(it); },
+    event: { at: 40, dur: 26, start(E) { const H = story.d.hob; const at = H ? { x: H.s.x, y: H.s.y, z: H.s.z } : { ...fwdP(2), y: 0 }; E.d.at = at; E.d.pan = I.add('saucepan', at.x, at.y, at.z, 0); E.d.pan.body.sleep(); banner('Something is boiling over!'); toast('Put it out quick (extinguisher), or let it burn'); },
+      update(dt, now, E) { const t = (now - E.t0) / 1000, p = E.d.pan.body.position; if (t < 6) { if (Math.random() < dt * 5) puff(new THREE.Vector3(p.x, p.y + 0.3, p.z), 0xe8e8e8, 1, 0.25, 0.8, 0.4, 1.5); alertBar('Pot boiling over', 1 - t / 6); return; }
+        if (!E.d.lit) { E.d.lit = now; ignite(E.d.pan); for (const f of room.furniture) if (!f.dead && f.parts[0].position.distanceTo(p) < 1.6) ignite(f, true); }
+        alertBar('Fire! Put it out', 1 - (now - E.d.lit) / 20000); if (!fires.length) { banner('Saved dinner'); addScore(150, p, 'big'); emit('saved'); return 'end'; } } },
+  },
+};
+
 // ---------- Domino runs: a snaking line across the floor that ends at gas cans
 function dominoRun() {
   const [x1, x2, z1, z2] = room.bounds, free = (x, z) => x > x1 && x < x2 && z > z1 && z < z2 && !room.obstacles.some(([a, b, c, d]) => x > a - 0.3 && x < b + 0.3 && z > c - 0.3 && z < d + 0.3) && Math.hypot(x - room.start.x, z - room.start.z) > 1.2;
@@ -1840,7 +2003,7 @@ function stayInside() { // keep the player in the room, or in any space opened u
   player.x = best[0]; player.z = best[1];
 }
 function updateRooms(dt, now) {
-  updateBoss(now); updateMachines(dt, now); updateFire(dt, now); updateTramps(now); updateFloor(dt, now); updateStorm(now); updateHot(now); updateDraw(); updateSprinklers(dt, now); updateCityAlarms(now); updatePet(dt, now); updateZen(dt, now); updateFireworks(dt, now); updateMic(dt, now);
+  updateBoss(now); updateMachines(dt, now); updateFire(dt, now); updateTramps(now); updateFloor(dt, now); updateStorm(now); updateHot(now); updateDraw(); updateSprinklers(dt, now); updateCityAlarms(now); updatePet(dt, now); updateZen(dt, now); updateStory(dt, now); updateFireworks(dt, now); updateMic(dt, now);
   if (museumAlarm) { museumAlarm.light.intensity = Math.floor(now / 300) % 2 ? (S.realistic ? 60 : 25) : 0; if (now > museumAlarm.until) { museumAlarm.sound?.stop(); museumAlarm.light.intensity = 0; museumAlarm.done = true; } }
   for (const B of breaches) {
     if (now > B.until) { if (B.sound) { B.sound.stop(); B.sound = null; banner('Breach sealed'); } continue; }
@@ -1892,13 +2055,13 @@ async function startSession() {
   if (!save.tut || tutAgain) { tutAgain = false; startTut(); }
   for (const id of ['modeScreen', 'lobby', 'end', 'pause', 'achScreen']) $(id).classList.add('hidden');
   $('hud').classList.remove('hidden'); if (isTouch) $('touch').classList.remove('hidden');
-  A.setMusicStyle(opts.gm === 'zen' || room.calm ? 'calm' : 'heavy'); A.setMusic(opts.music, true); A.startAmbience(room.amb); startStorm();
+  A.setMusicStyle(opts.gm === 'zen' || room.calm ? 'calm' : 'heavy'); A.setMusic(opts.music, true); A.startAmbience(room.amb); startStorm(); startStory();
   banner({ classic: 'Go!', zen: 'Relax', attack: 'Clear the room!', targets: 'Hit the targets!', build: 'Build it, then break it' }[opts.gm]);
   $('palette').classList.toggle('hidden', opts.gm !== 'build'); if (W.tool === 'broom') spawnBin();
   if (!isTouch) lockMouse();
 }
 function endSession() {
-  state = 'end'; mouseHeld = false; dropHeld(); stopMic(); pressSnd?.stop(); pressSnd = null; fireSnd?.stop(); fireSnd = null; stopSprinklers(); cityAlarms.forEach(a => a.sound?.stop()); cityAlarms = []; setHighlight(null); document.exitPointerLock?.(); A.SFX.buzzer(); A.setMusic(opts.music, false); A.stopAmbience();
+  state = 'end'; mouseHeld = false; dropHeld(); endStory(); stopMic(); pressSnd?.stop(); pressSnd = null; fireSnd?.stop(); fireSnd = null; stopSprinklers(); cityAlarms.forEach(a => a.sound?.stop()); cityAlarms = []; setHighlight(null); document.exitPointerLock?.(); A.SFX.buzzer(); A.setMusic(opts.music, false); A.stopAmbience();
   document.body.classList.remove('rage'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden');
   const before = Object.keys(WEAPONS).filter(unlocked);
   save.points += score; save.smashed += smashed; maxStat('round', smashed);
@@ -2245,4 +2408,4 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, fal
 renderMode();
 opts.mode = 'stylized'; build(); opts.mode = null; // background behind the first screen
 requestAnimationFrame(frame);
-window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; }, get cars() { return cars; }, get traffic() { return traffic; }, get renderer() { return renderer; }, get driving() { return driving; }, carKey, toggleView, get view() { return view; }, get wrecks() { return wrecks; }, get grav() { return grav; }, get paused() { return paused; }, get boss() { return boss; }, spawnBoss, get elapsed() { return elapsed; }, equip, placeToy, get basement() { return basement; }, get floorY() { return floorY; }, get storm() { return storm; }, get fires() { return fires; }, jumpY, get pet() { return pet; }, get zen() { return zen; }, get smoke() { return smoke; }, get hot() { return hot; }, petPet, feedKoi, petScare, damageCar, get cityAlarms() { return cityAlarms; } };
+window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; }, get cars() { return cars; }, get traffic() { return traffic; }, get renderer() { return renderer; }, get driving() { return driving; }, carKey, toggleView, get view() { return view; }, get wrecks() { return wrecks; }, get grav() { return grav; }, get paused() { return paused; }, get boss() { return boss; }, spawnBoss, get elapsed() { return elapsed; }, equip, placeToy, get basement() { return basement; }, get floorY() { return floorY; }, get storm() { return storm; }, get fires() { return fires; }, jumpY, get pet() { return pet; }, get zen() { return zen; }, get smoke() { return smoke; }, get hot() { return hot; }, petPet, feedKoi, petScare, damageCar, get cityAlarms() { return cityAlarms; }, get story() { return story; }, get strikes() { return strikes; }, strikeFixtures };
