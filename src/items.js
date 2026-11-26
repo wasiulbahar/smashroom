@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=26';
-import { itemModel, fitInto } from './models.js?v=26';
+import { canvasTex } from './style.js?v=27';
+import { itemModel, fitInto } from './models.js?v=27';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -161,6 +161,8 @@ export const DEFS = {
     make: (M, c) => { const mt = M('wood', c), g = grp(m(cyl(0.18, 0.18, 0.04, 20), mt, 0, 0.3));
       for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; g.add(m(cyl(0.02, 0.025, 0.62, 8), mt, Math.cos(a) * 0.12, 0, Math.sin(a) * 0.12, Math.sin(a) * 0.15, 0, -Math.cos(a) * 0.15)); }
       return { mesh: g, shape: cylS(0.18, 0.15, 0.64, 8), halfH: 0.32 }; } },
+  beachball: { kind: 'plastic', hp: Infinity, pts: 2, mass: 0.3, bv: 99, size: 0.45, spots: [], colors: [0xe83a3a, 0x2a8ad8, 0xf0c020],
+    make: (M, c) => { const g = grp(m(new THREE.SphereGeometry(0.22, 20, 14), M('paint', c))); const band = m(new THREE.TorusGeometry(0.222, 0.05, 8, 24), M('paint', 0xf8f8f4)); band.rotation.x = Math.PI / 2; g.add(band); return { mesh: g, shape: new CANNON.Sphere(0.22), halfH: 0.22 }; } },
   gem: { kind: 'glass', hp: 1, pts: 500, mass: 0.3, bv: 3, size: 0.16, spots: [], colors: [0xff3a6a, 0x3ad8ff, 0x7aff6a],
     make: (M, c) => { const g = grp(m(new THREE.OctahedronGeometry(0.08, 0), M('glass', c), 0, 0.08, 0)); g.children[0].scale.y = 1.3; return { mesh: g, shape: boxS(0.06, 0.08, 0.06), halfH: 0.08 }; } },
   till: { kind: 'electronics', hp: 3, pts: 120, mass: 6, bv: 7, size: 0.45, spots: [], colors: [0x2a2a30],

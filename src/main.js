@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=26';
-import { SCENES } from './scenes.js?v=26';
-import { createItems, DEFS } from './items.js?v=26';
-import * as A from './audio.js?v=26';
-import { preloadItemModels } from './models.js?v=26';
-import { createClayFigure, preloadClayBody } from './clay.js?v=26';
-import { createReplay } from './replay.js?v=26';
-import { clayBody } from './clay.js?v=26';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=27';
+import { SCENES } from './scenes.js?v=27';
+import { createItems, DEFS } from './items.js?v=27';
+import * as A from './audio.js?v=27';
+import { preloadItemModels } from './models.js?v=27';
+import { createClayFigure, preloadClayBody } from './clay.js?v=27';
+import { createReplay } from './replay.js?v=27';
+import { clayBody } from './clay.js?v=27';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const $ = id => document.getElementById(id);
@@ -48,7 +48,7 @@ const WEAPONS = {
 };
 const unlocked = k => { const u = WEAPONS[k].unlock; return !u || (u.pts && save.points >= u.pts) || (u.smashed && save.smashed >= u.smashed) || (u.ach && !!save.ach[u.ach]); };
 const unlockText = u => u.ach ? `achievement "${ACH.find(a => a.id === u.ach).name}"` : u.pts ? `${save.points.toLocaleString()} / ${u.pts.toLocaleString()} lifetime points` : `${save.smashed} / ${u.smashed} things smashed`;
-const NAMES = { gem: 'jewel', till: 'till', scrapcube: 'scrap cube', domino: 'domino', leg: 'table leg', plank: 'board', beam: 'wooden beam', coffeetable: 'coffee table', platestack: 'stack of plates', crt: 'old TV', tv: 'TV', beermug: 'beer mug', wineglass: 'wine glass', fishbowl: 'fish bowl', watercooler: 'water cooler', cinder: 'cinder block', fork: 'cutlery', flowerpot: 'plant pot' };
+const NAMES = { beachball: 'beach ball', gem: 'jewel', till: 'till', scrapcube: 'scrap cube', domino: 'domino', leg: 'table leg', plank: 'board', beam: 'wooden beam', coffeetable: 'coffee table', platestack: 'stack of plates', crt: 'old TV', tv: 'TV', beermug: 'beer mug', wineglass: 'wine glass', fishbowl: 'fish bowl', watercooler: 'water cooler', cinder: 'cinder block', fork: 'cutlery', flowerpot: 'plant pot' };
 const nameOf = k => NAMES[k] || k;
 const GMODES = {
   classic: { name: 'Classic', desc: 'Two minutes. Score as much as you can.' },
@@ -1761,7 +1761,7 @@ function rakeSand(dt) {
   const Z = zen.Z, u = (h.point.x + Z.W / 2) / Z.W * 1024, v = (h.point.z + Z.D / 2) / Z.D * 1024, L = zen.last; zen.last = { u, v };
   if (!L || Math.hypot(u - L.u, v - L.v) < 1) return; const g = zen.g, nx = -(v - L.v), ny = u - L.u, n = Math.hypot(nx, ny) || 1;
   g.lineCap = 'round'; for (let k = -2; k <= 2; k++) { const ox = nx / n * k * 7, oy = ny / n * k * 7; g.strokeStyle = 'rgba(110,95,70,.35)'; g.lineWidth = 3; g.beginPath(); g.moveTo(L.u + ox, L.v + oy); g.lineTo(u + ox, v + oy); g.stroke(); g.strokeStyle = 'rgba(250,244,228,.35)'; g.lineWidth = 2; g.beginPath(); g.moveTo(L.u + ox + 2, L.v + oy + 2); g.lineTo(u + ox + 2, v + oy + 2); g.stroke(); }
-  zen.tex.needsUpdate = true; if (Math.random() < dt * 6) A.at(h.point, () => A.SFX.sweep?.(0.15));
+  zen.tex.needsUpdate = true; if ((zen.raked = (zen.raked || 0) + Math.hypot(u - L.u, v - L.v)) > 60) { zen.raked = 0; emit('rake'); } if (Math.random() < dt * 6) A.at(h.point, () => A.SFX.sweep?.(0.15));
 }
 function feedKoi() {
   if (!zen) return false; const P = zen.Z.pond, d = Math.hypot(player.x - P.x, player.z - P.z); if (d > P.r + 1.6) return false;
@@ -1835,7 +1835,7 @@ function storyEmit(ev, d) {
   if (!story || state !== 'play') return; let ch = false;
   if (story.ev && !story.ev.over) story.def.event.on?.(ev, d, story.ev);
   for (const j of story.jobs) { if (j.done || j.failed || j.ev !== ev || (j.test && !j.test(d, story.d))) continue;
-    j.n = j.max ? Math.max(j.n, d.n || 0) : j.n + 1; ch = true; if (j.n >= j.need) jobDone(j); }
+    j.n = j.max ? Math.max(j.n, d.n || 0) : j.n + (j.sum ? (d.n || 0) : 1); ch = true; if (j.n >= j.need) jobDone(j); }
   if (ch) checkJobs();
 }
 function failJob(id) { const j = story?.jobs.find(q => q.id === id); if (j && !j.done && !j.failed) { j.failed = true; toast('Side job failed: ' + j.text); renderJobs(); } }
@@ -2145,6 +2145,100 @@ Object.assign(STORIES, {
   },
 });
 
+const atP = (m, x, y, z) => { m.position.set(x, y, z); return m; };
+function storyUse() { return !!(story && story.def.use && story.def.use(story.d)); } // E does something special in some rooms
+Object.assign(STORIES, {
+  tinytown: {
+    intro: "You're a giant, and this town has never been ready for you. Leave the church standing, though.",
+    jobs: [{ id: 'towers', text: 'Flatten 15 buildings', ev: 'break', need: 15, test: d => d.key === 'mini' },
+      { id: 'cars', text: 'Wreck 5 toy cars', ev: 'break', need: 5, test: d => d.key === 'toycar' },
+      { id: 'church', text: 'Keep the church standing for 60 s', ev: 'never', need: 1 }],
+    setup(d) { const s = freeSpot(3, 0.8) || { x: -3, z: -3 }; d.church = I.add('mini', s.x, 0, s.z, 0, { w: 0.5, h: 1.3, d: 0.8, tag: 'church', color: 0xf2eee4 }); d.church.body.sleep();
+      const cross = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.04), S.mat('paint', 0xc8a020)); cross.position.y = 0.8; d.church.mesh.add(cross);
+      // a toy train running round the outer road; swing at it to derail it
+      const cars = []; for (let i = 0; i < 4; i++) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.5), S.mat('paint', i ? pick([0x2a5ab3, 0x2a8a4a, 0xd9a22a]) : 0xc8202a)); c.castShadow = true; scene.add(c); S.outline(c, 1.04); cars.push(c); }
+      d.train = { cars, s: 0, on: true };
+      strikes.push({ get pos() { return cars[0].position.clone(); }, r: 0.5, hit(f) { if (!d.train.on) return; d.train.on = false; cars.forEach((c, i) => { scene.remove(c); const it = I.add('toycar', c.position.x, 0.05, c.position.z, c.rotation.y); it.body.velocity.set(f.x * 4 + rand(-2, 2), 3, f.z * 4 + rand(-2, 2)); });
+        banner('Derailed!'); addScore(100, cars[0].position, 'big'); emit('derail'); A.SFX.metal(0.8, 1.4); setTimeout(() => { if (story?.d === d) { d.train.on = true; cars.forEach(c => scene.add(c)); } }, 15000); } }); },
+    update(dt, now, d) {
+      if (d.church && !d.churchDone) { if (d.church.dead) { d.churchDone = true; failJob('church'); } else if (now - story.t0 > 60000) { d.churchDone = true; passJob('church'); } }
+      const T = d.train; if (!T || !T.on) return; T.s = (T.s + dt * 1.6) % 38.4; const at = s => { s = ((s % 38.4) + 38.4) % 38.4; const e = 4.8, L = 9.6; if (s < L) return [-e + s, e, Math.PI / 2]; if (s < 2 * L) return [e, e - (s - L), Math.PI]; if (s < 3 * L) return [e - (s - 2 * L), -e, -Math.PI / 2]; return [-e, -e + (s - 3 * L), 0]; };
+      T.cars.forEach((c, i) => { const [x, z, ry] = at(T.s - i * 0.6); c.position.set(x, 0.12, z); c.rotation.y = ry; });
+      const [hx, hz] = at(T.s); for (const it of I.list) if (!it.dead && !it.fixed && it.key !== 'mini' && Math.hypot(it.body.position.x - hx, it.body.position.z - hz) < 0.3) { it.body.wakeUp(); it.body.velocity.y = 2; } },
+    event: { at: 40, dur: 26, start(E) { // a toy tank rolls in and takes potshots at you; swing at it to stop it
+        const g = new THREE.Group(), body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.7), S.mat('paint', 0x4a5a2a)), tur = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.12, 0.3), S.mat('paint', 0x3a4a22)), gun = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.45, 8), S.mat('metal', 0x2a2a2a));
+        body.position.y = 0.1; tur.position.y = 0.24; gun.rotation.x = Math.PI / 2; gun.position.set(0, 0.24, 0.3); g.add(body, tur, gun); g.traverse(o => o.isMesh && S.outline(o, 1.04)); g.position.set(-4.8, 0, -6.5); scene.add(g);
+        Object.assign(E.d, { g, next: performance.now() + 1500, shots: [] }); banner('A tank!'); toast('It is shooting at you. Smash it');
+        strikes.push(E.d.st = { get pos() { return g.position.clone().add({ x: 0, y: 0.2, z: 0 }); }, r: 0.6, hit() { if (E.d.dead) return; E.d.dead = true; explode({ x: g.position.x, y: 0.3, z: g.position.z }); scene.remove(g); banner('Tank destroyed!'); addScore(200, g.position, 'big'); emit('tank'); } }); },
+      update(dt, now, E) { if (E.d.dead) return 'end'; const g = E.d.g, to = new THREE.Vector3(player.x - g.position.x, 0, player.z - g.position.z), d = to.length(); g.rotation.y = Math.atan2(to.x, to.z); if (d > 2.5) g.position.addScaledVector(to.normalize(), dt * 0.6);
+        alertBar('Smash the tank', 1 - (now - E.t0) / 26000);
+        if (now > E.d.next) { E.d.next = now + 1500; const o = g.position.clone().add({ x: 0, y: 0.25, z: 0 }), dir = new THREE.Vector3(player.x, 1.3, player.z).sub(o).normalize(); const b = new CANNON.Body({ mass: 0.3, shape: new CANNON.Sphere(0.04), position: new CANNON.Vec3(o.x + dir.x * 0.4, o.y + dir.y * 0.4, o.z + dir.z * 0.4) }); b.velocity.set(dir.x * 10, dir.y * 10 + 0.8, dir.z * 10); world.addBody(b);
+          const m = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), S.mat('metal', 0x222222)); scene.add(m); E.d.shots.push({ b, m, t: 0 }); A.at(o, () => A.SFX.pball(0.6)); puff(o, 0x8a8478, 2, 0.15, 0.2, 0.5); }
+        E.d.shots = E.d.shots.filter(s => { s.t += dt; s.m.position.copy(s.b.position); if (s.b.position.distanceTo(new THREE.Vector3(player.x, 1.4, player.z)) < 0.5 && !s.hitMe) { s.hitMe = true; shake = Math.max(shake, 0.3); flash(0.15); addScore(-20, fwdP(), 'small'); vibrate(60); }
+          if (s.t > 3) { world.removeBody(s.b); scene.remove(s.m); return false; } return true; }); },
+      end(E) { scene.remove(E.d.g); E.d.shots.forEach(s => { world.removeBody(s.b); scene.remove(s.m); }); strikes = strikes.filter(s => s !== E.d.st); } },
+  },
+  space: {
+    intro: 'Orbital station Kestrel, night cycle. The crew is asleep, and nothing up here is bolted down.',
+    jobs: [{ id: 'vent', text: 'Vent 20 things into space', ev: 'vent', need: 20 }, { id: 'panel', text: 'Wreck the control panel', ev: 'panel', need: 1 }, { id: 'seal', text: 'Seal a hull breach', ev: 'seal', need: 1 }],
+    setup(d) { const s = wallSpot(1.2, 0.35); if (s) { const p = fixture(1.2, 1.1, 0.3, 0x2a2e36, 'metal', s, 0.9); const sc = label('LIFE SUPPORT', 0.9, 0.3, '#0a2a1a', '#4aff8a'); sc.position.set(0, 0.2, 0.16); p.add(sc); d.php = 4;
+        strikes.push({ pos: new THREE.Vector3(s.x, 1.1, s.z), r: 0.5, hit() { if (d.php <= 0) return; d.php--; I.sparks_(this.pos, 14, 0x6ad8ff); A.at(this.pos, () => A.SFX.zap(0.8)); if (d.php === 0) { banner('Control panel fried'); dimLights(0.4); setTimeout(() => dimLights(1), 2500); addScore(150, this.pos, 'big'); emit('panel'); } } }); }
+      const a = wallSpot(1.4, 0.2, s ? [s] : []); if (!a) return; const door = fixture(1.3, 2.2, 0.15, 0x8a8f96, 'metal', a); const al = label('AIRLOCK', 0.6, 0.18, '#e8c020', '#1a1a1a'); al.position.set(0, 0.7, 0.08); door.add(al); d.lock = { a, door, open: 0 };
+      strikes.push({ pos: new THREE.Vector3(a.x, 1.1, a.z), r: 0.6, hit() { const L = d.lock; if (L.open > performance.now()) return; L.open = performance.now() + 4000; door.visible = false; const n = new THREE.Vector3(Math.sin(a.ry), 0, Math.cos(a.ry)), at = new THREE.Vector3(a.x, 1.1, a.z);
+        breaches.push({ at, n: n.clone().negate(), until: L.open, sound: A.loopAt('spray', at, 0.6, 0.55) }); banner('AIRLOCK OPEN!'); emit('airlock'); setTimeout(() => { door.visible = true; }, 4000); } }); },
+    event: { at: 45, dur: 22, start(E) { const s = wallSpot(0.8, 0.1) || { x: room.bounds[0] - 0.35, z: 0, ry: Math.PI / 2 }, n = new THREE.Vector3(Math.sin(s.ry), 0, Math.cos(s.ry)), at = new THREE.Vector3(s.x, 1.3, s.z);
+        const patch = new THREE.Mesh(new THREE.CircleGeometry(0.35, 20), new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.8, toneMapped: false })); patch.position.copy(at).addScaledVector(n, 0.06); patch.lookAt(at.clone().add(n)); scene.add(patch);
+        const B = { at, n: n.clone().negate(), until: performance.now() + 20000, sound: A.loopAt('spray', at, 0.6, 0.55) }; breaches.push(B); Object.assign(E.d, { B, patch, hp: 3 }); A.at(at, () => A.SFX.boom()); shake = Math.max(shake, 0.5); banner('METEOR STRIKE!'); toast('Hit the breach 3 times to seal it');
+        strikes.push(E.d.st = { pos: at.clone(), r: 0.5, hit() { if (E.d.hp <= 0) return; E.d.hp--; I.sparks_(this.pos, 10, 0xffd27a); A.at(this.pos, () => A.SFX.metal(1, 0.8)); if (E.d.hp === 0) E.d.sealed = true; } }); },
+      update(dt, now, E) { const left = (E.d.B.until - now) / 20000; alertBar(`Hull breach: oxygen ${Math.round(left * 100)}%`, left); E.d.patch.material.opacity = 0.5 + 0.4 * Math.abs(Math.sin(now * 0.01));
+        if (E.d.sealed) { E.d.B.until = now; banner('Breach sealed'); addScore(200, E.d.B.at, 'big'); emit('seal'); return 'end'; } if (left <= 0) { banner('Oxygen low!'); addScore(-100, fwdP(), 'big'); rageMeter = 0; return 'end'; } },
+      end(E) { scene.remove(E.d.patch); strikes = strikes.filter(s => s !== E.d.st); E.d.B.until = Math.min(E.d.B.until, performance.now()); } },
+  },
+  bowling: {
+    intro: "Ten-pin league night got cancelled. You've got the place, the balls and three lanes to yourself.",
+    jobs: [{ id: 'pins', text: 'Knock down 20 pins', ev: 'pins', need: 20, sum: true }, { id: 'strike', text: 'Bowl a strike', ev: 'strike', need: 1 }, { id: 'screen', text: 'Smash the score screen', ev: 'screen', need: 1 }],
+    setup(d) { const s = wallSpot(1.4, 0.2); if (s) { const scr = fixture(1.4, 0.8, 0.1, 0x111114, 'plastic', s, 2.2); const t = label('FRAME 1   STRIKE!', 1.2, 0.5, '#0a0a3a', '#ffcf3a'); t.position.set(0, 0, 0.06); scr.add(t); d.shp = 3;
+        strikes.push({ pos: new THREE.Vector3(s.x, 2.2, s.z), r: 0.6, hit() { if (d.shp <= 0) return; d.shp--; I.sparks_(this.pos, 10, 0xffe9a0); A.at(this.pos, () => A.SFX.glass(0.7, 1.1)); if (d.shp === 0) { t.visible = false; banner('Game over, scoreboard'); addScore(120, this.pos, 'big'); emit('screen'); } } }); }
+      // bumpers: hit the post to raise rails along the gutters
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.1, 0.15), S.mat('paint', 0x2a8ad8)); post.position.set(1.6, 0.55, 6); scene.add(post); room.obstacles.push([1.5, 1.7, 5.9, 6.1]); const bm = S.mat('paint', 0xe8c020), rails = [];
+      for (const L of room.lanes || []) for (const sx of [-1, 1]) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 17), bm); m.position.set(L.x + sx * 0.52, 0.11, -3); m.visible = false; scene.add(m); const b = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(0.03, 0.11, 8.5)), position: new CANNON.Vec3(L.x + sx * 0.52, 0.11, -3) }); rails.push({ m, b }); }
+      d.bump = { rails, up: false }; strikes.push({ pos: new THREE.Vector3(1.6, 1, 6), r: 0.3, hit() { const B2 = d.bump; B2.up = !B2.up; B2.rails.forEach(r => { r.m.visible = B2.up; B2.up ? world.addBody(r.b) : world.removeBody(r.b); }); toast(B2.up ? 'Bumpers up' : 'Bumpers down'); A.SFX.zap(0.4); } }); },
+    event: { at: 45, dur: 22, start(E) { dimLights(0.12); const L = new THREE.PointLight(0x9a4aff, S.realistic ? 30 : 10, 30, 1.5); L.userData.keep = true; L.position.set(0, 3, -6); scene.add(L); E.d.L = L; frenzyUntil = performance.now() + 20000; banner('COSMIC BOWLING!'); toast('Double points in the dark'); A.SFX.rage(); },
+      update(dt, now, E) { E.d.L.color.setHSL((now * 0.0002) % 1, 0.8, 0.6); alertBar('Cosmic bowling: double points', 1 - (now - E.t0) / 20000); }, end(E) { scene.remove(E.d.L); dimLights(1); frenzyUntil = 0; } },
+  },
+  greenhouse: {
+    intro: 'A sunny glasshouse on a slow afternoon. Nobody needs anything from you. Water the plants, or don’t.',
+    jobs: [{ id: 'pots', text: 'Smash 6 flowerpots', ev: 'break', need: 6, test: d => d.key === 'flowerpot' || d.key === 'pot' }, { id: 'glass', text: 'Break 10 glass things', ev: 'break', need: 10, test: d => d.kind === 'glass' },
+      { id: 'water', text: 'Water the plants (extinguisher) for 5 s', ev: 'water', need: 5 }],
+    update(dt, now, d) { if (W.tool === 'foam' && mouseHeld) { d.wt = (d.wt || 0) + dt; if (d.wt > 1) { d.wt = 0; emit('water'); } } },
+    event: { at: 45, dur: 30, start(E) { A.storm(); dimLights(0.75); banner('A shower rolls in'); }, update(dt, now, E) { if (Math.random() < dt * 25) { const [x1, x2, z1, z2] = room.bounds; puff(new THREE.Vector3(rand(x1, x2), 2.4, rand(z1, z2)), 0xc8e0f0, 1, 0.04, 0, 0.5, 0.35, new THREE.Vector3(0, -6, 0)); } }, end() { dimLights(1); } },
+  },
+  beach: {
+    intro: 'A beach shack at sunset, nobody around for miles. Build a sandcastle. Then stomp it.',
+    jobs: [{ id: 'build', text: 'Build a sandcastle (E on the marked sand, 3 times)', ev: 'build', need: 3 }, { id: 'stomp', text: 'Stomp the sandcastle', ev: 'castle', need: 1 }, { id: 'bottles', text: 'Smash 5 bottles', ev: 'break', need: 5, test: d => d.key === 'bottle' }],
+    setup(d) { const s = freeSpot(2.5, 1) || { x: 1.5, z: 1.5 }; const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.62, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(s.x, 0.02, s.z); scene.add(ring);
+      d.castle = { s, stage: 0, parts: [], ring }; const ball = I.add('beachball', s.x + 1.5, 0, s.z + 0.5, 0); ball.body.sleep();
+      strikes.push({ pos: new THREE.Vector3(s.x, 0.3, s.z), r: 0.5, hit() { if (d.castle.stage >= 3) stompCastle(d); } }); },
+    use(d) { const C = d.castle; if (!C || Math.hypot(player.x - C.s.x, player.z - C.s.z) > 1.6 || C.stage >= 3) return false; const sand = S.mat('stone', 0xe8d4a0);
+      if (C.stage === 0) C.parts.push(atP(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 0.3, 16), sand), C.s.x, 0.15, C.s.z));
+      if (C.stage === 1) for (const [dx, dz] of [[-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]]) C.parts.push(atP(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.3, 10), sand), C.s.x + dx, 0.45, C.s.z + dz));
+      if (C.stage === 2) { C.parts.push(atP(new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.35, 10), sand), C.s.x, 0.48, C.s.z)); const f = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.1), new THREE.MeshBasicMaterial({ color: 0xe82a2a, side: THREE.DoubleSide })); f.position.set(C.s.x + 0.08, 0.85, C.s.z); C.parts.push(f); }
+      C.parts.forEach(p => { if (!p.parent) { p.castShadow = true; scene.add(p); } }); C.stage++; A.at(new THREE.Vector3(C.s.x, 0.2, C.s.z), () => A.SFX.sweep?.(0.4)); emit('build'); if (C.stage === 3) { toast('Now stomp it (G) or smash it'); } return true; },
+    update(dt, now, d) { const C = d.castle; if (C && C.stage >= 3 && pound === null && C.armed && Math.hypot(player.x - C.s.x, player.z - C.s.z) < 2) stompCastle(d); if (C) C.armed = !!pound; },
+    event: { at: 45, dur: 40, start(E) { E.d.sun = []; scene.traverse(o => { if (o.isDirectionalLight || o.isHemisphereLight) E.d.sun.push([o, o.intensity, o.color.clone()]); }); banner('The sun is going down'); },
+      update(dt, now, E) { const k = Math.min(1, (now - E.t0) / 35000); E.d.sun.forEach(([o, i, c]) => { o.intensity = i * (1 - 0.65 * k); o.color.copy(c).lerp(new THREE.Color(0xff7a3a), k * 0.8); }); } },
+  },
+  zengarden: {
+    intro: 'Raked sand, soft rain, a wind chime. No score and no clock. Take as long as you like.',
+    jobs: [{ id: 'rake', text: 'Rake the sand (broom)', ev: 'rake', need: 30 }, { id: 'koi', text: 'Feed the koi 3 times (E by the pond)', ev: 'koi', need: 3 }, { id: 'chime', text: 'Ring the wind chime 3 times', ev: 'chimes', need: 3 }],
+    use(d) { (d.lanterns ??= []).length > 10 && (scene.remove(d.lanterns.shift().s)); const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTex(), color: 0xffc88a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false })); s.scale.set(0.35, 0.45, 1);
+      s.position.set(player.x - Math.sin(player.yaw) * 0.8, 1.3, player.z - Math.cos(player.yaw) * 0.8); scene.add(s); d.lanterns.push({ s, ph: rand(0, 6) }); emit('lantern'); toast('A paper lantern drifts up'); return true; },
+    update(dt, now, d) { (d.lanterns || []).forEach(L => { L.s.position.y += dt * 0.35; L.s.position.x += Math.sin(now * 0.0007 + L.ph) * dt * 0.15; L.s.material.opacity = Math.max(0, 1 - (L.s.position.y - 1.3) / 14); }); },
+    event: { at: 60, dur: 40, start(E) { E.d.lamps = room.lamps.map(L => [L.light, L.light.intensity]); banner('Dusk'); }, update(dt, now, E) { const k = Math.min(1, (now - E.t0) / 20000); dimLights(1 - 0.5 * k); E.d.lamps.forEach(([l, i]) => { l.intensity = i * (1 + 3 * k); }); } },
+  },
+});
+function stompCastle(d) { const C = d.castle; C.parts.forEach(p => scene.remove(p)); C.parts = []; C.stage = 0; puff(new THREE.Vector3(C.s.x, 0.3, C.s.z), 0xe8d4a0, 10, 0.5, 0.2, 0.6); A.at(new THREE.Vector3(C.s.x, 0.2, C.s.z), () => { A.SFX.bag?.(1); A.SFX.sweep?.(0.6); }); banner('Castle stomped!'); addScore(120, new THREE.Vector3(C.s.x, 0.5, C.s.z), 'big'); emit('castle'); }
+
 // ---------- Domino runs: a snaking line across the floor that ends at gas cans
 function dominoRun() {
   const [x1, x2, z1, z2] = room.bounds, free = (x, z) => x > x1 && x < x2 && z > z1 && z < z2 && !room.obstacles.some(([a, b, c, d]) => x > a - 0.3 && x < b + 0.3 && z > c - 0.3 && z < d + 0.3) && Math.hypot(x - room.start.x, z - room.start.z) > 1.2;
@@ -2199,7 +2293,7 @@ function updateRooms(dt, now) {
   for (const B of breaches) {
     if (now > B.until) { if (B.sound) { B.sound.stop(); B.sound = null; banner('Breach sealed'); } continue; }
     const pull = (body, k) => { const d = B.at.clone().sub(body.position), L = d.length(); if (L > 9) return; body.wakeUp(); d.normalize().multiplyScalar(k * dt * (1 - L / 10)); body.velocity.x += d.x; body.velocity.y += d.y; body.velocity.z += d.z; };
-    for (const it of I.list) if (!it.dead && !it.fixed && !it.held) { pull(it.body, 22 / Math.sqrt(Math.max(0.3, it.def.mass))); if (it.body.position.distanceTo(B.at) < 0.7) { I.shatter(it, B.n.clone().negate(), 4, false); addScore(5, B.at, 'small'); } }
+    for (const it of I.list) if (!it.dead && !it.fixed && !it.held) { pull(it.body, 22 / Math.sqrt(Math.max(0.3, it.def.mass))); if (it.body.position.distanceTo(B.at) < 0.7) { I.shatter(it, B.n.clone().negate(), 4, false); addScore(5, B.at, 'small'); emit('vent'); } }
     for (const c of [...I.chunks]) { pull(c.body, 26); if (c.body.position.distanceTo(B.at) < 0.6) { world.removeBody(c.body); scene.remove(c.mesh); I.chunks.splice(I.chunks.indexOf(c), 1); } }
     puff(B.at.clone().addScaledVector(B.n, 0.4), 0xd8e8ff, 1, 0.3, 0, 0.35, 0.6, B.n.clone().multiplyScalar(-4));
   }
@@ -2210,6 +2304,7 @@ function updateRooms(dt, now) {
     const down = L.pins.filter(p => p.dead || new THREE.Vector3(0, 1, 0).applyQuaternion(p.mesh.quaternion).y < 0.8 || p.body.position.y < -0.2).length;
     const at = { x: L.x, y: 1.2, z: -10.5 };
     if (down === 10) { banner('STRIKE!'); addScore(300, at, 'big'); A.SFX.unlock(); addStat('strikes'); emit('strike'); } else if (down > 0) { popup(`${down} pins`, at, 'big'); addScore(down * 15, at, 'small'); }
+    if (down > 0) emit('pins', { n: down });
     room.rack(L); A.at(at, () => A.SFX.wood(0.5, 0.8));
     balls = balls.filter(b => { const gone = Math.abs(b.body.position.x - L.x) < 0.7 && b.body.position.z < -8.5; if (gone) { world.removeBody(b.body); scene.remove(b.mesh); } return !gone; }); // the ball comes back
   }
@@ -2409,7 +2504,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyV') toggleView();
   if (e.code === 'KeyG') groundPound();
   if (e.code === 'KeyR' && driving) radio(true);
-  if (e.code === 'KeyE') { if (carKey()) return; if (!held && !hlTarget && (petPet() || feedKoi())) return; grabOrThrow(); }
+  if (e.code === 'KeyE') { if (carKey()) return; if (!held && !hlTarget && (petPet() || feedKoi() || storyUse())) return; grabOrThrow(); }
   if (e.code === 'KeyQ') dropHeld();
   if (opts.gm === 'build' && state === 'play' && /^Digit[1-7]$/.test(e.code)) placePreset(+e.code.slice(5) - 1);
   if (e.code === 'KeyT' && tut) tutDone(true);
@@ -2422,7 +2517,7 @@ const tl = $('touch');
 tl.addEventListener('pointerdown', e => {
   const id = e.target.id; if (id && id.endsWith('Btn')) { vibrate(8); try { e.target.setPointerCapture(e.pointerId); } catch (_) {} } // the finger can slide off and the release still counts
   if (id === 'smashBtn') { mouseHeld = true; startSwing(); return; }
-  if (id === 'grabBtn') { if (grav) gravDrop(); else if (held) dropHeld(); else if (!carKey() && !(!hlTarget && (petPet() || feedKoi()))) grab(hlTarget || findGrabTarget()); return; }
+  if (id === 'grabBtn') { if (grav) gravDrop(); else if (held) dropHeld(); else if (!carKey() && !(!hlTarget && (petPet() || feedKoi() || storyUse()))) grab(hlTarget || findGrabTarget()); return; }
   if (id === 'throwBtn') { if (held) { charging = true; chargeT = 0; } return; } // hold to throw harder
   if (id === 'kickBtn') { startSwing('kick'); return; }
   if (id === 'poundBtn') { groundPound(); return; }

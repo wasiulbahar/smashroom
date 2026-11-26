@@ -31,6 +31,18 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Toys.** A ball cannon that fires heavy iron balls, plus ramps (8) and trampolines (9) you can drop anywhere. Walk onto a trampoline and you bounce too.
 - **Breakable floors.** Ground pound the same spot three times and you crash through into a basement full of old stuff. A ladder takes you back up.
 - **Thunderstorms.** Tick Thunderstorm in the lobby: rain, lightning, real thunder, and now and then the power cuts out and you carry on by flashlight.
+- **Every room has a story.** Each one opens with a line of context, gives you three side jobs (with a bonus for each, and a bigger one for clearing all three), throws one timed event at you partway through, and has something only it has. A few examples:
+  - Classic: a punching bag that counts your hits, and a lights-out frenzy with double points.
+  - Haunted house: cursed dolls, a piano, and a ghost light that drifts toward you until you swing at it.
+  - Office: the boss's mug, a coffee machine, and footsteps in the corridor: freeze, or get caught in the act.
+  - Kitchen: a gas hob you can light, and a pot that boils over and catches fire.
+  - Car yard: a car lift that drops cars from height, and a security floodlight to stay out of.
+  - Apartment: a smart TV that changes channel when hit, and a neighbour who wants ten seconds of quiet.
+  - Museum: a jewel inside a laser grid, and a rotating laser sweep.
+  - Scrapyard: a magnet crane, and a load slipping right over your head.
+  - Space station: an airlock you can open, and a meteor strike to seal before the oxygen runs out.
+  - Tiny town: a toy train to derail, a church to protect, and a tank that shoots back.
+  - Beach: build a sandcastle, then stomp it. Zen garden: release paper lanterns at dusk.
 - **Pets.** Bring a cat or a dog (lobby). It wanders around, bolts under a table when things crash nearby, and purrs or wags when you pet it (E). Nothing can hurt it.
 - **Things play together.** Cannon balls and the wrecking ball catch fire when they pass through flames and carry it on, a burning thing you throw lights whatever it lands in, and the leaf blower fans a fire along. Smoke alarms go off when a fire takes hold and the sprinklers come on and put it out. Car alarms set off the cars parked nearby.
 - **Scrap cubes.** Whatever the scrapyard crusher flattens comes out as a scrap cube, stacked beside it, and a new car rolls in.
