@@ -1,9 +1,9 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=24';
-import { buildCity } from './city.js?v=24';
-import { loadModel, fitInto } from './models.js?v=24';
+import { canvasTex } from './style.js?v=25';
+import { buildCity } from './city.js?v=25';
+import { loadModel, fitInto } from './models.js?v=25';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -517,7 +517,13 @@ export const SCENES = {
       K.table(-2.4, 3.6, 1.4, 0.7, 0.4, wood, wood, { solid: true }); K.table(3.4, 3.8, 1.4, 0.7, 0.4, wood, wood, { solid: true });
       K.hemi(0xdde4ec, 0x8a8270, K.v(0.8, 1.15)); K.light('dir', 0xf4f0e8, K.v(1.8, 0.9), -6, 10, 4, { target: [0, 0, 0], shadow: true, size: 9 });
       K.floor([[-1.5, 0], [1.5, -0.5], [0, 1.5], [-4.5, 1.5], [4.6, 1], [-1, -2.5], [5, -6], [-5, 3]]);
-      return { ...K, zen: true, calm: true, pool: ['vase', 'vase', 'pot', 'pot', 'flowerpot', 'flowerpot', 'teapot', 'cup', 'cup', 'bowl', 'bowl', 'jar', 'jug', 'plate', 'platestack', 'lamp'], start: { x: 0, z: 5.6 }, amb: 'zen', photoSpots: [] };
+      // a wind chime on a post by the deck: swing anything at it to ring it
+      const post = S.mat('wood', 0x6a4a2a); K.box(0.12, 2.3, 0.12, post, -3.6, 1.15, -6.2); K.box(0.9, 0.08, 0.08, post, -3.2, 2.25, -6.2, { phys: false }); K.obstacles.push([-3.75, -3.45, -6.35, -6.05]);
+      const tubes = []; for (let i = 0; i < 5; i++) { const piv = new THREE.Group(); piv.position.set(-3.5 + i * 0.13, 2.2, -6.2); const L = 0.55 - i * 0.06;
+        const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, L, 10), S.mat('metal', 0xc8ccd0)); tube.position.y = -0.12 - L / 2; tube.castShadow = true; piv.add(tube);
+        const str = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.12, 4), S.mat('plastic', 0x222222)); str.position.y = -0.06; piv.add(str); scene.add(piv); tubes.push(piv); }
+      const zenParts = { W, D, pond: { x: 3.6, z: -3.2, r: 1.8 }, chimes: { pos: new THREE.Vector3(-3.25, 1.9, -6.2), tubes } };
+      return { ...K, zen: true, calm: true, zenParts, pool: ['vase', 'vase', 'pot', 'pot', 'flowerpot', 'flowerpot', 'teapot', 'cup', 'cup', 'bowl', 'bowl', 'jar', 'jug', 'plate', 'platestack', 'lamp'], start: { x: 0, z: 5.6 }, amb: 'zen', photoSpots: [] };
     },
   },
   greenhouse: {

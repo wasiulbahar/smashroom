@@ -80,6 +80,18 @@ function tn(t, f, dur, g, type = 'sine', bus = B(), f2) {
   o.connect(gn).connect(bus); o.start(t); o.stop(t + dur + 0.05);
 }
 const now = () => ac.currentTime;
+export const play = (set, g = 1, rate = 1) => smp(set, g, rate); // a recording at the current A.at() position
+// a smoke detector: a piezo beeper, three short beeps
+export function smokeBeep() { if (!ac) return; const t = now(); for (let k = 0; k < 3; k++) tn(t + k * 0.5, 3150, 0.28, 0.05, 'square', B()); }
+// silly mode: cartoon sounds, made on purpose to sound like a cartoon
+export const SILLY = {
+  boing() { if (!ac) return; const t = now(), o = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain(), g = ac.createGain(); o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(110, t + 0.6);
+    lfo.frequency.setValueAtTime(18, t); lfo.frequency.linearRampToValueAtTime(6, t + 0.6); lg.gain.setValueAtTime(60, t); lg.gain.exponentialRampToValueAtTime(1, t + 0.6); lfo.connect(lg).connect(o.frequency);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.65); o.connect(g).connect(B()); o.start(t); lfo.start(t); o.stop(t + 0.7); lfo.stop(t + 0.7); },
+  whistle() { if (!ac) return; const t = now(), up = Math.random() < 0.5; tn(t, up ? 500 : 1700, 0.45, 0.12, 'sine', B(), up ? 1700 : 450); },
+  honk() { if (!ac) return; const t = now(); tn(t, 233, 0.22, 0.12, 'sawtooth'); tn(t, 349, 0.22, 0.08, 'sawtooth'); nz(t, 0.18, 'bandpass', 700, 2, 0.05); },
+  pop() { if (!ac) return; const t = now(); tn(t, 900, 0.08, 0.2, 'sine', B(), 200); nz(t, 0.05, 'highpass', 2000, 0.7, 0.1); },
+};
 
 const SYN = {
   glass(i = 1) { if (!ac) return; const t = now(); nz(t, 0.5, 'highpass', 2500, 0.7, 0.8 * i); nz(t, 0.08, 'bandpass', 5000, 1, i); tn(t, 95, 0.12, 0.6 * i, 'sine', B(), 45);
@@ -116,7 +128,7 @@ const SYN = {
 };
 
 // recorded CC0 samples (assets/sounds, see CREDITS.txt); generated sounds are the fallback until they load
-const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6, type: 1, door: 2, keys: 2, siren: 1, alarm: 1, pball: 3, roll: 1, scuff: 3, wave: 3, birds: 1, rain: 1, engine: 1, skid: 1, fire: 1, thunder: 1 };
+const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6, type: 1, door: 2, keys: 2, siren: 1, alarm: 1, pball: 3, roll: 1, scuff: 3, wave: 3, birds: 1, rain: 1, engine: 1, skid: 1, fire: 1, thunder: 1, meow: 2, bark: 1, purr: 1 };
 const bufs = {};
 const WAV = new Set(['engine']); // tiny seamless loops stay WAV: mp3 adds gaps at the loop point
 function loadSamples() {

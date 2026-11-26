@@ -25,3 +25,5 @@ Sounds in this folder are CC0 (public domain).
 - assets/models/human: 'Animated Human' by Quaternius, opengameart.org, CC0
 - fire: 'fireplace sound loop', opengameart.org/content/fireplace-sound-loop, CC0 (trimmed into a seamless loop)
 - thunder: 'Rain + Long Thunder' by WuxiaScrub, opengameart.org/content/rain-long-thunder, CC0 (thunder roll cut out)
+- meow, purr: 'Cat Purr & Meow' by Kerzoven, opengameart.org/content/cat-purr-meow, CC0
+- bark: 'Dog barking mono' by Brandon Morris, opengameart.org/content/dog-barking-mono, CC0

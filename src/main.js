@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=24';
-import { SCENES } from './scenes.js?v=24';
-import { createItems, DEFS } from './items.js?v=24';
-import * as A from './audio.js?v=24';
-import { preloadItemModels } from './models.js?v=24';
-import { createClayFigure, preloadClayBody } from './clay.js?v=24';
-import { createReplay } from './replay.js?v=24';
-import { clayBody } from './clay.js?v=24';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=25';
+import { SCENES } from './scenes.js?v=25';
+import { createItems, DEFS } from './items.js?v=25';
+import * as A from './audio.js?v=25';
+import { preloadItemModels } from './models.js?v=25';
+import { createClayFigure, preloadClayBody } from './clay.js?v=25';
+import { createReplay } from './replay.js?v=25';
+import { clayBody } from './clay.js?v=25';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const $ = id => document.getElementById(id);
@@ -48,7 +48,7 @@ const WEAPONS = {
 };
 const unlocked = k => { const u = WEAPONS[k].unlock; return !u || (u.pts && save.points >= u.pts) || (u.smashed && save.smashed >= u.smashed) || (u.ach && !!save.ach[u.ach]); };
 const unlockText = u => u.ach ? `achievement "${ACH.find(a => a.id === u.ach).name}"` : u.pts ? `${save.points.toLocaleString()} / ${u.pts.toLocaleString()} lifetime points` : `${save.smashed} / ${u.smashed} things smashed`;
-const NAMES = { domino: 'domino', leg: 'table leg', plank: 'board', beam: 'wooden beam', coffeetable: 'coffee table', platestack: 'stack of plates', crt: 'old TV', tv: 'TV', beermug: 'beer mug', wineglass: 'wine glass', fishbowl: 'fish bowl', watercooler: 'water cooler', cinder: 'cinder block', fork: 'cutlery', flowerpot: 'plant pot' };
+const NAMES = { scrapcube: 'scrap cube', domino: 'domino', leg: 'table leg', plank: 'board', beam: 'wooden beam', coffeetable: 'coffee table', platestack: 'stack of plates', crt: 'old TV', tv: 'TV', beermug: 'beer mug', wineglass: 'wine glass', fishbowl: 'fish bowl', watercooler: 'water cooler', cinder: 'cinder block', fork: 'cutlery', flowerpot: 'plant pot' };
 const nameOf = k => NAMES[k] || k;
 const GMODES = {
   classic: { name: 'Classic', desc: 'Two minutes. Score as much as you can.' },
@@ -86,7 +86,9 @@ function build() {
   pivot = new THREE.Group(); camera.add(pivot); equip(opts.weapon);
   const sea = season(); if (sea && room.pool.length) room.pool = room.pool.concat(SEASON_ITEMS[sea]); // holiday things mixed into the room
   I.batch(room.pool, room.slots, opts.gm === 'build' ? 10 : batchSize());
-  applyWords(); fireworks = []; fwT = 0; room.extra = []; broken = 0; fires = []; fireSnd?.stop(); fireSnd = null; fireLight = null; toys = 0; jumpT = 0; floorHits = []; basement = null; floorY = 0; fall = null; storm = null; rushT = performance.now() + 4000; pressT = 0; pressSnd?.stop(); pressSnd = null; beltT = 0; boss = null; bossAt = performance.now() + 25000; $('boss').classList.add('hidden');
+  applyWords(); fireworks = []; fwT = 0; room.extra = []; broken = 0; fires = []; fireSnd?.stop(); fireSnd = null; fireLight = null; toys = 0; jumpT = 0; floorHits = []; basement = null; floorY = 0; fall = null; storm = null; hot = []; drawDom = null; stopSprinklers(); cityAlarms.forEach(a => a.sound?.stop()); cityAlarms = [];
+  I.silly = !!opts.silly; if (opts.silly) { world.defaultContactMaterial.restitution = 0.72; if (!room.gravity) world.gravity.set(0, -7.5, 0); }
+  spawnPet(); setupZen(); rushT = performance.now() + 4000; pressT = 0; pressSnd?.stop(); pressSnd = null; beltT = 0; boss = null; bossAt = performance.now() + 25000; $('boss').classList.add('hidden');
   I.onBossHit = it => { it.pop = 1; A.at(it.body.position, () => A.SFX[it.def.kind]?.(0.5, 0.7)); shake = Math.max(shake, 0.08); };
   if (!room.open && !room.calm && room.pool.length && opts.gm !== 'build' && Math.random() < 0.45) dominoRun();
   if (Math.random() < 0.7) I.pyramid(room.slots);
@@ -210,6 +212,7 @@ function crackScreen(it) {
   if (it.screens) it.flicker = performance.now() + 800;
 }
 function onBreak(it, fromHit) {
+  petScare(it.body.position); if (opts.silly) A.at(it.body.position, sillySound);
   const d = it.def, p = it.body.position;
   const sz = Math.min(1.2, d.size), rate = Math.max(0.7, Math.min(1.15, 1.22 - sz * 0.55)), lv = Math.max(0.85, Math.min(1.25, 0.8 + sz * 0.5));
   const zl = room.zen ? 0.5 : 1; A.at(p, () => { (A.SFX[d.kind] || A.SFX.plastic)(lv * zl, rate * (room.zen ? 0.9 : 1)); if (sz > 0.4) A.SFX.body(lv * zl); }); // zen garden: softer, lower // small things ring high and light, big things low and loud
@@ -332,6 +335,7 @@ function heldImpact(hit) {
   if (it.hp <= 0) { held = null; it.held = false; it.body.type = CANNON.Body.DYNAMIC; it.byHeld = true; popup('Broke it!', it.body.position, 'small'); I.shatter(it, camera.getWorldDirection(v2), 3, true); }
 }
 function startSwing(type = defaultAttack()) {
+  if (zen) ringChimes();
   if (swingT >= 0 || state !== 'play' || paused || driving) return;
   if (held) { atk = 'held'; CW = heldStats(held); swingT = 0; hitDone = false; swingHold = 0; A.SFX.whoosh(CW.heavy); return; }
   if (W.tool) { atk = 'tool'; CW = W; swingT = 0; hitDone = true; swingHold = 0; useTool(); return; } // tools fire on the press; foam and broom keep going while held
@@ -399,11 +403,11 @@ function hitItem(it, dir) {
   if (atk === 'held') it.byHeld = true;
   emit('hit');
   kick = Math.min(0.08, kick + (heavyNow ? 0.03 : 0.015)); vibrate(20);
-  const h = itemHitPoint(it), at = h ? h.point : p, lv = 0.8 + chargeK * 0.5;
+  const h = itemHitPoint(it), at = h ? h.point : p, lv = 0.8 + chargeK * 0.5, hw = Math.min(1.2, Math.max(0.15, it.def.size * 1.4 + (CW.power || 1) * 0.12 + (heavyNow ? 0.3 : 0))); // how hard the hit should feel: big things and heavy blows land harder
   if (it.def.hp === Infinity) { // metal: it rings, dents and flies, but never breaks
     A.at(at, () => { A.SFX.metal(lv, Math.max(0.7, 1.3 - it.def.size)); if (opts.weapon === 'pan') A.SFX.metal(0.8); });
     if (it.group != null) { carAlarm(it.group); addHeat(2); }
-    it.pop = 1; shake = Math.max(shake, 0.12); I.sparks_(at, 8, 0xffd27a); addScore(it.def.pts, p, 'small'); recoil = 1; freeze(30);
+    it.pop = 1; shake = Math.max(shake, 0.12); I.sparks_(at, 8, 0xffd27a); addScore(it.def.pts, p, 'small'); recoil = 1; freeze(14 + 40 * hw);
     if (!it.fixed) { if (h) damageDecal(it, h, 'dent', Math.min(0.2, it.def.size * 0.6)); it.body.wakeUp(); it.body.velocity.set(dir.x * CW.knock, dir.y * CW.knock * 0.5 + 2, dir.z * CW.knock); it.body.angularVelocity.set(rand(-12, 12), rand(-12, 12), rand(-12, 12)); }
     else { const sh = surfaceHit(camera.getWorldPosition(v1), camera.getWorldDirection(v2), CW.reach + 2.5, it.mesh.children); if (sh) addMark(sh.point, sh.normal, 'dent', heavyNow ? 0.45 : 0.3); }
     return;
@@ -414,16 +418,16 @@ function hitItem(it, dir) {
     recoil = 0.15; freeze(40); slashFx(); A.at(at, () => { A.SFX.metal(0.35, 2.2); A.SFX.whoosh(false); }); addStat('slices');
     return I.shatter(it, dir, 1.2, true, h ? h.point : new THREE.Vector3(p.x, p.y, p.z), false, cut);
   }
-  if (it.hp <= 0) { recoil = 0.35; freeze(heavyNow ? 45 : 28); return I.shatter(it, dir, CW.knock * 0.7, true, h && h.point, opts.weapon === 'hammer' && atk === 'swing'); }
+  if (it.hp <= 0) { recoil = 0.35; freeze(18 + 70 * hw); shake = Math.max(shake, 0.06 + 0.32 * hw); kick = Math.min(0.12, kick + 0.05 * hw); vibrate(15 + 60 * hw); return I.shatter(it, dir, CW.knock * 0.7, true, h && h.point, opts.weapon === 'hammer' && atk === 'swing'); }
   // still in one piece: leave a crack where it was hit, break the screen, start it smoking
-  it.pop = 1; recoil = 1; freeze(30);
+  it.pop = 1; recoil = 1; freeze(14 + 40 * hw);
   if (h) damageDecal(it, h, 'crack', Math.min(0.3, Math.max(0.1, it.def.size * 0.45)));
   if (kind === 'electronics') { crackScreen(it); it.smoking = true; I.sparks_(at, 10, 0xffc531); }
   puff(at, DUST[kind] || 0xbbbbbb, 2, 0.18, 0.2, 0.4);
   if (!it.fixed) { it.body.wakeUp(); it.born = 0; it.body.velocity.set(dir.x * CW.knock, dir.y * CW.knock * 0.5 + 2, dir.z * CW.knock); it.body.angularVelocity.set(rand(-10, 10), rand(-10, 10), rand(-10, 10)); }
   for (let i = 0; i < 5; i++) I.shard(kind, Math.min(0.3, it.def.size) * rand(0.06, 0.13), it.color, at, it.fixed ? new CANNON.Vec3() : it.body.velocity, dir, 2, 0.15, I.photo);
   A.at(at, () => { if (W.hands && atk !== 'held') A.SFX[atk === 'slap' ? 'slap' : atk === 'kick' ? 'kick' : 'punch'](0.8); A.SFX.thud(kind, lv, Math.max(0.75, 1.25 - it.def.size * 0.5)); if (kind === 'electronics') A.SFX.plastic(0.5, 1.2); });
-  shake = Math.max(shake, heavyNow ? 0.14 : 0.08); flash(0.06);
+  shake = Math.max(shake, 0.05 + 0.18 * hw); flash(0.03 + 0.05 * hw);
   addScore(2, p, 'small');
 }
 
@@ -742,6 +746,7 @@ function carAlarm(g) {
   const c = room.cars[g], pos = { x: c.x, y: 0.9, z: c.z };
   alarms.push({ g, until: performance.now() + 9000, sound: A.loopAt('alarm', pos, 0.55) });
   addHeat(8); popup('Car alarm!', { x: c.x, y: 1.8, z: c.z }, 'small'); emit('alarm');
+  room.cars.forEach((o, g2) => { if (g2 !== g && Math.hypot(o.x - c.x, o.z - c.z) < 12) setTimeout(() => state === 'play' && carAlarm(g2), rand(600, 1500)); }); // the others nearby join in
 }
 function updateHeat(dt, now) {
   if (!room.heat) return;
@@ -876,6 +881,7 @@ function updateTools(dt, now) {
       for (const it of I.list) { if (it.dead || it.fixed || it.held) continue; const q = it.body.position, v = new THREE.Vector3(q.x - o.x, q.y - o.y, q.z - o.z), dist = v.length(); if (dist > 6 || v.normalize().dot(f) < 0.88) continue;
         it.body.wakeUp(); it.born = 0; const k = 30 * dt * (1 - dist / 6.5) / Math.max(0.5, it.def.mass); it.body.velocity.x += f.x * k; it.body.velocity.y += 0.3 * k; it.body.velocity.z += f.z * k; }
       for (const c of I.chunks) { const q = c.body.position, v = new THREE.Vector3(q.x - o.x, q.y - o.y, q.z - o.z), dist = v.length(); if (dist > 6 || v.normalize().dot(f) < 0.85) continue; c.body.wakeUp(); c.body.velocity.x += f.x * 26 * dt; c.body.velocity.y += 4 * dt; c.body.velocity.z += f.z * 26 * dt; }
+      fanFire(o, f, dt);
       for (const p of puffs) { const v = p.m.position.clone().sub(o); if (v.length() < 6 && v.normalize().dot(f) > 0.8) p.v.addScaledVector(f, 12 * dt); } } }
   updateGrav(dt); updateWreck(dt);
   if (W.tool === 'foam') {
@@ -1012,9 +1018,9 @@ function groundPound() { // jump and slam: a shockwave through everything around
 }
 
 // ---------- Build & smash: set-ups placed where you look
-const PRESETS = ['Dominoes', 'Crate tower', 'Glass pyramid', 'Old TV wall', 'Bottle pins', 'Plate towers', 'Gas can row'];
+const PRESETS = ['Draw dominoes', 'Crate tower', 'Glass pyramid', 'Old TV wall', 'Bottle pins', 'Plate towers', 'Gas can row'];
 function placePreset(i) {
-  if (state !== 'play' || paused) return;
+  if (state !== 'play' || paused) return; if (i === 0) return toggleDraw();
   if (I.list.filter(x => !x.dead).length > 170) { toast('That is a lot of stuff. Smash some first'); return; }
   const o = camera.getWorldPosition(new THREE.Vector3()), f = camera.getWorldDirection(new THREE.Vector3());
   let h = surfaceHit(o, f, 7); if (!h || h.normal.y < 0.7) h = surfaceHit(o.clone().add(new THREE.Vector3(f.x, 0, f.z).normalize().multiplyScalar(2.2)), new THREE.Vector3(0, -1, 0), 4);
@@ -1181,7 +1187,7 @@ function carImpact(car, e) {
 }
 function damageCar(car, v, point) {
   if (car.dead) return; const tnow = performance.now(); if (!point && tnow - (car.lastHit || 0) < 350) return; car.lastHit = tnow; // one crash fires many contacts: count it once
-  car.hp -= Math.max(0, v - 3) * 3.6;
+  car.hp -= Math.max(0, v - 3) * 3.6; if (!car.ai && v > 3) cityAlarm(car);
   const p = car.body.position;
   if (v > 5 || point) breakCarWindow(car, point);
   A.at(p, () => { A.SFX.metal(Math.min(1.2, v / 8), 0.6); if (v > 7) A.SFX.crash?.(Math.min(1, v / 12)) || A.SFX.metal(1, 0.5); });
@@ -1448,16 +1454,17 @@ function updateMachines(dt, now) {
     P.plate.position.set(P.x, y + 0.2, P.z); P.ram.position.set(P.x, (y + 0.4 + 4.95) / 2, P.z); P.ram.scale.y = Math.max(0.01, 4.95 - y - 0.4);
     const moving = (t > 5 && t < 6.4) || (t > 7.4 && t < 10);
     if (moving && !pressSnd && live) pressSnd = A.loopAt('engine', P.plate.position, 0.35, 0.5); if (!moving && pressSnd) { pressSnd.stop(); pressSnd = null; }
-    if (t >= 6.4 && t < 7.4 && !pressHit) { pressHit = true; A.at(P.plate.position, () => { A.SFX.metal(1.2, 0.5); A.SFX.stone(1, 0.5); }); if (Math.hypot(player.x - P.x, player.z - P.z) < 9) shake = Math.max(shake, 0.25); }
+    if (t >= 6.4 && t < 7.4 && !pressHit) { pressHit = true; if (live) makeCube(P); A.at(P.plate.position, () => { A.SFX.metal(1.2, 0.5); A.SFX.stone(1, 0.5); }); if (Math.hypot(player.x - P.x, player.z - P.z) < 9) shake = Math.max(shake, 0.25); }
     if (t < 6.4) pressHit = false;
+    if (P.respawn && t < 4.5 && live) { P.respawn = false; room.car(P.x, P.z, pick([0xb3202a, 0x2a5ab3, 0x2a8a4a, 0xd9a22a, 0x8a8f96])); toast('Another one for the crusher'); }
     const inside = q => Math.abs(q.x - P.x) < P.w / 2 + 0.1 && Math.abs(q.z - P.z) < P.d / 2 + 0.1;
     if (y < top - 0.1) {
       for (const it of I.list) { if (it.dead || it.held || !inside(it.body.position)) continue;
         if (it.crushCycle !== cyc) { it.crushCycle = cyc; const b = new THREE.Box3().setFromObject(it.mesh); it.crushTop = b.max.y; it.crushY0 = it.mesh.position.y; }
         if (y > it.crushTop) continue;
-        if (it.def.hp !== Infinity) { if (live) I.shatter(it, new THREE.Vector3(rand(-1, 1), -0.3, rand(-1, 1)).normalize(), 3, false); continue; }
+        if (it.def.hp !== Infinity) { if (live) { I.shatter(it, new THREE.Vector3(rand(-1, 1), -0.3, rand(-1, 1)).normalize(), 3, false); P.count = (P.count || 0) + 1; } continue; }
         const k = Math.max(0.22, y / it.crushTop); it.mesh.scale.y = Math.min(it.mesh.scale.y, k); // metal folds flat
-        if (it.key === 'carbody' && k < 0.5 && !it.crushed && live) { it.crushed = true; banner('Crushed!'); addScore(250, it.body.position, 'big'); emit('crush'); addStat('crushed'); A.at(it.body.position, () => { A.SFX.metal(1.3, 0.6); A.SFX.glass(1, 0.8); }); }
+        if (it.key === 'carbody' && k < 0.5 && !it.crushed && live) { it.crushed = true; P.car = it; banner('Crushed!'); addScore(250, it.body.position, 'big'); emit('crush'); addStat('crushed'); A.at(it.body.position, () => { A.SFX.metal(1.3, 0.6); A.SFX.glass(1, 0.8); }); }
       }
       for (const c of I.chunks) { const q = c.body.position; if (inside(q) && q.y > y - 0.05) { q.y = Math.max(0.03, y - 0.06); c.body.velocity.set(rand(-1, 1), 0, rand(-1, 1)); } }
       if (y < 2.2 && inside(player)) player.x = P.x + Math.sign(player.x - P.x || 1) * (P.w / 2 + 0.6);
@@ -1482,7 +1489,7 @@ function flameTex() {
   return (fireTex = new THREE.CanvasTexture(c));
 }
 function ignite(tg, furn) {
-  if (!tg || tg.fire || tg.dead) return;
+  if (!tg || tg.fire || tg.dead || smoke?.on) return; // nothing catches while the sprinklers run
   const size = furn ? 0.7 : Math.max(0.3, Math.min(0.9, tg.def.size * 1.3)), n = furn ? 6 : 3, sprites = [];
   for (let i = 0; i < n; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTex(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false }));
     s.userData.o = furn ? new THREE.Vector3(rand(-0.6, 0.6), 0, rand(-0.3, 0.3)) : new THREE.Vector3(rand(-0.1, 0.1), 0, rand(-0.1, 0.1)); s.userData.ph = rand(0, 6); s.scale.set(0.01, 0.01, 1); scene.add(s); sprites.push(s); }
@@ -1611,6 +1618,179 @@ function powerCut(off) {
     s.cut = performance.now() + rand(7000, 11000); A.SFX.zap(0.8); banner('Power cut!'); emit('powercut'); }
   else { let k = 0; const back = () => { const on = k++ % 2 === 0 || k > 5; s.lights.forEach(([o, i]) => { o.intensity = on ? i : i * 0.03; }); (s.glow || []).forEach(m => { m.visible = on && !m.userData.broken; }); if (k <= 5) setTimeout(back, 90 + Math.random() * 120); else { camera.remove(s.torch, s.torch.target); s.lights = null; s.glow = null; } }; back(); }
 }
+// ---------- Weapons meet fire: balls that pass through flames catch and carry them, thrown burning things light what they land
+// on, and the leaf blower fans a fire along
+let hot = [];
+function heatBody(body, r) {
+  const h = hot.find(q => q.body === body); if (h) { h.until = performance.now() + 8000; return; }
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTex(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false })); scene.add(s);
+  hot.push({ body, r, s, until: performance.now() + 8000 }); A.at(body.position, () => A.SFX.whoosh(false));
+}
+function updateHot(now) {
+  if (fires.length) for (const [b, r] of wrecks.map(w => [w.body, room.open ? 0.9 : 0.45]).concat(balls.map(b => [b.body, b.body.shapes[0].radius || 0.14])))
+    for (const f of fires) if (firePos(f).distanceTo(b.position) < r + (f.furn ? 0.9 : 0.5)) { heatBody(b, r); break; }
+  hot = hot.filter(h => {
+    if (now > h.until || !h.body.world) { scene.remove(h.s); h.s.material.dispose(); return false; }
+    const p = h.body.position, k = h.r * 2.4 * (0.85 + 0.2 * Math.sin(now * 0.02)); h.s.scale.set(k * 0.8, k * 1.3, 1); h.s.position.set(p.x, p.y + h.r * 0.5, p.z);
+    for (const it of I.list) if (!it.fire && burnable(it) && it.body.position.distanceTo(p) < h.r + 0.45) ignite(it);
+    for (const fu of room.furniture) if (!fu.dead && !fu.fire && fu.parts[0].position.distanceTo(p) < h.r + 0.9) ignite(fu, true);
+    return true; });
+  for (const f of fires) if (!f.furn && f.tg.thrown) for (const it of I.list) if (!it.fire && burnable(it) && it.body.position.distanceTo(f.tg.body.position) < 1.1) ignite(it); // a flaming throw lights what it lands in
+}
+function fanFire(o, f, dt) { // the leaf blower makes flames jump downwind
+  for (const fi of fires) { const p = firePos(fi), v = p.clone().sub(o), d = v.length(); if (d > 6 || v.normalize().dot(f) < 0.85) continue;
+    fi.size = Math.min(fi.furn ? 1.1 : 1, fi.size * (1 + dt * 0.4));
+    if (Math.random() < dt * 2) { const ahead = p.clone().addScaledVector(f, 1.2); for (const it of I.list) if (!it.fire && burnable(it) && it.body.position.distanceTo(ahead) < 1) ignite(it);
+      for (const fu of room.furniture) if (!fu.dead && !fu.fire && fu.parts[0].position.distanceTo(ahead) < 1.4) ignite(fu, true); } }
+}
+
+// ---------- Build & smash: draw a domino line by looking along the floor (key 1 starts and stops)
+let drawDom = null;
+function toggleDraw() {
+  if (drawDom) { toast(drawDom.n ? `${drawDom.n} dominoes. Knock the first one over` : 'No dominoes laid'); drawDom = null; return; }
+  drawDom = { last: null, n: 0 }; toast('Look along the floor to lay dominoes. Press 1 again to finish');
+}
+function updateDraw() {
+  if (!drawDom || state !== 'play' || paused) return;
+  const h = surfaceHit(camera.getWorldPosition(new THREE.Vector3()), camera.getWorldDirection(new THREE.Vector3()), 8); if (!h || h.normal.y < 0.8) return;
+  const p = h.point, L = drawDom.last; if (!L) { drawDom.last = { x: p.x, y: p.y, z: p.z }; return; }
+  const dx = p.x - L.x, dz = p.z - L.z, d = Math.hypot(dx, dz); if (d < 0.3) return; if (d > 1.5) { drawDom.last = { x: p.x, y: p.y, z: p.z }; return; } // jumped: start a new line there
+  const a = Math.atan2(dx, dz), steps = Math.floor(d / 0.3);
+  for (let k = 1; k <= steps; k++) { const x = L.x + dx / d * 0.3 * k, z = L.z + dz / d * 0.3 * k;
+    if (room.obstacles.some(([x1, x2, z1, z2]) => x > x1 && x < x2 && z > z1 && z < z2)) continue;
+    const it = I.add('domino', x, p.y, z, a); it.body.sleep(); it.born = performance.now(); drawDom.n++; drawDom.last = { x, y: p.y, z }; }
+  A.SFX.wood(0.12, 1.7); if (drawDom.n >= 150) toggleDraw();
+}
+
+// ---------- Rooms that react: smoke alarms then sprinklers when a fire takes hold; car alarms set each other off
+let smoke = null;
+function updateSprinklers(dt, now) {
+  if (room.open || OUTDOOR.has(opts.scene) || room.space || room.zen) return;
+  if (!smoke && fires.some(f => f.t > 3)) { smoke = { t0: now, beep: 0, on: 0 }; toast('Smoke alarm!'); }
+  if (!smoke) return;
+  if (now > smoke.beep && !smoke.on) { smoke.beep = now + 1700; A.smokeBeep(); }
+  if (!smoke.on && now - smoke.t0 > 6000) { smoke.on = now; banner('Sprinklers!'); smoke.hiss = A.loopAt('rain', null, 0.55, 1.25); emit('sprinkler'); }
+  if (smoke.on) {
+    if ((smoke.dropT = (smoke.dropT || 0) - dt) < 0) { smoke.dropT = 0.05; const [x1, x2, z1, z2] = room.bounds; for (let i = 0; i < 4; i++) puff(new THREE.Vector3(rand(x1, x2), 2.7, rand(z1, z2)), 0xa8d0f0, 1, 0.05, 0, 0.7, 0.45, new THREE.Vector3(0, -7, 0)); }
+    for (const f of fires) if (f.t > 0.5 && Math.random() < dt * 0.9) { f.out = true; puff(firePos(f).clone().add({ x: 0, y: 0.3, z: 0 }), 0xe8e8ec, 3, 0.5, 0.8, 0.5, 1.4); }
+    if (now - smoke.on > 12000) stopSprinklers();
+  }
+}
+function stopSprinklers() { smoke?.hiss?.stop(); smoke = null; }
+let cityAlarms = [];
+function cityAlarm(c, depth = 0) { // a parked car in the open city starts wailing, and the ones parked nearby join in
+  const now = performance.now(); if (c.ai || c === driving || c.dead || (c.alarmUntil || 0) > now) return;
+  c.alarmUntil = now + 9000; cityAlarms.push({ c, until: c.alarmUntil, sound: A.loopAt('alarm', c.body.position, 0.45, rand(0.95, 1.08)) }); addHeat(5);
+  if (depth < 2) for (const o of cars) if (o !== c && !o.ai && !o.dead && o !== driving && o.body.position.distanceTo(c.body.position) < 14) setTimeout(() => state === 'play' && cityAlarm(o, depth + 1), rand(500, 1500)); // two rings out, not the whole city
+}
+function updateCityAlarms(now) { cityAlarms = cityAlarms.filter(a => { if (now > a.until || a.c.dead) { a.sound?.stop(); return false; } return true; }); }
+
+// ---------- Pets: a cat or a dog that wanders, hides from crashes, and likes being petted (E). Nothing can hurt it
+let pet = null;
+function makePet(kind) {
+  const dog = kind === 'dog', fur = S.mat('fabric', dog ? pick([0xc89a5a, 0x3a2a20, 0xe8e0d0, 0x8a6a4a]) : pick([0xe0a050, 0x3a3a3e, 0xd8d4cc, 0x9a7a5a])), dark = S.mat('plastic', 0x15151a), pink = S.mat('plastic', 0xd88a8a);
+  const g = new THREE.Group(), s = dog ? 1.45 : 1, ball = (r, mat, x, y, z, sx = 1, sy = 1, sz = 1) => { const o = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), mat); o.position.set(x, y, z); o.scale.set(sx, sy, sz); o.castShadow = true; return o; };
+  const body = ball(0.11 * s, fur, 0, 0.2 * s, 0, 1, 0.85, 1.9); g.add(body);
+  const head = new THREE.Group(); head.position.set(0, 0.3 * s, 0.2 * s); g.add(head); head.add(ball(0.085 * s, fur, 0, 0, 0));
+  if (dog) { head.add(ball(0.05 * s, fur, 0, -0.02 * s, 0.08 * s, 1, 0.8, 1.3)); head.add(ball(0.018 * s, dark, 0, -0.005 * s, 0.14 * s)); for (const x of [-1, 1]) head.add(ball(0.035 * s, fur, x * 0.075 * s, -0.01 * s, -0.01 * s, 0.5, 1.4, 1)); }
+  else { head.add(ball(0.012, pink, 0, -0.015, 0.083)); for (const x of [-1, 1]) { const e = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.06, 4), fur); e.position.set(x * 0.045, 0.07, 0); head.add(e); } }
+  for (const x of [-1, 1]) head.add(ball(0.013 * s, dark, x * 0.035 * s, 0.02 * s, 0.072 * s));
+  const legs = []; for (const [x, z] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) { const p = new THREE.Group(); p.position.set(x * 0.06 * s, 0.17 * s, z * 0.13 * s); const l = new THREE.Mesh(new THREE.CylinderGeometry(0.022 * s, 0.02 * s, 0.17 * s, 8), fur); l.position.y = -0.085 * s; l.castShadow = true; p.add(l); g.add(p); legs.push(p); }
+  const tail = new THREE.Group(); tail.position.set(0, 0.24 * s, -0.2 * s); const tl = new THREE.Mesh(new THREE.CylinderGeometry(0.015 * s, 0.022 * s, dog ? 0.14 : 0.26, 8), fur); tl.position.y = (dog ? 0.07 : 0.13); tail.add(tl); tail.rotation.x = dog ? -0.6 : -0.3; g.add(tail);
+  g.traverse(o => { if (o.isMesh) S.outline(o, 1.06); });
+  return { g, head, legs, tail, dog, sp: dog ? 1.3 : 0.9 };
+}
+function spawnPet() {
+  pet = null; if (!opts.pet || opts.pet === 'none' || room.open || room.space || opts.scene === 'tinytown') return;
+  const m = makePet(opts.pet), spot = freeSpot(1.5, 0.4) || { x: room.start.x + 1, z: room.start.z - 1 }; m.g.position.set(spot.x, 0, spot.z); scene.add(m.g);
+  pet = { ...m, x: spot.x, z: spot.z, yaw: 0, mode: 'idle', until: performance.now() + 1500, tx: spot.x, tz: spot.z, phase: 0, happy: 0, sound: null };
+}
+const petBlocked = (x, z, hide) => { const [x1, x2, z1, z2] = room.bounds; if (x < x1 || x > x2 || z < z1 || z > z2) return true; return room.obstacles.some(o => o !== hide && x > o[0] - 0.1 && x < o[1] + 0.1 && z > o[2] - 0.1 && z < o[3] + 0.1); };
+function petScare(p) {
+  if (!pet || pet.mode === 'hide' || floorY < -0.5) return; const d = Math.hypot(p.x - pet.x, p.z - pet.z); if (d > 4.5) return;
+  const tables = room.furniture.filter(f => !f.dead && f.name === 'table' && f.obstacle).sort((a, b) => Math.hypot(a.parts[0].position.x - pet.x, a.parts[0].position.z - pet.z) - Math.hypot(b.parts[0].position.x - pet.x, b.parts[0].position.z - pet.z));
+  const t = tables[0]; if (t && Math.hypot(t.parts[0].position.x - pet.x, t.parts[0].position.z - pet.z) < 7) { pet.mode = 'run'; pet.hide = t; pet.tx = t.parts[0].position.x; pet.tz = t.parts[0].position.z; }
+  else { const a = Math.atan2(pet.x - p.x, pet.z - p.z); pet.mode = 'run'; pet.hide = null; pet.tx = pet.x + Math.sin(a) * 3; pet.tz = pet.z + Math.cos(a) * 3; }
+  pet.until = performance.now() + 7000; if (Math.random() < 0.6) A.at(new THREE.Vector3(pet.x, 0.3, pet.z), () => A.play(pet.dog ? 'bark' : 'meow', pet.dog ? 0.6 : 0.5, pet.dog ? 1 : 1.15));
+}
+function petPet() {
+  if (!pet || Math.hypot(player.x - pet.x, player.z - pet.z) > 1.4 || floorY < -0.5) return false;
+  pet.happy = performance.now() + 2500; pet.mode = 'idle'; pet.until = pet.happy; popup('♥', { x: pet.x, y: 0.7, z: pet.z }, 'small'); addStat('pets'); emit('pet'); vibrate(20);
+  A.at(new THREE.Vector3(pet.x, 0.3, pet.z), () => pet.dog ? A.play('bark', 0.35, 1.2) : (pet.sound = A.loopAt('purr', new THREE.Vector3(pet.x, 0.3, pet.z), 0.5)));
+  if (pet.sound) { const s = pet.sound; setTimeout(() => s.stop(), 2200); pet.sound = null; } return true;
+}
+function updatePet(dt, now) {
+  if (!pet) return; const P = pet;
+  if (P.mode === 'idle' && now > P.until) { // pick somewhere to go: often toward you, otherwise anywhere free
+    let tx, tz; for (let i = 0; i < 12; i++) { if (Math.random() < 0.35) { tx = player.x + rand(-1.2, 1.2); tz = player.z + rand(-1.2, 1.2); } else { const s = freeSpot(0, 0.3); if (!s) continue; tx = s.x; tz = s.z; } if (!petBlocked(tx, tz)) break; }
+    if (tx != null) { P.tx = tx; P.tz = tz; P.mode = 'walk'; } P.until = now + 9000; }
+  const moving = P.mode === 'walk' || P.mode === 'run';
+  if (moving) { const dx = P.tx - P.x, dz = P.tz - P.z, d = Math.hypot(dx, dz), sp = P.sp * (P.mode === 'run' ? 2.4 : 1);
+    if (d < 0.15 || now > P.until) { if (P.mode === 'run' && P.hide) { P.mode = 'hide'; P.until = now + rand(4000, 6500); } else { P.mode = 'idle'; P.until = now + rand(1500, 4500); } }
+    else { const want = Math.atan2(dx, dz); let da = want - P.yaw; da = Math.atan2(Math.sin(da), Math.cos(da)); P.yaw += Math.max(-6 * dt, Math.min(6 * dt, da));
+      const nx = P.x + Math.sin(P.yaw) * sp * dt, nz = P.z + Math.cos(P.yaw) * sp * dt;
+      if (!petBlocked(nx, nz, P.mode === 'run' ? P.hide?.obstacle : null)) { P.x = nx; P.z = nz; } else { P.mode = 'idle'; P.until = now + 600; } } }
+  if (P.mode === 'hide' && now > P.until) { P.mode = 'idle'; P.until = now + 800; }
+  P.phase += dt * (moving ? (P.mode === 'run' ? 22 : 11) : 0);
+  P.legs.forEach((l, i) => { l.rotation.x = moving ? Math.sin(P.phase + (i === 0 || i === 3 ? 0 : Math.PI)) * 0.6 : 0; });
+  const crouch = P.mode === 'hide' ? 0.6 : 1, happy = now < P.happy;
+  P.g.position.set(P.x, moving ? Math.abs(Math.sin(P.phase)) * 0.015 : 0, P.z); P.g.rotation.y = P.yaw; P.g.scale.y = crouch;
+  P.tail.rotation.z = P.dog ? Math.sin(now * (happy ? 0.03 : 0.008)) * (happy ? 0.8 : 0.3) : Math.sin(now * 0.002) * 0.4;
+  P.head.rotation.x = P.mode === 'hide' ? 0.4 : happy ? -0.2 : Math.sin(now * 0.001) * 0.1;
+}
+
+// ---------- Silly physics: bouncy everything, big chunks, cartoon noises (lobby toggle)
+function sillySound() { const k = pick(['boing', 'boing', 'whistle', 'honk', 'pop']); A.SILLY[k](); }
+
+// ---------- Zen garden: rake the sand with the broom, feed the koi, ring the chimes
+let zen = null;
+function setupZen() {
+  zen = null; if (!room.zen) return; const Z = room.zenParts; if (!Z) return;
+  const c = document.createElement('canvas'); c.width = c.height = 1024; const g = c.getContext('2d'); const tex = new THREE.CanvasTexture(c);
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(Z.W, Z.D), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })); plane.rotation.x = -Math.PI / 2; plane.position.y = 0.004; scene.add(plane);
+  const fish = []; for (let i = 0; i < 5; i++) { const f = new THREE.Group(), col = pick([0xf07a20, 0xf8f4ec, 0xe84a2a, 0xf0c040]); const b = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), S.mat('paint', col)); b.scale.set(0.6, 0.4, 1.6); f.add(b); const t = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.08, 6), S.mat('paint', col)); t.rotation.x = -Math.PI / 2; t.position.z = -0.12; f.add(t); f.position.y = -0.005; scene.add(f); fish.push({ f, a: rand(0, 6.28), r: rand(0.4, 1.3), sp: rand(0.25, 0.5) * (Math.random() < 0.5 ? -1 : 1), food: null }); }
+  zen = { Z, g, tex, plane, fish, last: null, chimeSwing: 0, food: [] };
+}
+function rakeSand(dt) {
+  if (!zen || W.tool !== 'broom' || !mouseHeld || state !== 'play' || paused) { if (zen) zen.last = null; return; }
+  const h = surfaceHit(camera.getWorldPosition(new THREE.Vector3()), camera.getWorldDirection(new THREE.Vector3()), 4); if (!h || h.normal.y < 0.8) return;
+  const Z = zen.Z, u = (h.point.x + Z.W / 2) / Z.W * 1024, v = (h.point.z + Z.D / 2) / Z.D * 1024, L = zen.last; zen.last = { u, v };
+  if (!L || Math.hypot(u - L.u, v - L.v) < 1) return; const g = zen.g, nx = -(v - L.v), ny = u - L.u, n = Math.hypot(nx, ny) || 1;
+  g.lineCap = 'round'; for (let k = -2; k <= 2; k++) { const ox = nx / n * k * 7, oy = ny / n * k * 7; g.strokeStyle = 'rgba(110,95,70,.35)'; g.lineWidth = 3; g.beginPath(); g.moveTo(L.u + ox, L.v + oy); g.lineTo(u + ox, v + oy); g.stroke(); g.strokeStyle = 'rgba(250,244,228,.35)'; g.lineWidth = 2; g.beginPath(); g.moveTo(L.u + ox + 2, L.v + oy + 2); g.lineTo(u + ox + 2, v + oy + 2); g.stroke(); }
+  zen.tex.needsUpdate = true; if (Math.random() < dt * 6) A.at(h.point, () => A.SFX.sweep?.(0.15));
+}
+function feedKoi() {
+  if (!zen) return false; const P = zen.Z.pond, d = Math.hypot(player.x - P.x, player.z - P.z); if (d > P.r + 1.6) return false;
+  for (let i = 0; i < 6; i++) { const a = rand(0, 6.28), r = rand(0, P.r * 0.6), x = P.x + Math.cos(a) * r, z = P.z + Math.sin(a) * r; const m = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 4), S.mat('paint', 0xc89a5a)); m.position.set(x, 0.015, z); scene.add(m); zen.food.push({ m, t: performance.now() + 8000 }); }
+  zen.fish.forEach(f => { f.food = zen.food[Math.floor(Math.random() * zen.food.length)]; });
+  popup('Feeding time', { x: P.x, y: 0.6, z: P.z }, 'small'); A.at(new THREE.Vector3(P.x, 0, P.z), () => A.SFX.splash?.(0.2)); emit('koi'); return true;
+}
+function ringChimes() {
+  if (!zen) return; const C = zen.Z.chimes, o = camera.getWorldPosition(new THREE.Vector3()), v = C.pos.clone().sub(o); if (v.length() > 2.6 || v.normalize().dot(camera.getWorldDirection(new THREE.Vector3())) < 0.75) return;
+  zen.chimeSwing = 1; for (let k = 0; k < 5; k++) setTimeout(() => A.chime(rand(0.04, 0.08)), k * rand(60, 160)); emit('chimes');
+}
+function updateZen(dt, now) {
+  if (!zen) return; rakeSand(dt); const P = zen.Z.pond;
+  zen.food = zen.food.filter(f => { if (now > f.t || f.eaten) { scene.remove(f.m); return false; } return true; });
+  for (const F of zen.fish) {
+    if (F.food && !F.food.eaten && zen.food.includes(F.food)) { const p = F.food.m.position, dx = p.x - F.f.position.x, dz = p.z - F.f.position.z, d = Math.hypot(dx, dz);
+      if (d < 0.06) { F.food.eaten = true; A.at(p, () => A.SFX.splash?.(0.08)); F.food = null; } else { const s = Math.min(d, dt * 0.7); F.f.position.x += dx / d * s; F.f.position.z += dz / d * s; F.f.rotation.y = Math.atan2(dx, dz); } continue; }
+    F.a += F.sp * dt / F.r; const x = P.x + Math.cos(F.a) * F.r, z = P.z + Math.sin(F.a) * F.r; F.f.rotation.y = Math.atan2(x - F.f.position.x, z - F.f.position.z) || F.f.rotation.y; F.f.position.set(x, -0.005, z);
+    F.f.children[1].rotation.y = Math.sin(now * 0.012 + F.r * 5) * 0.4; }
+  const C = zen.Z.chimes; zen.chimeSwing *= Math.pow(0.4, dt); C.tubes.forEach((t, i) => { t.rotation.z = Math.sin(now * 0.004 + i) * (0.05 + zen.chimeSwing * 0.35); });
+}
+
+// ---------- Scrapyard: whatever the press flattens comes out as a scrap cube, stacked beside it
+function makeCube(P) {
+  const n = P.count || 0, car = P.car; P.count = 0; P.car = null; if (!n && !car) return;
+  for (let i = I.chunks.length - 1; i >= 0; i--) { const c = I.chunks[i], q = c.body.position; if (Math.abs(q.x - P.x) < P.w / 2 + 0.1 && Math.abs(q.z - P.z) < P.d / 2 + 0.1) { world.removeBody(c.body); scene.remove(c.mesh); I.chunks.splice(i, 1); } }
+  if (car) { for (const it of I.list.slice()) if (!it.dead && it.group === car.group) I.remove(it);
+    P.respawn = true; } // a fresh car rolls in once the press is back up
+  const k = (P.cubes = (P.cubes || 0) + 1) - 1, s = car ? 0.95 : Math.min(0.75, 0.4 + n * 0.05), x = P.x + P.w / 2 + 1.3 + (k % 2) * 1.05, z = P.z - 1.6 + (Math.floor(k / 2) % 4) * 1.05, y = Math.floor(k / 8) * 1.0;
+  const cube = I.add('scrapcube', x, y, z, rand(-0.2, 0.2), { s }), pts = 60 + n * 25 + (car ? 200 : 0);
+  addScore(pts, cube.body.position, 'big'); popup('Scrap cube!', { x, y: y + 1.2, z }, 'small'); addStat('cubes'); emit('cube');
+  A.at(cube.body.position, () => { A.SFX.metal(1, 0.55); A.SFX.metalfall?.(0.6); }); puff(new THREE.Vector3(x, 0.3, z), 0x8a8478, 5, 0.5, 0.2, 0.5);
+}
 // ---------- Domino runs: a snaking line across the floor that ends at gas cans
 function dominoRun() {
   const [x1, x2, z1, z2] = room.bounds, free = (x, z) => x > x1 && x < x2 && z > z1 && z < z2 && !room.obstacles.some(([a, b, c, d]) => x > a - 0.3 && x < b + 0.3 && z > c - 0.3 && z < d + 0.3) && Math.hypot(x - room.start.x, z - room.start.z) > 1.2;
@@ -1660,7 +1840,7 @@ function stayInside() { // keep the player in the room, or in any space opened u
   player.x = best[0]; player.z = best[1];
 }
 function updateRooms(dt, now) {
-  updateBoss(now); updateMachines(dt, now); updateFire(dt, now); updateTramps(now); updateFloor(dt, now); updateStorm(now); updateFireworks(dt, now); updateMic(dt, now);
+  updateBoss(now); updateMachines(dt, now); updateFire(dt, now); updateTramps(now); updateFloor(dt, now); updateStorm(now); updateHot(now); updateDraw(); updateSprinklers(dt, now); updateCityAlarms(now); updatePet(dt, now); updateZen(dt, now); updateFireworks(dt, now); updateMic(dt, now);
   if (museumAlarm) { museumAlarm.light.intensity = Math.floor(now / 300) % 2 ? (S.realistic ? 60 : 25) : 0; if (now > museumAlarm.until) { museumAlarm.sound?.stop(); museumAlarm.light.intensity = 0; museumAlarm.done = true; } }
   for (const B of breaches) {
     if (now > B.until) { if (B.sound) { B.sound.stop(); B.sound = null; banner('Breach sealed'); } continue; }
@@ -1718,7 +1898,7 @@ async function startSession() {
   if (!isTouch) lockMouse();
 }
 function endSession() {
-  state = 'end'; mouseHeld = false; dropHeld(); stopMic(); pressSnd?.stop(); pressSnd = null; fireSnd?.stop(); fireSnd = null; setHighlight(null); document.exitPointerLock?.(); A.SFX.buzzer(); A.setMusic(opts.music, false); A.stopAmbience();
+  state = 'end'; mouseHeld = false; dropHeld(); stopMic(); pressSnd?.stop(); pressSnd = null; fireSnd?.stop(); fireSnd = null; stopSprinklers(); cityAlarms.forEach(a => a.sound?.stop()); cityAlarms = []; setHighlight(null); document.exitPointerLock?.(); A.SFX.buzzer(); A.setMusic(opts.music, false); A.stopAmbience();
   document.body.classList.remove('rage'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden');
   const before = Object.keys(WEAPONS).filter(unlocked);
   save.points += score; save.smashed += smashed; maxStat('round', smashed);
@@ -1824,6 +2004,8 @@ $('saveClip').onclick = () => replay.download();
 $('quality').onchange = e => { opts.quality = e.target.value; build(); };
 $('mic').onchange = e => { opts.mic = e.target.checked; };
 $('storm').onchange = e => { opts.storm = e.target.checked; };
+$('silly').onchange = e => { opts.silly = e.target.checked; };
+$('pet').onchange = e => { opts.pet = e.target.value; };
 $('season').onchange = e => { opts.season = e.target.value; build(); };
 $('music').onchange = e => { opts.music = e.target.checked; A.setMusic(opts.music, state === 'play'); };
 $('backMode').onclick = () => { $('lobby').classList.add('hidden'); renderMode(); };
@@ -1873,7 +2055,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyV') toggleView();
   if (e.code === 'KeyG') groundPound();
   if (e.code === 'KeyR' && driving) radio(true);
-  if (e.code === 'KeyE') { if (carKey()) return; grabOrThrow(); }
+  if (e.code === 'KeyE') { if (carKey()) return; if (!held && !hlTarget && (petPet() || feedKoi())) return; grabOrThrow(); }
   if (e.code === 'KeyQ') dropHeld();
   if (opts.gm === 'build' && state === 'play' && /^Digit[1-7]$/.test(e.code)) placePreset(+e.code.slice(5) - 1);
   if (e.code === 'KeyT' && tut) tutDone(true);
@@ -1886,7 +2068,7 @@ const tl = $('touch');
 tl.addEventListener('pointerdown', e => {
   const id = e.target.id; if (id && id.endsWith('Btn')) { vibrate(8); try { e.target.setPointerCapture(e.pointerId); } catch (_) {} } // the finger can slide off and the release still counts
   if (id === 'smashBtn') { mouseHeld = true; startSwing(); return; }
-  if (id === 'grabBtn') { if (grav) gravDrop(); else if (held) dropHeld(); else if (!carKey()) grab(hlTarget || findGrabTarget()); return; }
+  if (id === 'grabBtn') { if (grav) gravDrop(); else if (held) dropHeld(); else if (!carKey() && !(!hlTarget && (petPet() || feedKoi()))) grab(hlTarget || findGrabTarget()); return; }
   if (id === 'throwBtn') { if (held) { charging = true; chargeT = 0; } return; } // hold to throw harder
   if (id === 'kickBtn') { startSwing('kick'); return; }
   if (id === 'poundBtn') { groundPound(); return; }
@@ -2063,4 +2245,4 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, fal
 renderMode();
 opts.mode = 'stylized'; build(); opts.mode = null; // background behind the first screen
 requestAnimationFrame(frame);
-window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; }, get cars() { return cars; }, get traffic() { return traffic; }, get renderer() { return renderer; }, get driving() { return driving; }, carKey, toggleView, get view() { return view; }, get wrecks() { return wrecks; }, get grav() { return grav; }, get paused() { return paused; }, get boss() { return boss; }, spawnBoss, get elapsed() { return elapsed; }, equip, placeToy, get basement() { return basement; }, get floorY() { return floorY; }, get storm() { return storm; }, get fires() { return fires; }, jumpY };
+window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; }, get cars() { return cars; }, get traffic() { return traffic; }, get renderer() { return renderer; }, get driving() { return driving; }, carKey, toggleView, get view() { return view; }, get wrecks() { return wrecks; }, get grav() { return grav; }, get paused() { return paused; }, get boss() { return boss; }, spawnBoss, get elapsed() { return elapsed; }, equip, placeToy, get basement() { return basement; }, get floorY() { return floorY; }, get storm() { return storm; }, get fires() { return fires; }, jumpY, get pet() { return pet; }, get zen() { return zen; }, get smoke() { return smoke; }, get hot() { return hot; }, petPet, feedKoi, petScare, damageCar, get cityAlarms() { return cityAlarms; } };

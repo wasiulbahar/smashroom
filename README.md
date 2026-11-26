@@ -31,6 +31,13 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Toys.** A ball cannon that fires heavy iron balls, plus ramps (8) and trampolines (9) you can drop anywhere. Walk onto a trampoline and you bounce too.
 - **Breakable floors.** Ground pound the same spot three times and you crash through into a basement full of old stuff. A ladder takes you back up.
 - **Thunderstorms.** Tick Thunderstorm in the lobby: rain, lightning, real thunder, and now and then the power cuts out and you carry on by flashlight.
+- **Pets.** Bring a cat or a dog (lobby). It wanders around, bolts under a table when things crash nearby, and purrs or wags when you pet it (E). Nothing can hurt it.
+- **Things play together.** Cannon balls and the wrecking ball catch fire when they pass through flames and carry it on, a burning thing you throw lights whatever it lands in, and the leaf blower fans a fire along. Smoke alarms go off when a fire takes hold and the sprinklers come on and put it out. Car alarms set off the cars parked nearby.
+- **Scrap cubes.** Whatever the scrapyard crusher flattens comes out as a scrap cube, stacked beside it, and a new car rolls in.
+- **Draw dominoes.** In Build & smash press 1 and look along the floor to lay a domino line wherever you look; press 1 again to finish.
+- **Silly physics.** A lobby switch for bouncy everything, big cartoon chunks and cartoon noises.
+- **Zen garden extras.** Rake patterns in the sand with the broom, feed the koi (E by the pond), and swing at the wind chime to ring it.
+- **Heavier hits.** The pause, shake and rumble on each hit now scale with how big the thing is and how hard you hit it.
 - **Holidays.** Pumpkins at Halloween, baubles and gifts at Christmas, and fireworks over the outdoor scenes at New Year. Picked by date, or choose one in the lobby.
 - **Scream to rage.** Optional: tick it in the lobby and shouting into your microphone fills the rage meter. The sound is only measured for loudness, never recorded or sent anywhere.
 - **Smash your stress.** Type what's bothering you in the lobby; the words are written on plates, TVs and the clay figure for you to smash. They never leave the device.

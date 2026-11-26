@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=24';
-import { itemModel, fitInto } from './models.js?v=24';
+import { canvasTex } from './style.js?v=25';
+import { itemModel, fitInto } from './models.js?v=25';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -161,6 +161,10 @@ export const DEFS = {
     make: (M, c) => { const mt = M('wood', c), g = grp(m(cyl(0.18, 0.18, 0.04, 20), mt, 0, 0.3));
       for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; g.add(m(cyl(0.02, 0.025, 0.62, 8), mt, Math.cos(a) * 0.12, 0, Math.sin(a) * 0.12, Math.sin(a) * 0.15, 0, -Math.cos(a) * 0.15)); }
       return { mesh: g, shape: cylS(0.18, 0.15, 0.64, 8), halfH: 0.32 }; } },
+  scrapcube: { kind: 'metal', hp: Infinity, pts: 10, mass: 25, bv: 99, size: 0.6, spots: [], colors: [0x6a6a70, 0x7a5a3a, 0x5a6a7a, 0x8a3a2a, 0x4a5a3a],
+    make: (M, c, o) => { const s = o.s || 0.6, g = grp(m(bx(s, s * 0.9, s), M('metal', c))); // a compacted block: crumpled panels poking out of every face
+      for (let i = 0; i < 9; i++) { const f = m(bx(s * rand(0.25, 0.6), s * rand(0.04, 0.1), s * 0.03), M('paint', pick([0xb3202a, 0x2a5ab3, 0xd9a22a, 0xe8e8ec, 0x2a8a4a, c])), rand(-s / 2.4, s / 2.4), rand(-s / 2.6, s / 2.6), (Math.random() < 0.5 ? -1 : 1) * s * 0.5); f.rotation.set(rand(-0.4, 0.4), Math.random() < 0.5 ? 0 : Math.PI / 2, rand(-0.6, 0.6)); g.add(f); }
+      return { mesh: g, shape: boxS(s / 2, s * 0.45, s / 2), halfH: s * 0.45 }; } },
   crate: { kind: 'wood', hp: 2, pts: 20, mass: 4, bv: 10, size: 0.45, spots: ['floor'], colors: [0xc69a5e],
     make: (M, c) => ({ mesh: m(bx(0.44, 0.44, 0.44), M('wood', c)), shape: boxS(0.22, 0.22, 0.22), halfH: 0.22 }) },
   frame: { kind: 'wood', hp: 1, pts: 15, mass: 0.6, bv: 4, size: 0.3, spots: SMALL, colors: [0x6b4430, 0xc9a227, 0x1a1a1a],
@@ -450,7 +454,7 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
   const MAXFR = { low: 6, medium: 10, high: 14 };
   api.remove = it => remove(it);
   api.shatter = (it, dir, force, fromHit, hitPoint, chunky, cut) => { // cut: a world-space plane normal for a clean two-piece slice // chunky: a sledgehammer knocks it into fewer, bigger pieces
-    if (it.dead) return;
+    if (it.dead) return; if (api.silly) chunky = true; // silly physics: big cartoon chunks
     if (it.boss) { if (!fromHit) it.hp -= Math.max(1, force * 0.4); if (it.hp > 0) { api.onBossHit?.(it); return; } } // bosses wear down; only the last blow breaks them
     const d = it.def, p = it.body.position, vel = it.fixed ? V(0, 0, 0) : it.body.velocity, root = it.mesh;
     let made = 0;
