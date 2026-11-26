@@ -15,7 +15,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SMASHROOM">
 <meta property="og:title" content="SMASHROOM: Free Online Rage Room Game">
-<meta property="og:description" content="Smash, throw and wreck everything in sixteen rooms and an open city, from an office to a space station. Then sweep up. A rage room in your browser, free, no download.">
+<meta property="og:description" content="Smash, throw and wreck everything in nineteen rooms and an open city, from an office to a space station. Then sweep up. A rage room in your browser, free, no download.">
 <meta property="og:url" content="https://wasiulbahar.com/smashroom/">
 <meta property="og:image" content="https://wasiulbahar.com/smashroom/assets/share.jpg">
 <meta property="og:image:width" content="1200">
@@ -28,7 +28,7 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
  {"@type":["VideoGame","WebApplication"],"name":"SMASHROOM","alternateName":["Smash Room","Online Rage Room"],"url":"https://wasiulbahar.com/smashroom/","image":"https://wasiulbahar.com/smashroom/assets/share.jpg",
-  "description":"A free online rage room game. Smash and throw glass, plates, TVs, furniture and a car in sixteen rooms plus an open city, from a corporate office to a city street at night and a calm beach shack, or smash a clay statue with your bare hands.",
+  "description":"A free online rage room game. Smash and throw glass, plates, TVs, furniture and a car in nineteen rooms plus an open city, from a corporate office to a city street at night and a calm beach shack, or smash a clay statue with your bare hands.",
   "genre":["Action","Simulation","Casual","Stress relief"],"keywords":"rage room, smash room, break room, online rage room, stress relief game, smashing game, destruction game, browser game, free online game",
   "applicationCategory":"GameApplication","operatingSystem":"Any (web browser)","gamePlatform":["Web browser","PC","Mobile"],"playMode":"SinglePlayer","inLanguage":"en","isAccessibleForFree":true,
   "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Wasiul Bahar","url":"https://wasiulbahar.com/"}},
@@ -109,6 +109,7 @@ kbd{background:var(--bg);border:2px solid var(--ink);border-radius:5px;padding:0
 #micLvl{width:120px;height:5px;margin-top:4px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden}#micFill{height:100%;width:0;background:var(--pink);transition:width .08s}
 #rageFill{height:100%;width:0;background:linear-gradient(90deg,var(--yellow),var(--pink))}
 #rage span{position:absolute;inset:0;text-align:center;font-size:12px;line-height:16px;color:var(--text);text-shadow:1px 1px 0 var(--ink)}
+#boss{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:min(360px,70vw);text-align:center;font-weight:800;color:#fff;text-shadow:2px 2px 0 var(--ink);font-size:14px}#boss>div{height:10px;margin-top:4px;border:2px solid var(--ink);border-radius:6px;background:rgba(0,0,0,.4);overflow:hidden}#bossFill{height:100%;width:100%;background:linear-gradient(90deg,var(--pink),var(--yellow));transition:width .15s}
 #banner{position:absolute;left:0;right:0;top:26%;text-align:center;font-size:clamp(36px,8vw,72px);color:var(--yellow);text-shadow:4px 4px 0 var(--pink),7px 7px 0 var(--ink);opacity:0}
 #banner.show{animation:ban 1.2s ease-out}
 @keyframes ban{0%{opacity:0;transform:scale(2)}15%{opacity:1;transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:translateY(-20px)}}
@@ -188,6 +189,7 @@ details.about p{margin:6px 0}
   <div id="cross"></div><div id="hint"></div><div id="charge"><div id="chargeFill"></div></div>
   <div id="rage"><div id="rageFill"></div><span id="rageTxt">Rage</span></div><div id="micLvl" class="hidden" title="Mic level"><div id="micFill"></div></div>
   <div id="banner"></div>
+  <div id="boss" class="hidden"><span id="bossName"></span><div><div id="bossFill"></div></div></div>
   <div id="announce"></div>
   <div id="mission" class="hidden"><div class="lbl">Mission</div><div id="missionText"></div><div id="missionBar"><div id="missionFill"></div></div></div>
   <div id="tut" class="hidden"><div class="lbl" id="tutStep"></div><div id="tutText"></div><button id="tutSkip">Skip tutorial (T)</button></div>
@@ -337,6 +339,6 @@ details.about p{margin:6px 0}
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=21"></script>
+<script type="module" src="src/main.js?v=22"></script>
 </body>
 </html>

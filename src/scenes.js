@@ -1,9 +1,9 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=21';
-import { buildCity } from './city.js?v=21';
-import { loadModel, fitInto } from './models.js?v=21';
+import { canvasTex } from './style.js?v=22';
+import { buildCity } from './city.js?v=22';
+import { loadModel, fitInto } from './models.js?v=22';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -633,6 +633,78 @@ export const SCENES = {
       spawn();
       K.hemi(0xdfeaff, 0x5a7a40, K.v(0.8, 1.1)); K.light('dir', 0xfff0d8, K.v(3.2, 1.4), 8, 12, 6, { target: [0, 0, 0], shadow: true, size: 10 });
       return { ...K, pool: [], restock: spawn, start: { x: 0, z: 8.5 }, amb: 'town', photoSpots: [] };
+    },
+  },
+  restaurant: {
+    name: 'Restaurant kitchen', desc: 'The dinner rush. Steel counters, racks of plates, and new orders keep landing on the pass.', exposure: 1, env: 0.6,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx);
+      K.room(12, 15, 3.2, 'tiles', 'wallTiles', 'plaster', { t: 0.8, oz: 2 });
+      scene.background = new THREE.Color(0x1a1a1c);
+      const steel = S.surface('steel', 2, 1), dark = S.mat('metal', 0x5a5e64);
+      K.table(-3, -4.95, 5, 0.9, 0.92, steel, steel, { solid: true }); K.table(3, -4.95, 5, 0.9, 0.92, steel, steel, { solid: true }); // the line along the back
+      for (const x of [-4.2, -1.8, 1.8, 4.2]) { K.box(0.9, 0.5, 0.7, S.mat('metal', 0x2a2a2e), x, 1.17, -5.05); for (const dx of [-0.2, 0.2]) K.cyl(0.13, 0.03, S.mat('metal', 0x111114), x + dx, 1.44, -5.05, { outline: false }); }
+      K.box(11.6, 0.7, 0.9, S.mat('metal', 0x9aa0a6), 0, 2.85, -5.0, { cast: false }); // extraction hood
+      K.table(0, 0.2, 6, 0.9, 1.0, steel, dark); // the pass: orders land here
+      for (const x of [-2.2, 2.2]) K.bulb(x, 1.9, 0.2, 0xffa860, K.v(14, 5), { r: 0.1, dist: 5 });
+      K.table(-5.35, 3.4, 0.9, 3.2, 0.92, steel, dark); K.table(5.35, 3.4, 0.9, 3.2, 0.92, steel, dark);
+      K.shelf(-5.75, -2, 2.6, 0.45, [0.9, 1.5, 2.1], steel, dark, 'z'); K.shelf(5.75, -2, 2.6, 0.45, [0.9, 1.5, 2.1], steel, dark, 'z');
+      K.decal(sign([['ORDERS', 80, 150], ['NO. 47  NO. 48  NO. 49', 36, 260]], '#f4f0e4', '#2a2a2e', 512, 320), 1.6, 1, 0, 2.1, -5.44, 0);
+      K.light('point', 0xf4f4ff, K.v(16, 4), 0, 2.6, 3.5, { dist: 16 }); K.light('point', 0xf4f4ff, K.v(9, 3), 0, 2.6, -2.5, { dist: 10 }); K.hemi(0xf4f4ff, 0x404040, K.v(0.6, 1));
+      K.floor([[-3, 5.5], [3, 6], [-2.5, 2.5], [2.6, 2.8]]);
+      return { ...K, rush: { x: 0, y: 1.0, z: 0.2 }, pool: ['plate', 'plate', 'plate', 'platestack', 'platestack', 'bowl', 'bowl', 'wineglass', 'wineglass', 'mug', 'cup', 'teapot', 'jug', 'pan', 'saucepan', 'kettle', 'jar', 'bottle', 'gascan'], start: { x: 0, z: 7.5 }, amb: 'kitchen', photoSpots: [] };
+    },
+  },
+  scrapyard: {
+    name: 'Scrapyard', desc: 'Junk piles, wrecked cars and a hydraulic crusher. Get things under the press and watch it come down.', exposure: 1.05, env: 0.6,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx), W = 22;
+      K.box(W, 0.2, W, S.surface('asphalt', 7, 7), 0, -0.1, 0, { cast: false });
+      const rust = S.surface('rust', W / 3, 1);
+      for (const [x, z, ry] of [[0, -W / 2, 0], [0, W / 2, 0], [-W / 2, 0, Math.PI / 2], [W / 2, 0, Math.PI / 2]]) K.box(W, 3.2, 0.3, rust, x, 1.6, z, { ry, cast: false });
+      K.bounds = [-W / 2 + 0.5, W / 2 - 0.5, -W / 2 + 0.5, W / 2 - 0.5];
+      const sky = canvasTex(4, 256, (g, w, h) => { const s = g.createLinearGradient(0, 0, 0, h); s.addColorStop(0, '#6a7480'); s.addColorStop(1, '#c8c4b8'); g.fillStyle = s; g.fillRect(0, 0, w, h); });
+      scene.background = sky; scene.fog = new THREE.Fog(0xb0aca4, 16, 44);
+      K.hemi(0xdde4ec, 0x40382f, K.v(0.8, 1.1)); K.light('dir', 0xfff2e0, K.v(3, 1.3), 8, 10, 6, { target: [0, 0, 0], shadow: true, size: 12 });
+      // the crusher: four posts, a top beam and a heavy plate that comes down on whatever is on the bed
+      const steel = S.mat('metal', 0x3a3e44), yellow = S.mat('paint', 0xe0b020), px = 0, pz = -6.5, pw = 2.6, pd = 5;
+      K.box(pw + 0.6, 0.12, pd + 0.6, S.mat('metal', 0x4a4a4e), px, 0.06, pz, { cast: false });
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) K.box(0.35, 5.2, 0.35, yellow, px + sx * (pw / 2 + 0.3), 2.6, pz + sz * (pd / 2 + 0.3));
+      K.box(pw + 1, 0.5, pd + 1, yellow, px, 5.2, pz);
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(pw, 0.4, pd), steel); plate.castShadow = true; scene.add(plate); S.outline(plate, 1.02);
+      const ram = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1, 16), S.mat('metal', 0xc8ccd0)); scene.add(ram);
+      K.decal(spray('CRUSHER', '#f4e6c8', 110), 3.6, 1.0, px, 2.2, -W / 2 + 0.17, 0);
+      K.car(px, pz, 0x2a5ab3); K.car(-6, 1, 0xb3202a); K.car(5.5, 3, 0x8a8f96);
+      for (const [x, z] of [[-8, -6], [-7.2, -7.4], [8, -7], [7.4, -5.8]]) K.box(rand(1, 1.6), rand(0.6, 1.4), rand(1, 1.6), rust, x, 0.5, z, { ry: rand(0, 3) });
+      K.obstacles.push([-8.9, -6.4, -8.3, -5.2], [6.6, 8.9, -7.9, -5]);
+      K.table(-3, 6, 2, 1, 0.8, S.surface('wood', 1, 1), S.mat('metal', 0x555555)); K.table(3.4, -1, 1.6, 0.9, 0.8, S.surface('wood', 1, 1), S.mat('metal', 0x555555));
+      K.floor([[-2.5, 3], [2.6, 2.5], [-8, 4], [8, 6], [0, 8], [-4, -3], [3.5, -3.5], [-1.4, 1.5]]);
+      return { ...K, press: { x: px, z: pz, w: pw, d: pd, plate, ram, top: 4.95 }, pool: ['gascan', 'tv', 'crt', 'crt', 'monitor', 'microwave', 'speaker', 'bottle', 'bottle', 'cinder', 'crate', 'crate', 'chair', 'jar', 'lamp', 'printer'], start: { x: 0, z: 7 }, amb: 'caryard', photoSpots: [] };
+    },
+  },
+  glassworks: {
+    name: 'Glass factory', desc: 'Bottles and glasses ride the conveyor belts out of the furnace. Smash them as they roll past.', exposure: 1, env: 0.6,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx);
+      K.room(16, 16, 5, 'concreteFloor', 'blockWall', 'concreteFloor', { ceilTint: 0x666666, oz: 1.5 });
+      scene.background = new THREE.Color(0x15130f);
+      const tex = canvasTex(64, 64, (g, w, h) => { g.fillStyle = '#2a2a2e'; g.fillRect(0, 0, w, h); g.fillStyle = '#3e3e44'; for (let i = 0; i < 4; i++) g.fillRect(i * 16, 0, 6, h); });
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(22, 1);
+      const beltMat = S.mat('plastic', 0xffffff, { map: tex }); const frame = S.mat('metal', 0x5a6068);
+      const belts = [];
+      for (const z of [-3.6, 0, 3.6]) { K.box(11, 0.1, 0.7, beltMat, 0, 0.85, z, { cast: false }); K.box(11.2, 0.8, 0.9, frame, 0, 0.4, z, { phys: false });
+        for (const s of [-1, 1]) K.box(11.2, 0.1, 0.06, frame, 0, 0.95, z + s * 0.4); K.obstacles.push([-5.6, 5.6, z - 0.5, z + 0.5]); belts.push({ x1: -5.3, x2: 5.3, z, y: 0.9 }); }
+      K.updates.push((t, dt) => { tex.offset.x -= dt * 0.9 * 2; });
+      // the furnace the glass comes out of, glowing
+      K.box(1.4, 3.4, 9.6, S.mat('metal', 0x2a2420), -7.2, 1.7, 0); K.box(0.1, 0.6, 8.6, S.mat('emissive', 0xff7a20), -6.48, 1.15, 0, { phys: false });
+      K.bulb(-6, 1.4, 0, 0xff8a30, K.v(30, 10), { r: 0.05, dist: 9 });
+      for (const z of [-3.6, 0, 3.6]) K.box(1, 0.7, 1, S.surface('wood', 1, 1), 6.2, 0.35, z); // crates at the end of the line
+      K.shelf(7.7, 6.5, 2.6, 0.45, [0.5, 1.1, 1.7], S.mat('metal', 0x8a9098), frame, 'z'); K.shelf(-7.7, 6.5, 2.6, 0.45, [0.5, 1.1, 1.7], S.mat('metal', 0x8a9098), frame, 'z');
+      for (const x of [-4, 0, 4]) K.bulb(x, 4.4, 1.5, 0xfff0d8, K.v(26, 9), { r: 0.12, dist: 14 });
+      K.hemi(0xfff0e0, 0x302a24, K.v(0.5, 0.9));
+      K.decal(spray('LINE 3', '#f4e6c8', 110), 3, 0.9, 0, 3.4, -6.38, 0);
+      K.floor([[-3, 6], [3, 6.5], [0, 5.8], [-5, 2], [5, -2]]);
+      return { ...K, belts, beltKeys: ['bottle', 'bottle', 'bottle', 'wineglass', 'wineglass', 'jar', 'beermug', 'cup', 'fishbowl'], pool: ['bottle', 'bottle', 'bottle', 'wineglass', 'wineglass', 'jar', 'jar', 'beermug', 'cup', 'vase', 'fishbowl', 'lamp', 'crate', 'gascan'], start: { x: 0, z: 8 }, amb: 'store', photoSpots: [] };
     },
   },
   space: {

@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=21';
-import { SCENES } from './scenes.js?v=21';
-import { createItems, DEFS } from './items.js?v=21';
-import * as A from './audio.js?v=21';
-import { preloadItemModels } from './models.js?v=21';
-import { createClayFigure, preloadClayBody } from './clay.js?v=21';
-import { createReplay } from './replay.js?v=21';
-import { clayBody } from './clay.js?v=21';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=22';
+import { SCENES } from './scenes.js?v=22';
+import { createItems, DEFS } from './items.js?v=22';
+import * as A from './audio.js?v=22';
+import { preloadItemModels } from './models.js?v=22';
+import { createClayFigure, preloadClayBody } from './clay.js?v=22';
+import { createReplay } from './replay.js?v=22';
+import { clayBody } from './clay.js?v=22';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const $ = id => document.getElementById(id);
@@ -85,7 +85,9 @@ function build() {
   pivot = new THREE.Group(); camera.add(pivot); equip(opts.weapon);
   const sea = season(); if (sea && room.pool.length) room.pool = room.pool.concat(SEASON_ITEMS[sea]); // holiday things mixed into the room
   I.batch(room.pool, room.slots, opts.gm === 'build' ? 10 : batchSize());
-  applyWords(); fireworks = []; fwT = 0;
+  applyWords(); fireworks = []; fwT = 0; room.extra = []; broken = 0; rushT = performance.now() + 4000; pressT = 0; pressSnd?.stop(); pressSnd = null; beltT = 0; boss = null; bossAt = performance.now() + 25000; $('boss').classList.add('hidden');
+  I.onBossHit = it => { it.pop = 1; A.at(it.body.position, () => A.SFX[it.def.kind]?.(0.5, 0.7)); shake = Math.max(shake, 0.08); };
+  if (!room.open && !room.calm && room.pool.length && opts.gm !== 'build' && Math.random() < 0.45) dominoRun();
   if (Math.random() < 0.7) I.pyramid(room.slots);
   spawnPhotos();
   boomLight = new THREE.PointLight(0xffa040, 0, 12, 2); scene.add(boomLight); fx = [];
@@ -254,7 +256,8 @@ function announce(text) {
 
 // a gas can went off: fireball, knock everything back, break what's close (which can set off more cans)
 function explode(p, src) {
-  const P = new THREE.Vector3(p.x, p.y, p.z), R = 2.6, now = performance.now(), blast = { n: 0 };
+  const P = new THREE.Vector3(p.x, p.y, p.z), R = 2.6, now = performance.now(), blast = { n: 0 }, chain = (src && src.chain) || { n: 0 }; chain.n++;
+  if (chain.n >= 2 && state === 'play') { banner('Chain reaction x' + chain.n); addScore(20 * chain.n, P, 'big'); maxStat('chainLen', chain.n); }
   for (const f of room.furniture) { if (f.dead) continue; const c = f.parts[0].position, d = c.distanceTo(P); if (d < R + 0.6) { f.hp -= 7 * (1 - d / (R + 0.6)) + 2; if (f.hp <= 0) collapse(f, c.clone().sub(P).setY(0).normalize()); } }
   for (const L of room.lamps) if (!L.broken && L.pos.distanceTo(P) < R + 0.5) breakLamp(L);
   A.at(P, () => A.SFX.boom()); puff(P, 0x3a3632, 8, 1.1, 0.8, 0.6);
@@ -272,7 +275,8 @@ function explode(p, src) {
     const q = it.body.position, d = Math.hypot(q.x - P.x, q.y - P.y, q.z - P.z); if (d > R) continue;
     const f = 1 - d / R, dir = new THREE.Vector3(q.x - P.x, q.y - P.y + 0.3, q.z - P.z).normalize();
     if (!it.fixed) { it.body.wakeUp(); it.born = 0; it.body.velocity.set(it.body.velocity.x + dir.x * 14 * f, it.body.velocity.y + dir.y * 10 * f + 4 * f, it.body.velocity.z + dir.z * 14 * f); }
-    if (it.def.hp !== Infinity && d < R * 0.65) { it.blasted = true; it.blast = blast; setTimeout(() => { if (!it.dead) I.shatter(it, dir, 6 * f + 2, false); }, 50 + d * 120); }
+    const lit = it.def.kind === 'explosive' && d < R * 0.8 && !it.chain; if (lit) it.chain = chain; // gas cans nearby go off in turn
+    if (it.def.hp !== Infinity && (d < R * 0.65 || lit)) { it.blasted = true; it.blast = blast; setTimeout(() => { if (!it.dead) I.shatter(it, dir, 6 * f + 2, false); }, 50 + d * 120); }
   }
   for (const c of I.chunks) { const q = c.body.position, d = Math.hypot(q.x - P.x, q.y - P.y, q.z - P.z); if (d < R) { const f = 1 - d / R; c.body.wakeUp(); c.body.velocity.set((q.x - P.x) / d * 12 * f, 3 + 8 * f, (q.z - P.z) / d * 12 * f); } }
   if (figure && figure.alive) {
@@ -689,6 +693,7 @@ function updateLamps(now) {
 function damageWall(h) {
   let w = wallHits.find(q => q.p.distanceTo(h.point) < 0.35); if (!w) wallHits.push(w = { p: h.point.clone(), n: 0, hole: 0 });
   const sledge = opts.weapon === 'hammer' && atk === 'swing'; w.n += sledge ? 3 : heavyNow ? 2 : 1;
+  if (w.n >= 16 && w.hole === 2 && breakThrough(h)) { w.hole = 3; return; }
   if ((w.n >= 4 && !w.hole) || (w.n >= 9 && w.hole === 1)) {
     w.hole++; addMark(h.point, h.normal, 'hole', (w.hole === 1 ? 0.5 : 0.85) * (sledge ? 1.4 : 1));
     for (let i = 0; i < (sledge ? 14 : 8); i++) I.shard('stone', sledge ? rand(0.04, 0.09) : rand(0.02, 0.05), 0xb8b0a4, h.point, new CANNON.Vec3(), h.normal.clone().setY(0.3).normalize(), 3, 0.15);
@@ -1396,8 +1401,122 @@ function updateMic(dt, now) {
   const rms = Math.sqrt(sum / mic.buf.length); mic.lvl = Math.max(rms, mic.lvl - dt * 0.6); $('micFill').style.width = Math.min(100, mic.lvl * 400) + '%';
   if (rms > 0.12 && now >= rageUntil && state === 'play' && !paused) { rageMeter += rms * 120 * dt; shake = Math.max(shake, Math.min(0.08, rms * 0.2)); if (rageMeter >= 100) { startRage(); emit('scream'); } }
 }
+// ---------- Bosses: now and then a giant version of something in the room turns up. Many hits to break, big reward
+const BOSS_KEYS = ['vase', 'crt', 'tv', 'microwave', 'teapot', 'jug', 'pot', 'flowerpot', 'speaker', 'monitor', 'bust', 'pumpkin', 'kettle', 'mug', 'bottle', 'jar', 'fishbowl'];
+let boss = null, bossAt = 0;
+function freeSpot(minFromPlayer = 2.5, clear = 0.6) {
+  const [x1, x2, z1, z2] = room.bounds;
+  for (let i = 0; i < 40; i++) { const x = rand(x1 + 1, x2 - 1), z = rand(z1 + 1, z2 - 1);
+    if (Math.hypot(x - player.x, z - player.z) < minFromPlayer || room.obstacles.some(([a, b, c, d]) => x > a - clear && x < b + clear && z > c - clear && z < d + clear)) continue;
+    if (I.list.some(i => !i.dead && Math.hypot(i.body.position.x - x, i.body.position.z - z) < clear)) continue; return { x, z }; }
+  return null;
+}
+function spawnBoss() {
+  const keys = BOSS_KEYS.filter(k => room.pool.includes(k)); if (!keys.length) return;
+  const key = pick(keys), spot = freeSpot(); if (!spot) return; const sc = Math.min(4.5, 1.5 / I.DEFS[key].size);
+  const it = I.add(key, spot.x, 0, spot.z, rand(0, 6.28), { scale: sc, mass: 0, fixed: true, hpMul: 1 }); it.boss = true; it.hp = it.maxHp = 10 + Math.round(sc * 1.5);
+  boss = it; banner('Boss: giant ' + (NAMES[key] || key)); A.at(it.body.position, () => { A.SFX.land('stone', 1); A.SFX.body(1.3); }); shake = Math.max(shake, 0.3);
+  puff(new THREE.Vector3(spot.x, 0.1, spot.z), 0xc8c0b4, 10, 0.8, 0.2, 0.5); $('boss').classList.remove('hidden'); $('bossName').textContent = 'Giant ' + (NAMES[key] || key);
+}
+function updateBoss(now) {
+  if (boss && boss.dead) { const p = boss.body.position; boss = null; bossAt = now + 60000; $('boss').classList.add('hidden');
+    if (state === 'play') { banner('Boss down!'); addScore(300, p, 'big'); shake = Math.max(shake, 0.6); flash(0.3); freeze(120); vibrate(200); I.sparks_(p, 40, 0xffd27a); emit('boss'); addStat('bosses'); } }
+  if (boss) $('bossFill').style.width = Math.max(0, boss.hp / boss.maxHp * 100) + '%';
+  else if (state === 'play' && !paused && !room.open && !room.calm && opts.gm !== 'build' && now > bossAt) { bossAt = now + 20000; spawnBoss(); }
+}
+// ---------- Room machines: orders on the pass, the scrapyard crusher, conveyor belts
+let rushT = 0, pressT = 0, pressSnd = null, pressHit = false, beltT = 0;
+function updateMachines(dt, now) {
+  const live = state === 'play' && !paused;
+  if (room.rush && live && now > rushT) { // order up: a bell, and fresh plates land on the pass
+    rushT = now + rand(7000, 10000); const r = room.rush;
+    if (!room.furniture.some(f => f.dead && Math.hypot(f.parts[0].position.x - r.x, f.parts[0].position.z - r.z) < 1)) {
+      A.at(r, () => { A.SFX.metal(0.45, 3.2); setTimeout(() => A.SFX.metal(0.3, 3.2), 140); });
+      popup('Order up!', { x: r.x, y: r.y + 0.6, z: r.z }, 'small');
+      for (let i = 0; i < 3; i++) { const it = I.add(pick(['plate', 'platestack', 'bowl', 'wineglass', 'mug']), r.x + rand(-2.6, 2.6), r.y, r.z + rand(-0.25, 0.25), rand(0, 6)); it.body.sleep(); }
+    }
+  }
+  const P = room.press;
+  if (P) { // a 10 s cycle: wait up top, come down hard, hold, go back up
+    pressT += dt; const cyc = Math.floor(pressT / 10), t = pressT % 10, top = P.top, low = 0.32;
+    const y = t < 5 ? top : t < 6.4 ? top - (top - low) * Math.pow((t - 5) / 1.4, 2) : t < 7.4 ? low : t < 10 ? low + (top - low) * ((t - 7.4) / 2.6) : top;
+    P.plate.position.set(P.x, y + 0.2, P.z); P.ram.position.set(P.x, (y + 0.4 + 4.95) / 2, P.z); P.ram.scale.y = Math.max(0.01, 4.95 - y - 0.4);
+    const moving = (t > 5 && t < 6.4) || (t > 7.4 && t < 10);
+    if (moving && !pressSnd && live) pressSnd = A.loopAt('engine', P.plate.position, 0.35, 0.5); if (!moving && pressSnd) { pressSnd.stop(); pressSnd = null; }
+    if (t >= 6.4 && t < 7.4 && !pressHit) { pressHit = true; A.at(P.plate.position, () => { A.SFX.metal(1.2, 0.5); A.SFX.stone(1, 0.5); }); if (Math.hypot(player.x - P.x, player.z - P.z) < 9) shake = Math.max(shake, 0.25); }
+    if (t < 6.4) pressHit = false;
+    const inside = q => Math.abs(q.x - P.x) < P.w / 2 + 0.1 && Math.abs(q.z - P.z) < P.d / 2 + 0.1;
+    if (y < top - 0.1) {
+      for (const it of I.list) { if (it.dead || it.held || !inside(it.body.position)) continue;
+        if (it.crushCycle !== cyc) { it.crushCycle = cyc; const b = new THREE.Box3().setFromObject(it.mesh); it.crushTop = b.max.y; it.crushY0 = it.mesh.position.y; }
+        if (y > it.crushTop) continue;
+        if (it.def.hp !== Infinity) { if (live) I.shatter(it, new THREE.Vector3(rand(-1, 1), -0.3, rand(-1, 1)).normalize(), 3, false); continue; }
+        const k = Math.max(0.22, y / it.crushTop); it.mesh.scale.y = Math.min(it.mesh.scale.y, k); // metal folds flat
+        if (it.key === 'carbody' && k < 0.5 && !it.crushed && live) { it.crushed = true; banner('Crushed!'); addScore(250, it.body.position, 'big'); emit('crush'); addStat('crushed'); A.at(it.body.position, () => { A.SFX.metal(1.3, 0.6); A.SFX.glass(1, 0.8); }); }
+      }
+      for (const c of I.chunks) { const q = c.body.position; if (inside(q) && q.y > y - 0.05) { q.y = Math.max(0.03, y - 0.06); c.body.velocity.set(rand(-1, 1), 0, rand(-1, 1)); } }
+      if (y < 2.2 && inside(player)) player.x = P.x + Math.sign(player.x - P.x || 1) * (P.w / 2 + 0.6);
+    }
+  }
+  if (room.belts) { // glass rides the belts out of the furnace and drops into the crates at the end
+    beltT -= dt;
+    for (const it of I.list) { if (it.dead || it.held || it.thrown) continue; const q = it.body.position;
+      const b = room.belts.find(b => Math.abs(q.z - b.z) < 0.38 && q.x > b.x1 - 0.2 && q.x < b.x2 + 0.3 && q.y > b.y - 0.05 && q.y < b.y + 0.7); if (!b) continue;
+      if (q.x > b.x2) { I.remove(it); continue; }
+      it.body.wakeUp(); it.body.velocity.x = 0.9; it.body.velocity.z *= 0.8; }
+    if (beltT <= 0 && live) { beltT = 1.1; for (const b of room.belts) if (Math.random() < 0.7 && I.list.filter(i => !i.dead && Math.abs(i.body.position.z - b.z) < 0.4 && i.body.position.y > b.y - 0.1).length < 12) { const it = I.add(pick(room.beltKeys), b.x1, b.y, b.z + rand(-0.08, 0.08), rand(0, 6)); it.born = now; } }
+  }
+}
+// ---------- Domino runs: a snaking line across the floor that ends at gas cans
+function dominoRun() {
+  const [x1, x2, z1, z2] = room.bounds, free = (x, z) => x > x1 && x < x2 && z > z1 && z < z2 && !room.obstacles.some(([a, b, c, d]) => x > a - 0.3 && x < b + 0.3 && z > c - 0.3 && z < d + 0.3) && Math.hypot(x - room.start.x, z - room.start.z) > 1.2;
+  for (let tries = 0; tries < 12; tries++) {
+    let x = rand(x1 + 1, x2 - 1), z = rand(z1 + 1, z2 - 1), a = rand(0, 6.28); const pts = [];
+    while (pts.length < 40 && free(x, z)) { pts.push([x, z, a]); a += Math.sin(pts.length * 0.4) * 0.12; x += Math.sin(a) * 0.3; z += Math.cos(a) * 0.3; }
+    if (pts.length < 14) continue;
+    for (const [px, pz, pa] of pts) { const it = I.add('domino', px, 0, pz, pa); it.body.sleep(); it.born = performance.now(); }
+    const [ex, ez, ea] = pts[pts.length - 1];
+    for (let k = 1; k <= 2; k++) { const gx = ex + Math.sin(ea) * 0.35 * k, gz = ez + Math.cos(ea) * 0.35 * k; if (free(gx, gz)) { const g = I.add('gascan', gx, 0, gz, ea); g.body.sleep(); } }
+    return true;
+  }
+  return false;
+}
+// ---------- Break right through a wall into a hidden room behind it
+let broken = 0;
+function breakThrough(h) {
+  const wall = h.object, sz = wall.userData.size; if (!sz || !wall.userData.body || broken >= 2 || room.open) return false;
+  const alongX = sz[2] <= 0.25 && sz[0] > 1; if (!alongX && !(sz[0] <= 0.25 && sz[2] > 1)) return false;
+  const L = alongX ? sz[0] : sz[2], H = sz[1], T = 0.2, c = wall.position, cu = alongX ? c.x : c.z, wc = alongX ? c.z : c.x;
+  const out = Math.sign(alongX ? c.z - player.z : c.x - player.x), DW = 1.6, DH = Math.min(2.3, H - 0.3), CW = 3.4, CD = 3;
+  if (L < CW + 0.6 || H < 2.4) return false;
+  const u = Math.max(cu - L / 2 + CW / 2 + 0.2, Math.min(cu + L / 2 - CW / 2 - 0.2, alongX ? h.point.x : h.point.z));
+  world.removeBody(wall.userData.body); scene.remove(wall); room.statics.splice(room.statics.indexOf(wall), 1);
+  const mat = wall.material, XZ = (a, b) => alongX ? [a, b] : [b, a];
+  const box = (lu, ly, lw, pu, py, pw, m = mat) => { if (lu < 0.02) return; const [sx, sz2] = XZ(lu, lw), [px, pz] = XZ(pu, pw); room.box(sx, ly, sz2, m, px, py, pz, { cast: false }); };
+  const a0 = cu - L / 2, a1 = u - DW / 2, b0 = u + DW / 2, b1 = cu + L / 2;
+  box(a1 - a0, H, T, (a0 + a1) / 2, H / 2, wc); box(b1 - b0, H, T, (b0 + b1) / 2, H / 2, wc); box(DW, H - DH, T, u, DH + (H - DH) / 2, wc); // the wall, now with a ragged doorway
+  const cw = wc + out * (T / 2 + CD / 2), back = wc + out * (T / 2 + CD + T / 2);
+  box(CW + 2 * T, 0.2, CD + T, u, -0.1, cw + out * T / 2, S.surface('concreteFloor', 2, 2)); box(CW, H, T, u, H / 2, back);
+  box(T, H, CD, u - CW / 2 - T / 2, H / 2, cw); box(T, H, CD, u + CW / 2 + T / 2, H / 2, cw); box(CW + 2 * T, 0.2, CD + T, u, H + 0.1, cw + out * T / 2);
+  const [lx, lz] = XZ(u, cw), bulb = new THREE.PointLight(0xffd8a0, S.realistic ? 9 : 3, 6, 2); bulb.position.set(lx, H - 0.4, lz); scene.add(bulb);
+  // walkable: the doorway and the room behind
+  const rect = (u0, u1, w0, w1) => { const [p0, q0] = XZ(Math.min(u0, u1), Math.min(w0, w1)), [p1, q1] = XZ(Math.max(u0, u1), Math.max(w0, w1)); room.extra.push([p0, p1, q0, q1]); };
+  rect(u - DW / 2 + 0.35, u + DW / 2 - 0.35, wc - out * 0.6, cw); rect(u - CW / 2 + 0.35, u + CW / 2 - 0.35, wc + out * (T / 2 + 0.35), back - out * (T / 2 + 0.35));
+  // a hidden stash: things to smash, worth extra
+  const stash = room.pool.filter(k => k !== 'gascan'); for (let i = 0; i < 9; i++) { const [sx, sz2] = XZ(u + rand(-CW / 2 + 0.5, CW / 2 - 0.5), cw + out * rand(-CD / 2 + 0.5, CD / 2 - 0.5)); I.add(pick(stash), sx, 0.05, sz2, rand(0, 6)); }
+  for (const m of marks.filter(m => Math.abs((alongX ? m.position.z : m.position.x) - wc) < 0.3 && Math.abs((alongX ? m.position.x : m.position.z) - u) < DW / 2 + 0.2 && m.position.y < DH + 0.2)) m.visible = false;
+  for (let i = 0; i < 26; i++) I.shard('stone', rand(0.05, 0.13), 0xb8b0a4, h.point, new CANNON.Vec3(), h.normal.clone().setY(0.2).normalize(), 4, 0.4);
+  puff(h.point, 0xc8c0b4, 14, 0.9, 0.3, 0.6); A.at(h.point, () => { A.SFX.stone(1.4, 0.6); A.SFX.boom(); }); shake = Math.max(shake, 0.6); freeze(90); vibrate(160);
+  broken++; banner('Breakthrough!'); addScore(100, h.point, 'big'); emit('breakthrough'); addStat('breakthroughs');
+  return true;
+}
+function stayInside() { // keep the player in the room, or in any space opened up behind a wall
+  const rs = [room.bounds, ...(room.extra || [])]; if (rs.some(([a, b, c, d]) => player.x >= a && player.x <= b && player.z >= c && player.z <= d)) return;
+  let best = null, bd = Infinity; for (const [a, b, c, d] of rs) { const x = Math.max(a, Math.min(b, player.x)), z = Math.max(c, Math.min(d, player.z)), dd = Math.hypot(x - player.x, z - player.z); if (dd < bd) { bd = dd; best = [x, z]; } }
+  player.x = best[0]; player.z = best[1];
+}
 function updateRooms(dt, now) {
-  updateFireworks(dt, now); updateMic(dt, now);
+  updateBoss(now); updateMachines(dt, now); updateFireworks(dt, now); updateMic(dt, now);
   if (museumAlarm) { museumAlarm.light.intensity = Math.floor(now / 300) % 2 ? (S.realistic ? 60 : 25) : 0; if (now > museumAlarm.until) { museumAlarm.sound?.stop(); museumAlarm.light.intensity = 0; museumAlarm.done = true; } }
   for (const B of breaches) {
     if (now > B.until) { if (B.sound) { B.sound.stop(); B.sound = null; banner('Breach sealed'); } continue; }
@@ -1455,7 +1574,7 @@ async function startSession() {
   if (!isTouch) lockMouse();
 }
 function endSession() {
-  state = 'end'; mouseHeld = false; dropHeld(); stopMic(); setHighlight(null); document.exitPointerLock?.(); A.SFX.buzzer(); A.setMusic(opts.music, false); A.stopAmbience();
+  state = 'end'; mouseHeld = false; dropHeld(); stopMic(); pressSnd?.stop(); pressSnd = null; setHighlight(null); document.exitPointerLock?.(); A.SFX.buzzer(); A.setMusic(opts.music, false); A.stopAmbience();
   document.body.classList.remove('rage'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden');
   const before = Object.keys(WEAPONS).filter(unlocked);
   save.points += score; save.smashed += smashed; maxStat('round', smashed);
@@ -1640,8 +1759,7 @@ function updatePlayer(dt) {
   const len = Math.hypot(mx, mz); if (len > 1) { mx /= len; mz /= len; }
   const s = Math.sin(player.yaw), c = Math.cos(player.yaw), sp = (keys.ShiftLeft ? 5 : 3.6) * dt;
   player.x += (mx * c + mz * s) * sp; player.z += (-mx * s + mz * c) * sp;
-  const [bx1, bx2, bz1, bz2] = room.bounds;
-  player.x = Math.max(bx1, Math.min(bx2, player.x)); player.z = Math.max(bz1, Math.min(bz2, player.z));
+  stayInside();
   const R = 0.3;
   for (const [x1, x2, z1, z2] of room.obstacles) {
     if (player.x > x1 - R && player.x < x2 + R && player.z > z1 - R && player.z < z2 + R) {
@@ -1789,4 +1907,4 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, fal
 renderMode();
 opts.mode = 'stylized'; build(); opts.mode = null; // background behind the first screen
 requestAnimationFrame(frame);
-window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; }, get cars() { return cars; }, get traffic() { return traffic; }, get renderer() { return renderer; }, get driving() { return driving; }, carKey, toggleView, get view() { return view; }, get wrecks() { return wrecks; }, get grav() { return grav; }, get paused() { return paused; } };
+window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; }, get cars() { return cars; }, get traffic() { return traffic; }, get renderer() { return renderer; }, get driving() { return driving; }, carKey, toggleView, get view() { return view; }, get wrecks() { return wrecks; }, get grav() { return grav; }, get paused() { return paused; }, get boss() { return boss; }, spawnBoss, get elapsed() { return elapsed; } };

@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=21';
-import { itemModel, fitInto } from './models.js?v=21';
+import { canvasTex } from './style.js?v=22';
+import { itemModel, fitInto } from './models.js?v=22';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -361,23 +361,24 @@ function fracture(root, impact, nPlanes, ds, cut) { // cut: one exact plane (a k
 export function createItems({ scene, world, S, onBreak, onClink }) {
   const dsCache = new Map(); // fragments are open shells, so their materials draw both sides
   const ds = mat => { if (mat.side === THREE.DoubleSide) return mat; let c = dsCache.get(mat); if (!c) { c = mat.clone(); c.side = THREE.DoubleSide; dsCache.set(mat, c); } return c; };
-  const api = { list: [], chunks: [], sparks: [], queue: [], photo: null };
+  const api = { list: [], chunks: [], sparks: [], queue: [], photo: null, DEFS };
   const M = S.mat;
 
   function add(key, x, y, z, ry = 0, o = {}) {
     const def = DEFS[key], color = o.color ?? pick(def.colors), r = def.make(M, color, { photo: api.photo, ...o });
     const src = S.realistic && !(key === 'frame' && api.photo) && itemModel(key); // realistic look: swap in a real model, sized to the simple shape
     if (src) { const g = new THREE.Group(); g.add(fitInto(src, new THREE.Box3().setFromObject(r.mesh), 'item')); r.mesh = g; }
+    if (o.scale) { r.mesh.scale.setScalar(o.scale); const hs = new THREE.Box3().setFromObject(r.mesh).getSize(new THREE.Vector3()).multiplyScalar(0.5); r.shape = new CANNON.Box(V(hs.x * 0.8, hs.y, hs.z * 0.8)); r.shapes = null; r.halfH = hs.y; } // a giant version (boss)
     r.mesh.traverse(n => { if (n.isMesh) { n.castShadow = !def.fixed || key === 'carbody'; n.receiveShadow = true; } });
     if (def.kind !== 'glass' && key !== 'bowl') S.outline(r.mesh, 1.05); // outlines show through see-through and open vessels, so those go without
     scene.add(r.mesh);
-    const body = new CANNON.Body({ mass: def.mass, position: V(x, def.fixed ? y : y + r.halfH + 0.01, z) }); // fixed things: y is their centre
+    const body = new CANNON.Body({ mass: o.mass ?? def.mass, position: V(x, def.fixed ? y : y + r.halfH + 0.01, z) }); // fixed things: y is their centre
     if (r.shapes) r.shapes.forEach(([s, off]) => body.addShape(s, off)); else body.addShape(r.shape);
     body.quaternion.setFromEuler(o.rx || 0, ry, 0);
     body.sleepSpeedLimit = 0.15; body.angularDamping = 0.2; body.linearDamping = 0.02;
     world.addBody(body);
-    const it = { key, def, mesh: r.mesh, body, color, hp: def.hp * (o.hpMul || 1), born: performance.now(), pop: 0, dead: false, fixed: !!def.fixed, group: o.group };
-    if (def.fixed) { r.mesh.position.copy(body.position); r.mesh.quaternion.copy(body.quaternion); }
+    const it = { key, def, mesh: r.mesh, body, color, hp: def.hp * (o.hpMul || 1), born: performance.now(), pop: 0, dead: false, fixed: !!(def.fixed || o.fixed), group: o.group };
+    if (it.fixed) { r.mesh.position.copy(body.position); r.mesh.quaternion.copy(body.quaternion); }
     body.addEventListener('collide', e => {
       if (it.dead || it.queued || it.held) return;
       const v = Math.abs(e.contact.getImpactVelocityAlongNormal());
@@ -450,6 +451,7 @@ export function createItems({ scene, world, S, onBreak, onClink }) {
   api.remove = it => remove(it);
   api.shatter = (it, dir, force, fromHit, hitPoint, chunky, cut) => { // cut: a world-space plane normal for a clean two-piece slice // chunky: a sledgehammer knocks it into fewer, bigger pieces
     if (it.dead) return;
+    if (it.boss) { if (!fromHit) it.hp -= Math.max(1, force * 0.4); if (it.hp > 0) { api.onBossHit?.(it); return; } } // bosses wear down; only the last blow breaks them
     const d = it.def, p = it.body.position, vel = it.fixed ? V(0, 0, 0) : it.body.velocity, root = it.mesh;
     let made = 0;
     try {
