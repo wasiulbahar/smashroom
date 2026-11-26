@@ -7,7 +7,7 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 ## What's in it
 
 - **Two looks.** *Stylized* (bright cartoon, runs on almost anything) or *Realistic* (real textures and models, see-through glass, soft shadows, dust and glow; needs more PC power, quality drops automatically if it lags).
-- **Nine rooms.** Classic rage room, abandoned building, haunted house, corporate office, kitchen, apartment, car yard (smash whole cars), a clay studio and a Downtown city street.
+- **Eleven rooms.** Classic rage room, abandoned building, haunted house, corporate office, kitchen, apartment, car yard (smash whole cars), a clay studio and a Downtown city street, plus two calm rooms: a sunny greenhouse and a beach shack at sunset.
 - **Clay figure.** A life-size clay statue of a human body that you punch, slap and kick with bare hands. Every hit leaves a dent, slaps turn its head, it sways and groans, arms, legs and head break off at the joints, and every third figure is a tougher gold boss.
 - **Four modes.** Classic (2 minutes), Zen (no timer, calm music), Time attack (clear the room as fast as you can) and Target practice (throw things at targets on the walls).
 - **Things that react.** Gas cans explode and set off chain reactions, golden items are worth 10× for a few seconds, and cup pyramids topple.
@@ -18,6 +18,12 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Wreck the room.** Tables and shelves give way after enough hits, lights pop and go dark, walls crack into holes.
 - **Missions and achievements.** Short timed missions pop up during classic and zen rounds; 17 achievements are tracked across rounds.
 - **Use the wreckage.** Legs, boards and beams from wrecked tables and shelves can be picked up and swung.
+- **Smash your stress.** Type what's bothering you in the lobby; the words are written on plates, TVs and the clay figure for you to smash. They never leave the device.
+- **Build & smash.** A no-timer mode: place domino runs, crate towers, glass pyramids, TV walls, bottle pins, plate towers and gas-can rows (keys 1 to 7), then knock them down.
+- **New tools.** A paintball gun (colour splats everywhere, pops glass), a bowling ball and a fire extinguisher that blasts foam.
+- **Clean up.** After a round, sweep the shards into a bin with a broom. Slow and satisfying.
+- **Calm rooms.** A sunny greenhouse with birdsong and rain on the glass, and a beach shack at sunset with real wave recordings.
+- **What a break leaves behind.** Spilled drinks spread into puddles, china leaves powder on the floor, dust hangs in the air and you hear the debris settle.
 - **Downtown.** A city street at night: parked cars with alarms, shop windows, neon signs, a phone booth, a vending machine and fire hydrants that turn into geysers. Wrecking it builds Heat (up to five stars): a higher score multiplier, sirens closing in, and in a timed round five stars means you get Busted.
 - **Bigger rooms.** Every room is larger, with more tables, shelves and things to break. The car yard has two cars.
 - **Apartment.** A whole flat with a TV wall, fridge, glass coffee table, windows that crack before they fall out, and a bathroom mirror. Smash into the walls and you may hit a water pipe.

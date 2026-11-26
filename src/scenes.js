@@ -1,8 +1,8 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=14';
-import { loadModel, fitInto } from './models.js?v=14';
+import { canvasTex } from './style.js?v=15';
+import { loadModel, fitInto } from './models.js?v=15';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -482,6 +482,81 @@ export const SCENES = {
       K.hemi(0x8090c0, 0x201820, K.v(0.25, 0.7));
       K.light('dir', 0x9fb0ff, K.v(0.8, 0.5), -6, 14, 8, { target: [0, 0, 0], shadow: true, size: 16 });
       return { ...K, heat: true, pool: ['gascan', 'gascan', 'bottle', 'bottle', 'bottle', 'tv', 'crt', 'monitor', 'cinder', 'crate', 'speaker', 'microwave', 'chair', 'lamp', 'jar', 'vase', 'pot', 'laptop', 'mug'], start: { x: 0, z: 12 }, amb: 'city', photoSpots: [[-1.6, -10, 0.2], [1.6, -10, -0.2]] };
+    },
+  },
+  greenhouse: {
+    name: 'Greenhouse', desc: 'Calm. A sunny glasshouse of pots and panes, birdsong and a light shower on the glass. No rush.', exposure: 1.05, env: 0.6, calm: true,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx);
+      const W = 10, D = 12, oz = 1, H = 2.5;
+      K.box(W, 0.2, D, S.surface('tiles', 4, 5, 0xd8a888), 0, -0.1, oz, { cast: false });
+      const brick = S.surface('brick', W / 2, 0.4), frame = S.mat('paint', 0xf2f2ee), wood = S.surface('wood', 1, 1), rust = S.surface('rust', 1, 1);
+      for (const [x, z, w, d] of [[0, oz - D / 2, W, 0.25], [0, oz + D / 2, W, 0.25], [-W / 2, oz, 0.25, D], [W / 2, oz, 0.25, D]]) K.box(w, 0.6, d, brick, x, 0.3, z, { cast: false });
+      const paneH = H - 0.6, py = 0.6 + paneH / 2;
+      for (const s of [-1, 1]) for (let z = oz - D / 2 + 1; z < oz + D / 2; z += 2) { K.fixed('window', s * W / 2, py, z, Math.PI / 2, { w: 1.92, h: paneH }); K.box(0.08, paneH, 0.08, frame, s * W / 2, py, z + 1, { phys: false }); }
+      for (const s of [-1, 1]) for (let x = -W / 2 + 1; x < W / 2; x += 2) { K.fixed('window', x, py, oz + s * D / 2, 0, { w: 1.92, h: paneH }); K.box(0.08, paneH, 0.08, frame, x + 1, py, oz + s * D / 2, { phys: false }); }
+      for (const s of [-1, 1]) { K.box(0.1, 0.1, D, frame, s * W / 2, H, oz, { phys: false }); K.box(W, 0.1, 0.1, frame, 0, H, oz + s * D / 2, { phys: false }); }
+      for (const s of [-1, 1]) { K.box(0.4, 5, D + 1, frame, s * (W / 2 + 0.5), 2.5, oz).visible = false; K.box(W + 1, 5, 0.4, frame, 0, 2.5, oz + s * (D / 2 + 0.5)).visible = false; } // keep shards in
+      // gable roof of glass on white rafters
+      const roofGlass = S.realistic ? new THREE.MeshStandardMaterial({ color: 0xeef6ff, transparent: true, opacity: 0.18, roughness: 0.05, envMapIntensity: 1.2, side: THREE.DoubleSide, depthWrite: false }) : new THREE.MeshToonMaterial({ color: 0xdff3ff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false });
+      const slope = Math.atan2(1.4, W / 2), rl = Math.hypot(1.4, W / 2);
+      for (const s of [-1, 1]) { const r = new THREE.Mesh(new THREE.PlaneGeometry(rl, D), roofGlass); r.rotation.order = 'ZXY'; r.rotation.set(-Math.PI / 2, 0, -s * slope); r.position.set(s * W / 4, H + 0.7, oz); scene.add(r); }
+      K.box(0.12, 0.12, D, frame, 0, H + 1.4, oz, { phys: false });
+      for (let z = oz - D / 2; z <= oz + D / 2 + 0.01; z += 2) for (const s of [-1, 1]) { const b = K.box(rl, 0.08, 0.08, frame, s * W / 4, H + 0.7, z, { phys: false }); b.rotation.z = -s * slope; }
+      // the garden outside
+      K.box(70, 0.1, 70, S.mat('fabric', 0x5a8a3a), 0, -0.26, 0, { cast: false, phys: false });
+      for (let i = 0; i < 22; i++) { const a = i / 22 * Math.PI * 2, r = rand(11, 15); const h = new THREE.Mesh(new THREE.SphereGeometry(rand(1.2, 2.2), 10, 8), S.mat('fabric', pick([0x3f6a2a, 0x4f7a34, 0x365a22]))); h.position.set(Math.cos(a) * r, rand(0.4, 1.2), oz + Math.sin(a) * r); h.scale.y = 0.8; scene.add(h); }
+      scene.background = new THREE.Color(K.v(0xa8d4f0, 0x9ad0f0)); scene.fog = new THREE.Fog(K.v(0xc8e4f0, 0xb8e0f0), 18, 50);
+      // potting benches and a rack along the back
+      K.table(-3.7, -2, 1.1, 3, 0.85, wood, rust); K.table(3.7, -2, 1.1, 3, 0.85, wood, rust);
+      K.table(-3.7, 3.6, 1.1, 3, 0.85, wood, rust); K.table(3.7, 3.6, 1.1, 3, 0.85, wood, rust);
+      K.table(0, 0.6, 3, 1.2, 0.85, wood, rust);
+      K.shelf(0, oz - D / 2 + 0.45, 4.4, 0.4, [0.95, 1.6], wood, wood, 'x');
+      K.hemi(0xfff6e0, 0x6a8a50, K.v(0.75, 1.1));
+      K.light('dir', 0xfff0d0, K.v(4.5, 1.6), 6, 9, 4, { target: [0, 0, 0], shadow: true, size: 9 });
+      K.light('point', 0xfff4e0, K.v(6, 3), 0, 2.8, 1, { dist: 12 });
+      K.floor([[-1.6, -3.6], [1.8, -1], [-2, 2], [2, 5.2], [0, 4.4], [-2, 5.6], [0, -2.6]]);
+      K.bounds = [-W / 2 + 0.5, W / 2 - 0.5, oz - D / 2 + 0.5, oz + D / 2 - 0.5];
+      K.dust(160, K.bounds, 2.6);
+      return { ...K, calm: true, pool: ['flowerpot', 'flowerpot', 'pot', 'pot', 'vase', 'vase', 'jar', 'jug', 'bowl', 'mug', 'bottle', 'plate', 'platestack', 'cup', 'wineglass', 'teapot', 'fishbowl'], start: { x: 0, z: oz + D / 2 - 1.5 }, amb: 'greenhouse', photoSpots: [[-1.4, -3.2, 0.3], [1.4, -3.2, -0.3]] };
+    },
+  },
+  beach: {
+    name: 'Beach shack', desc: 'Calm. A wooden bar open to the sea at sunset. Waves roll in while you break bottles and jars.', exposure: 1.05, env: 0.6, calm: true,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx);
+      const W = 10, D = 9;
+      const deck = S.surface('oldWood', 4, 4, K.v(0xffe0b8, 0xd8b088)), planks = S.surface('oldWood', 3, 1.5, K.v(0xf0d0a8, 0xc89870)), wood = S.surface('wood', 1, 1), dark = S.mat('wood', 0x5a3a24);
+      K.box(W, 0.2, D, deck, 0, -0.1, 0, { cast: false });
+      K.box(W, 3, 0.2, planks, 0, 1.5, -D / 2 - 0.1, { cast: false });
+      for (const s of [-1, 1]) K.box(0.2, 3, D, planks, s * (W / 2 + 0.1), 1.5, 0, { cast: false });
+      K.box(W + 0.6, 0.14, D + 0.8, dark, 0, 3.07, 0.2, { phys: false });
+      for (const x of [-W / 2 + 0.1, -1.7, 1.7, W / 2 - 0.1]) K.box(0.16, 3, 0.16, dark, x, 1.5, D / 2 - 0.1, { phys: false });
+      K.box(W, 0.08, 0.08, dark, 0, 1, D / 2 - 0.05, { phys: false }); K.box(W, 0.08, 0.08, dark, 0, 0.55, D / 2 - 0.05, { phys: false }); // railing
+      K.box(W, 1.6, 0.3, dark, 0, 0.8, D / 2 + 0.2).visible = false; K.box(W + 2, 6, 0.3, dark, 0, 3, D / 2 + 3).visible = false; // keep things on the deck
+      // sand, sea and a sunset sky
+      K.box(90, 0.1, 30, S.mat('fabric', 0xe0c08a), 0, -0.35, D / 2 + 14, { cast: false, phys: false });
+      const seaTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#2a6a8a'; g.fillRect(0, 0, w, h); for (let i = 0; i < 260; i++) { g.strokeStyle = `rgba(255,${180 + Math.random() * 60 | 0},${140 + Math.random() * 80 | 0},${Math.random() * 0.35})`; g.lineWidth = 1 + Math.random() * 2; const y = Math.random() * h, x = Math.random() * w; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 10 + Math.random() * 30, y + Math.random() * 2); g.stroke(); } });
+      seaTex.wrapS = seaTex.wrapT = THREE.RepeatWrapping; seaTex.repeat.set(12, 6);
+      const sea = new THREE.Mesh(new THREE.PlaneGeometry(240, 120), S.realistic ? new THREE.MeshStandardMaterial({ map: seaTex, color: 0x9ab8c8, roughness: 0.12, metalness: 0.3 }) : S.mat('plastic', 0x3a7aa0, { map: seaTex }));
+      sea.rotation.x = -Math.PI / 2; sea.position.set(0, -0.32, D / 2 + 85); scene.add(sea);
+      const foam = new THREE.Mesh(new THREE.PlaneGeometry(90, 1.2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false })); foam.rotation.x = -Math.PI / 2; foam.position.set(0, -0.29, D / 2 + 25.5); scene.add(foam);
+      K.updates.push(t => { seaTex.offset.set(t * 0.004, t * 0.012); foam.position.z = D / 2 + 25.5 + Math.sin(t * 0.8) * 1.4; foam.material.opacity = 0.35 + 0.25 * Math.sin(t * 0.8 + 1.2); });
+      const sky = canvasTex(4, 256, (g, w, h) => { const s = g.createLinearGradient(0, 0, 0, h); s.addColorStop(0, '#2a2a5a'); s.addColorStop(0.45, '#c86a5a'); s.addColorStop(0.7, '#f2a05a'); s.addColorStop(1, '#ffd08a'); g.fillStyle = s; g.fillRect(0, 0, w, h); });
+      scene.background = sky; scene.fog = new THREE.Fog(K.v(0xe8a070, 0xd890a0), 30, 140);
+      const sun = new THREE.Mesh(new THREE.SphereGeometry(4, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffc070, fog: false })); sun.position.set(-14, 3, 120); scene.add(sun);
+      // the bar: counter, back shelves of bottles, two tables, string lights
+      K.table(0, -3.7, 6, 0.7, 1.05, wood, dark, { solid: true });
+      K.shelf(0, -4.35, 5.4, 0.3, [1.5, 2.1], wood, dark, 'x');
+      K.table(-2.6, 0.6, 1.2, 1.2, 0.75, wood, dark); K.table(2.6, 1.6, 1.2, 1.2, 0.75, wood, dark);
+      K.table(-4.2, 3.3, 0.8, 1.6, 0.75, wood, dark);
+      for (let i = 0; i < 7; i++) K.bulb(-4.2 + i * 1.4, 2.75 - (i % 2) * 0.12, D / 2 - 0.3, 0xffcf8a, K.v(2.5, 2), { cage: false, cord: 0.15, r: 0.05, dist: 5 });
+      K.hemi(0xffd8b8, 0x6a5040, K.v(1.1, 1));
+      K.light('dir', 0xffb070, K.v(4.5, 1.3), -6, 4, 14, { target: [0, 0, -2], shadow: true, size: 8 });
+      K.light('point', 0xffc890, K.v(16, 3), 0, 2.6, -1.5, { dist: 11 }); K.light('point', 0xffc890, K.v(9, 0), 0, 2.4, 2.4, { dist: 8 });
+      K.floor([[-1, 2.6], [1.2, -1.2], [-3.6, -1.6], [3.8, -1.2], [0.4, 3.4], [3.6, 3.6]]);
+      K.bounds = [-W / 2 + 0.4, W / 2 - 0.4, -D / 2 + 0.4, D / 2 - 0.5];
+      return { ...K, calm: true, pool: ['bottle', 'bottle', 'bottle', 'beermug', 'wineglass', 'cup', 'jar', 'jar', 'plate', 'bowl', 'lamp', 'vase', 'flowerpot', 'fishbowl', 'chair', 'stool', 'crate', 'mug'], start: { x: 0, z: 2.8 }, amb: 'beach', photoSpots: [[-1.4, -2.8, 0.3], [1.4, -2.8, -0.3]] };
     },
   },
   studio: {

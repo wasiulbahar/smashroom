@@ -20,7 +20,8 @@ export function createReplay(canvas) {
       seg.prev = null; prev = seg;
       if (stopping && r === rec) stopping();
     };
-    r.start(); rec = r; cur = seg;
+    try { r.start(); } catch (e) { return; } // some browsers refuse to record a canvas; the replay is optional
+    rec = r; cur = seg;
   }
 
   api.start = () => {

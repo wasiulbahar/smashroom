@@ -33,9 +33,9 @@ export function at(p, fn) { // every sound started inside fn comes from point p
   n.connect(sfx); cur = n; try { return fn(); } finally { cur = null; }
 }
 // a looping recording fixed at point p (a burst pipe); returns a handle to fade it out
-export function loopAt(set, p, gain = 1) {
+export function loopAt(set, p, gain = 1, rate = 1) {
   if (!ac || !has(set)) return null;
-  const s = ac.createBufferSource(), b = bufs[set][0]; s.buffer = b; s.loop = true; s.loopStart = 0.06; s.loopEnd = b.duration - 0.06; // skip the mp3 padding at both ends
+  const s = ac.createBufferSource(), b = bufs[set][0]; s.buffer = b; s.loop = true; s.playbackRate.value = rate; s.loopStart = 0.06; s.loopEnd = b.duration - 0.06; // skip the mp3 padding at both ends
   const g = ac.createGain(); g.gain.value = gain;
   at(p, () => s.connect(g).connect(B())); s.start();
   return { set: v => g.gain.setTargetAtTime(v, ac.currentTime, 0.4), stop() { g.gain.setTargetAtTime(0, ac.currentTime, 0.5); setTimeout(() => { try { s.stop(); } catch (e) {} }, 2500); } };
@@ -116,7 +116,7 @@ const SYN = {
 };
 
 // recorded CC0 samples (assets/sounds, see CREDITS.txt); generated sounds are the fallback until they load
-const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6, type: 1, door: 2, keys: 2, siren: 1, alarm: 1 };
+const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6, type: 1, door: 2, keys: 2, siren: 1, alarm: 1, pball: 3, roll: 1, scuff: 3, wave: 3, birds: 1, rain: 1 };
 const bufs = {};
 function loadSamples() {
   for (const [set, n] of Object.entries(SETS)) for (let i = 0; i < n; i++)
@@ -150,6 +150,10 @@ export const SFX = {
       : kind === 'clay' ? smp('punch', 0.25 * i, 0.6) : smp('plastic', 0.3 * i, rand(1.1, 1.5));
     if (!ok) SYN.clink(kind, i);
   },
+  pball(i = 1) { smp('pball', i, rand(0.95, 1.08)); }, // paintball marker: built from real slap, hiss and click recordings
+  splat(i = 1) { smp('slap', 0.55 * i, rand(0.75, 0.9)); smp('splash', 0.35 * i, rand(1.4, 1.8), 0.005); }, // a paintball bursting
+  roll(i = 1) { smp('roll', i, rand(0.9, 1.05)); }, // a bowling ball rolling away
+  sweep(i = 1, grit = 0) { smp('scuff', 0.4 * i, rand(0.68, 0.82)); smp('scuff', 0.25 * i, rand(0.9, 1.1), 0.08); if (grit > 0) smp('debris', 0.22 * grit, rand(1.15, 1.45), 0.04); }, // broom bristles, plus shards skittering
   bag(i = 1, r = 1) { smp('bag', i, r) || SYN.thud('wood', i); }, // a dull, heavy hit, like punching a sandbag: the clay figure
   crack(i = 1, r = 1) { smp('crack', i, r) || SYN.wood(i); }, // wood splitting: tables and shelves giving way
   zap(i = 1) { if (!smp('zap', i, rand(0.9, 1.2))) return; smp('zap', 0.6 * i, rand(1.1, 1.4), 0.12); smp('zap', 0.35 * i, rand(0.8, 1), 0.3); }, // a light shorting out
@@ -227,6 +231,13 @@ function far(set, g, o = {}) {
   if (o.dur) { gn.gain.setValueAtTime(g, t + o.dur - 0.15); gn.gain.linearRampToValueAtTime(0, t + o.dur); }
   s.start(t, off, o.dur || undefined); ambNodes.push(s);
 }
+// a recording looping softly in the background (birds, rain); waits for it to load if needed
+function ambLoop(set, g, lp = 20000, tries = 0) {
+  if (!has(set)) { if (tries < 8) ambTimers.push(setTimeout(() => ambLoop(set, g, lp, tries + 1), 700)); return; }
+  const b = bufs[set][0], s = ac.createBufferSource(); s.buffer = b; s.loop = true; s.loopStart = 0.06; s.loopEnd = b.duration - 0.06;
+  const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; const gn = ac.createGain(); gn.gain.value = g;
+  s.connect(f).connect(gn).connect(amb); s.start(); ambNodes.push(s);
+}
 export function startAmbience(kind) {
   stopAmbience(); if (!ac || !kind) return;
   const every = (ms, fn) => ambTimers.push(setInterval(() => { if (Math.random() < 0.5) fn(now()); }, ms));
@@ -255,6 +266,14 @@ export function startAmbience(kind) {
     every(16000, () => far('door', 0.22, { lp: 900, rate: rand(0.8, 0.95) }));
     every(13000, () => far('keys', 0.08, { lp: 2500 }));
     every(9000, () => far('clink', 0.08, { lp: 2000 })); }
+  if (kind === 'greenhouse') { // birdsong outside and a light shower pattering on the glass
+    ambLoop('birds', 0.45, 9000); ambLoop('rain', 0.14, 5000);
+    every(9000, t => nz(t, 3.5, 'bandpass', rand(300, 600), 0.6, 0.04, amb, rand(200, 400))); }
+  if (kind === 'beach') { // waves rolling in, a low surf bed, a warm breeze
+    loopNoise('lowpass', 450, 0.4, 0.05);
+    const wave = () => far('wave', rand(0.35, 0.55), { lp: 7000, rate: rand(0.85, 1.05) }); wave();
+    tick(2800, () => { if (Math.random() < 0.8) setTimeout(wave, rand(0, 900)); });
+    every(8000, t => nz(t, 4, 'bandpass', rand(250, 500), 0.5, 0.05, amb, rand(150, 300))); }
   if (kind === 'city') { // night street: traffic a block away, a car passing, footsteps, a door
     loopNoise('lowpass', 260, 0.5, 0.09);
     every(6000, t => nz(t, 3, 'bandpass', rand(220, 420), 0.7, 0.1, amb, rand(140, 260)));
@@ -264,4 +283,4 @@ export function startAmbience(kind) {
   if (kind === 'caryard') { const w = loopNoise('bandpass', 350, 0.6, 0.25); loopNoise('lowpass', 150, 0.4, 0.12); tick(3000, () => w.frequency.setTargetAtTime(rand(250, 600), now(), 2));
     every(6000, t => nz(t, 2, 'lowpass', 400, 0.7, 0.12, amb, 150)); }
 }
-export function stopAmbience() { for (const n of ambNodes) { try { n.stop(); } catch (e) {} } ambNodes = []; ambTimers.forEach(clearInterval); ambTimers = []; }
+export function stopAmbience() { for (const n of ambNodes) { try { n.stop(); } catch (e) {} } ambNodes = []; ambTimers.forEach(t => { clearInterval(t); clearTimeout(t); }); ambTimers = []; }

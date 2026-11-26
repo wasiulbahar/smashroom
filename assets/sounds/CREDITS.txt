@@ -14,3 +14,9 @@ Sounds in this folder are CC0 (public domain).
 - splash: '6 short water splashes' by ezwa, opengameart.org, CC0
 - spray: '30 CC0 SFX loops' (water_flowing) by rubberduck, opengameart.org, CC0
 - siren, alarm: cut from 'sirens and alarm noise', opengameart.org, CC0
+- pball: made for SMASHROOM from the CC0 slap, spray and keys recordings above (layered, pitched and trimmed)
+- roll: 'Bowling Ball Rolling' by qubodup, opengameart.org, CC0
+- scuff (broom): from 'Fantozzi's Footsteps (Grass/Sand & Stone)' by Fantozzi, opengameart.org, CC0
+- wave: 'Beach Ocean Waves' (jasinski), opengameart.org, CC0
+- birds: 'Ambient Bird Sounds' by isaiah658, opengameart.org, CC0
+- rain: '30 CC0 SFX loops' (rain) by rubberduck, opengameart.org, CC0
