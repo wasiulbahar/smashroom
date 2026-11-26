@@ -15,7 +15,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SMASHROOM">
 <meta property="og:title" content="SMASHROOM: Free Online Rage Room Game">
-<meta property="og:description" content="Smash, throw and wreck everything in eleven rooms, from an office to a city street. Then sweep up. A rage room in your browser, free, no download.">
+<meta property="og:description" content="Smash, throw and wreck everything in sixteen rooms and an open city, from an office to a space station. Then sweep up. A rage room in your browser, free, no download.">
 <meta property="og:url" content="https://wasiulbahar.com/smashroom/">
 <meta property="og:image" content="https://wasiulbahar.com/smashroom/assets/share.jpg">
 <meta property="og:image:width" content="1200">
@@ -28,7 +28,7 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
  {"@type":["VideoGame","WebApplication"],"name":"SMASHROOM","alternateName":["Smash Room","Online Rage Room"],"url":"https://wasiulbahar.com/smashroom/","image":"https://wasiulbahar.com/smashroom/assets/share.jpg",
-  "description":"A free online rage room game. Smash and throw glass, plates, TVs, furniture and a car in eleven rooms, from a corporate office to a city street at night and a calm beach shack, or smash a clay statue with your bare hands.",
+  "description":"A free online rage room game. Smash and throw glass, plates, TVs, furniture and a car in sixteen rooms plus an open city, from a corporate office to a city street at night and a calm beach shack, or smash a clay statue with your bare hands.",
   "genre":["Action","Simulation","Casual","Stress relief"],"keywords":"rage room, smash room, break room, online rage room, stress relief game, smashing game, destruction game, browser game, free online game",
   "applicationCategory":"GameApplication","operatingSystem":"Any (web browser)","gamePlatform":["Web browser","PC","Mobile"],"playMode":"SinglePlayer","inLanguage":"en","isAccessibleForFree":true,
   "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Wasiul Bahar","url":"https://wasiulbahar.com/"}},
@@ -106,6 +106,7 @@ kbd{background:var(--bg);border:2px solid var(--ink);border-radius:5px;padding:0
 #chargeFill{height:100%;width:0;background:var(--yellow)}
 #combo{position:absolute;top:84px;right:14px;font-size:26px;color:var(--yellow);text-shadow:3px 3px 0 var(--ink)}
 #rage{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);width:min(340px,60vw);height:22px;background:rgba(20,13,31,.7);border:3px solid var(--ink);border-radius:12px;overflow:hidden}
+#micLvl{width:120px;height:5px;margin-top:4px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden}#micFill{height:100%;width:0;background:var(--pink);transition:width .08s}
 #rageFill{height:100%;width:0;background:linear-gradient(90deg,var(--yellow),var(--pink))}
 #rage span{position:absolute;inset:0;text-align:center;font-size:12px;line-height:16px;color:var(--text);text-shadow:1px 1px 0 var(--ink)}
 #banner{position:absolute;left:0;right:0;top:26%;text-align:center;font-size:clamp(36px,8vw,72px);color:var(--yellow);text-shadow:4px 4px 0 var(--pink),7px 7px 0 var(--ink);opacity:0}
@@ -185,7 +186,7 @@ details.about p{margin:6px 0}
   <div id="heat" class="hidden"><span class="stars"></span><small id="heatLbl"></small></div>
   <div id="combo"></div>
   <div id="cross"></div><div id="hint"></div><div id="charge"><div id="chargeFill"></div></div>
-  <div id="rage"><div id="rageFill"></div><span id="rageTxt">Rage</span></div>
+  <div id="rage"><div id="rageFill"></div><span id="rageTxt">Rage</span></div><div id="micLvl" class="hidden" title="Mic level"><div id="micFill"></div></div>
   <div id="banner"></div>
   <div id="announce"></div>
   <div id="mission" class="hidden"><div class="lbl">Mission</div><div id="missionText"></div><div id="missionBar"><div id="missionFill"></div></div></div>
@@ -209,7 +210,7 @@ details.about p{margin:6px 0}
     <div class="modes">
       <button class="card mode" data-mode="stylized">
         <b>Stylized</b>
-        <ul><li>Bright cartoon look with bold outlines</li><li>All twelve places, every weapon</li><li>Smooth and light</li></ul>
+        <ul><li>Bright cartoon look with bold outlines</li><li>Every place, every weapon</li><li>Smooth and light</li></ul>
         <div class="req">Runs well on almost anything, including phones and older laptops.</div>
       </button>
       <button class="card mode real" data-mode="realistic">
@@ -255,6 +256,10 @@ details.about p{margin:6px 0}
     <div class="row">
       <div class="opts">
         <label class="tog"><input type="checkbox" id="music" checked> Music</label>
+        <label class="tog" title="Shout into your mic to fill the rage meter. Nothing is recorded or sent."><input type="checkbox" id="mic"> Scream to rage (mic)</label>
+        <label class="tog">Holiday
+          <select id="season"><option value="auto">Auto</option><option value="halloween">Halloween</option><option value="christmas">Christmas</option><option value="newyear">New Year</option><option value="off">Off</option></select>
+        </label>
         <label class="tog hidden" id="darkTog"><input type="checkbox" id="dark"> Blackout (flashlight)</label>
         <label class="tog" id="qualityRow">Quality
           <select id="quality"><option value="auto">Auto</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
@@ -332,6 +337,6 @@ details.about p{margin:6px 0}
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=20"></script>
+<script type="module" src="src/main.js?v=21"></script>
 </body>
 </html>

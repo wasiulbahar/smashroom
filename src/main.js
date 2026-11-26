@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=20';
-import { SCENES } from './scenes.js?v=20';
-import { createItems, DEFS } from './items.js?v=20';
-import * as A from './audio.js?v=20';
-import { preloadItemModels } from './models.js?v=20';
-import { createClayFigure, preloadClayBody } from './clay.js?v=20';
-import { createReplay } from './replay.js?v=20';
-import { clayBody } from './clay.js?v=20';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=21';
+import { SCENES } from './scenes.js?v=21';
+import { createItems, DEFS } from './items.js?v=21';
+import * as A from './audio.js?v=21';
+import { preloadItemModels } from './models.js?v=21';
+import { createClayFigure, preloadClayBody } from './clay.js?v=21';
+import { createReplay } from './replay.js?v=21';
+import { clayBody } from './clay.js?v=21';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const $ = id => document.getElementById(id);
@@ -83,8 +83,9 @@ function build() {
   figure = room.clay ? createClayFigure({ scene, world, S, items: I, ...room.clay, onLoose: c => I.chunks.push(c) }) : null;
   S.setup(scene, camera, def);
   pivot = new THREE.Group(); camera.add(pivot); equip(opts.weapon);
+  const sea = season(); if (sea && room.pool.length) room.pool = room.pool.concat(SEASON_ITEMS[sea]); // holiday things mixed into the room
   I.batch(room.pool, room.slots, opts.gm === 'build' ? 10 : batchSize());
-  applyWords();
+  applyWords(); fireworks = []; fwT = 0;
   if (Math.random() < 0.7) I.pyramid(room.slots);
   spawnPhotos();
   boomLight = new THREE.PointLight(0xffa040, 0, 12, 2); scene.add(boomLight); fx = [];
@@ -1353,7 +1354,50 @@ function pushTrolleys(dx, dz, len) { // walking into a trolley rolls it ahead of
   if (len < 0.1) return;
   for (const it of I.list) if (it.key === 'trolley' && !it.dead && !it.held) { const q = it.body.position; if (Math.hypot(q.x - player.x, q.z - player.z) < 0.85) { it.body.wakeUp(); it.body.velocity.x = dx * 4.4 / len; it.body.velocity.z = dz * 4.4 / len; } }
 }
+// ---------- Holidays: themed things to smash, and fireworks outside at New Year
+const SEASON_ITEMS = { halloween: ['pumpkin', 'pumpkin', 'pumpkin', 'pumpkin', 'pumpkin'], christmas: ['bauble', 'bauble', 'bauble', 'gift', 'gift', 'gift'], newyear: ['bottle', 'wineglass', 'wineglass', 'gift', 'bauble'] };
+const OUTDOOR = new Set(['city', 'downtown', 'caryard', 'beach', 'tinytown']);
+function season() {
+  if (opts.season && opts.season !== 'auto') return opts.season === 'off' ? null : opts.season;
+  const d = new Date(), m = d.getMonth() + 1, day = d.getDate();
+  if ((m === 12 && day === 31) || (m === 1 && day <= 2)) return 'newyear';
+  if (m === 10 && day >= 15) return 'halloween'; if (m === 12) return 'christmas'; return null;
+}
+let fireworks = [], fwT = 0;
+function updateFireworks(dt, now) {
+  if (season() !== 'newyear' || !OUTDOOR.has(opts.scene)) return;
+  if (now > fwT) { fwT = now + rand(700, 2200); // launch one somewhere in front of you, far off
+    const a = player.yaw + rand(-0.9, 0.9), d = rand(35, 60), x = player.x - Math.sin(a) * d, z = player.z - Math.cos(a) * d, n = 90, pos = new Float32Array(n * 3), vel = [];
+    const col = new THREE.Color().setHSL(Math.random(), 0.9, 0.62), y = rand(22, 34);
+    for (let i = 0; i < n; i++) { pos.set([x, y, z], i * 3); const v = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(7, 10)); vel.push(v); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: col, size: 0.5, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    pts.visible = false; scene.add(pts); fireworks.push({ pts, vel, t: -0.9, flash: col });
+    A.at(new THREE.Vector3(x, 1, z), () => A.SFX.whoosh(false)); }
+  fireworks = fireworks.filter(f => { f.t += dt;
+    if (f.t < 0) return true;
+    if (!f.pts.visible) { f.pts.visible = true; const p = f.pts.geometry.attributes.position.array; A.at(new THREE.Vector3(p[0], p[1], p[2]), () => A.SFX.boom()); }
+    const a = f.pts.geometry.attributes.position; for (let i = 0; i < f.vel.length; i++) { const v = f.vel[i]; v.y -= 4 * dt; v.multiplyScalar(1 - 1.2 * dt); a.array[i * 3] += v.x * dt; a.array[i * 3 + 1] += v.y * dt; a.array[i * 3 + 2] += v.z * dt; }
+    a.needsUpdate = true; f.pts.material.opacity = Math.max(0, 1 - f.t / 2.2);
+    if (f.t > 2.2) { scene.remove(f.pts); f.pts.geometry.dispose(); f.pts.material.dispose(); return false; } return true; });
+}
+// ---------- Scream to rage: opt-in mic level feeds the rage meter. Nothing is recorded or sent.
+let mic = null;
+async function startMic() {
+  if (!opts.mic || mic) return;
+  try { const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false } });
+    const ctx = new AudioContext(), an = ctx.createAnalyser(); an.fftSize = 1024; ctx.createMediaStreamSource(stream).connect(an);
+    mic = { stream, ctx, an, buf: new Float32Array(an.fftSize), lvl: 0 }; $('micLvl').classList.remove('hidden');
+  } catch (e) { toast('No microphone, so no scream power this time'); opts.mic = false; $('mic').checked = false; }
+}
+function stopMic() { if (!mic) return; mic.stream.getTracks().forEach(t => t.stop()); mic.ctx.close(); mic = null; $('micLvl').classList.add('hidden'); }
+function updateMic(dt, now) {
+  if (!mic) return; mic.an.getFloatTimeDomainData(mic.buf); let sum = 0; for (const v of mic.buf) sum += v * v;
+  const rms = Math.sqrt(sum / mic.buf.length); mic.lvl = Math.max(rms, mic.lvl - dt * 0.6); $('micFill').style.width = Math.min(100, mic.lvl * 400) + '%';
+  if (rms > 0.12 && now >= rageUntil && state === 'play' && !paused) { rageMeter += rms * 120 * dt; shake = Math.max(shake, Math.min(0.08, rms * 0.2)); if (rageMeter >= 100) { startRage(); emit('scream'); } }
+}
 function updateRooms(dt, now) {
+  updateFireworks(dt, now); updateMic(dt, now);
   if (museumAlarm) { museumAlarm.light.intensity = Math.floor(now / 300) % 2 ? (S.realistic ? 60 : 25) : 0; if (now > museumAlarm.until) { museumAlarm.sound?.stop(); museumAlarm.light.intensity = 0; museumAlarm.done = true; } }
   for (const B of breaches) {
     if (now > B.until) { if (B.sound) { B.sound.stop(); B.sound = null; banner('Breach sealed'); } continue; }
@@ -1392,7 +1436,7 @@ async function startSession() {
   A.initAudio(); A.setVolume(save.vol); A.setRoom(opts.scene);
   if (opts.scene === 'studio') { $('start').textContent = 'Loading…'; await Promise.race([headReady, new Promise(r => setTimeout(r, 20000))]); $('start').textContent = 'Start smashing'; }
   if (opts.mode === 'realistic' && modelsReady) { $('start').textContent = 'Loading…'; await modelsReady; $('start').textContent = 'Start smashing'; }
-  build();
+  build(); startMic();
   Object.assign(player, { x: room.start.x, z: room.start.z, yaw: 0, pitch: -0.18 });
   timeLeft = opts.gm === 'targets' ? 90 : opts.gm === 'classic' ? SESSION : Infinity;
   score = 0; smashed = 0; combo = 0; bestCombo = 0; rageMeter = 0; rageUntil = 0; byKind = {}; restocking = false; throws = 0;
@@ -1411,7 +1455,7 @@ async function startSession() {
   if (!isTouch) lockMouse();
 }
 function endSession() {
-  state = 'end'; mouseHeld = false; dropHeld(); setHighlight(null); document.exitPointerLock?.(); A.SFX.buzzer(); A.setMusic(opts.music, false); A.stopAmbience();
+  state = 'end'; mouseHeld = false; dropHeld(); stopMic(); setHighlight(null); document.exitPointerLock?.(); A.SFX.buzzer(); A.setMusic(opts.music, false); A.stopAmbience();
   document.body.classList.remove('rage'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden');
   const before = Object.keys(WEAPONS).filter(unlocked);
   save.points += score; save.smashed += smashed; maxStat('round', smashed);
@@ -1515,6 +1559,8 @@ $('dark').onchange = e => { opts.dark = e.target.checked; };
 $('watchAgain').onclick = () => replay.best && playReplay();
 $('saveClip').onclick = () => replay.download();
 $('quality').onchange = e => { opts.quality = e.target.value; build(); };
+$('mic').onchange = e => { opts.mic = e.target.checked; };
+$('season').onchange = e => { opts.season = e.target.value; build(); };
 $('music').onchange = e => { opts.music = e.target.checked; A.setMusic(opts.music, state === 'play'); };
 $('backMode').onclick = () => { $('lobby').classList.add('hidden'); renderMode(); };
 $('start').onclick = startSession;
