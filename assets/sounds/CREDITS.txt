@@ -22,3 +22,4 @@ Sounds in this folder are CC0 (public domain).
 - rain: '30 CC0 SFX loops' (rain) by rubberduck, opengameart.org, CC0
 - engine: 'Racing car engine sound loops' by domasx2, opengameart.org, CC0
 - skid: 'SuperTuxKart sound effects', opengameart.org, CC0
+- assets/models/human: 'Animated Human' by Quaternius, opengameart.org, CC0

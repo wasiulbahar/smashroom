@@ -3,7 +3,8 @@
 // the third-person view and the mini-map; the sky, sun, street lights and rain run here as a room update.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { canvasTex } from './style.js?v=16';
+import { canvasTex } from './style.js?v=17';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -36,8 +37,8 @@ function facade(w, h, mat) {
 }
 
 export function buildCity(ctx, K, { spray }) {
-  const { scene, S } = ctx, R = S.realistic;
-  const mapRects = [], lampSpots = [], cars = [], heads = [];
+  const { scene, S } = ctx, R = S.realistic, LOW = S.quality === 'low';
+  const mapRects = [], lampSpots = [], cars = [], heads = [], merge = []; // merge: static meshes drawn as a few big batches
   const L = HALF * 2;
   // ground, roads and markings
   const asphalt = S.surface('asphalt', 52, 52);
@@ -65,32 +66,32 @@ export function buildCity(ctx, K, { spray }) {
     K.fixed('window', x + nx * 0.1, WALK + 1.3, z + nz * 0.1, ry, { w, h: 2 });
     const sign = canvasTex(512, 128, (g, cw, ch) => { g.clearRect(0, 0, cw, ch); g.font = '80px Bungee, Impact, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = col; g.shadowBlur = 22; g.fillStyle = col; g.fillText(name, cw / 2, ch / 2); g.fillText(name, cw / 2, ch / 2); });
     const neon = K.decal(sign, w * 0.9, w * 0.22, x + nx * 0.03, WALK + 2.75, z + nz * 0.03, ry); neonSigns.push(neon);
-    K.box(w + 0.6, 0.1, 0.9, S.mat('paint', new THREE.Color(col).getHex()), x + nx * 0.45, WALK + 2.45, z + nz * 0.45, { ry, phys: false }); // awning
+    merge.push(K.box(w + 0.6, 0.1, 0.9, S.mat('paint', new THREE.Color(col).getHex()), x + nx * 0.45, WALK + 2.45, z + nz * 0.45, { ry, phys: false })); // awning
   };
   const building = (x, z, w, d, h, cx, cz, shops = true) => {
     const skin = pick(skins);
-    K.box(w, h, d, skin, x, WALK + h / 2, z, { cast: true });
+    merge.push(K.box(w, h, d, skin, x, WALK + h / 2, z, { cast: true }));
     K.obstacles.push([x - w / 2, x + w / 2, z - d / 2, z + d / 2]);
     mapRects.push([x - w / 2, z - d / 2, x + w / 2, z + d / 2, '#6a6470']);
     const up = h - 4.2; // window bands above the ground floor
     if (up > 2) for (const [nx, nz, fw] of [[1, 0, d], [-1, 0, d], [0, 1, w], [0, -1, w]]) {
-      const f = facade(fw - 0.6, up, winMat); f.position.set(x + nx * (w / 2 + 0.02), WALK + 4 + up / 2, z + nz * (d / 2 + 0.02)); f.rotation.y = Math.atan2(nx, nz); scene.add(f);
+      const f = facade(fw - 0.6, up, winMat); f.position.set(x + nx * (w / 2 + 0.02), WALK + 4 + up / 2, z + nz * (d / 2 + 0.02)); f.rotation.y = Math.atan2(nx, nz); f.receiveShadow = true; scene.add(f); merge.push(f);
     }
-    K.box(w + 0.3, 0.4, d + 0.3, S.mat('stone', 0x8a8580), x, WALK + h + 0.2, z, { phys: false }); // roof parapet
+    merge.push(K.box(w + 0.3, 0.4, d + 0.3, S.mat('stone', 0x8a8580), x, WALK + h + 0.2, z, { phys: false })); // roof parapet
     if (shops) { const nx = Math.sign(x - cx) || 1, nz = Math.sign(z - cz) || 1;
       if (Math.abs(x - cx) > Math.abs(z - cz)) shop(x + nx * w / 2, z, nx, 0, d); else shop(x, z + nz * d / 2, 0, nz, w); }
   };
-  const sidewalk = (cx, cz, mat = walkMat) => { K.box(BLOCK, WALK, BLOCK, mat, cx, WALK / 2, cz, { cast: false }); mapRects.push([cx - BLOCK / 2, cz - BLOCK / 2, cx + BLOCK / 2, cz + BLOCK / 2, '#8a8690']); };
+  const sidewalk = (cx, cz, mat = walkMat) => { merge.push(K.box(BLOCK, WALK, BLOCK, mat, cx, WALK / 2, cz, { cast: false })); mapRects.push([cx - BLOCK / 2, cz - BLOCK / 2, cx + BLOCK / 2, cz + BLOCK / 2, '#8a8690']); };
   const floorSlots = (cx, cz) => { for (const s of [-1, 1]) for (let t = -15; t <= 15; t += 7.5) { K.slots.push({ x: cx + s * 17.4, y: WALK, z: cz + t, k: 'floor' }); K.slots.push({ x: cx + t, y: WALK, z: cz + s * 17.4, k: 'floor' }); } };
-  const lampPost = (x, z) => { K.cyl(0.08, 5.4, S.mat('metal', 0x3a3e44), x, WALK + 2.7, z); K.obstacles.push([x - 0.15, x + 0.15, z - 0.15, z + 0.15]);
-    const hd = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.3), S.mat('emissive', 0x332a1a)); hd.position.set(x, WALK + 5.45, z); scene.add(hd); heads.push(hd); lampSpots.push(new THREE.Vector3(x, WALK + 5.3, z)); };
+  const lampPost = (x, z) => { merge.push(K.cyl(0.08, 5.4, S.mat('metal', 0x3a3e44), x, WALK + 2.7, z, { outline: false, seg: 8 })); K.obstacles.push([x - 0.15, x + 0.15, z - 0.15, z + 0.15]);
+    const hd = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.3), heads.mat ||= S.mat('emissive', 0x332a1a).clone()); hd.position.set(x, WALK + 5.45, z); scene.add(hd); merge.push(hd); lampSpots.push(new THREE.Vector3(x, WALK + 5.3, z)); };
 
   for (const cx of CENTRES) for (const cz of CENTRES) {
     const id = `${cx},${cz}`;
     if (id === '-75,-75') { // the park: grass, trees, benches, a fountain
       sidewalk(cx, cz, S.mat('fabric', R ? 0x4a6a2e : 0x5a9a3a)); mapRects.push([cx - 17, cz - 17, cx + 17, cz + 17, '#4a8a3a']);
       for (let i = 0; i < 16; i++) { const x = cx + rand(-15, 15), z = cz + rand(-15, 15); if (Math.hypot(x - cx, z - cz) < 5) continue;
-        K.cyl(0.18, 3, S.mat('wood', 0x5a3a24), x, WALK + 1.5, z); const crown = new THREE.Mesh(new THREE.SphereGeometry(rand(1.6, 2.4), 12, 10), S.mat('fabric', pick([0x3f6a2a, 0x4f7a34, 0x365a22]))); crown.position.set(x, WALK + 3.8, z); crown.castShadow = true; scene.add(crown); K.obstacles.push([x - 0.3, x + 0.3, z - 0.3, z + 0.3]); }
+        merge.push(K.cyl(0.18, 3, S.mat('wood', 0x5a3a24), x, WALK + 1.5, z, { outline: false, seg: 8 })); const crown = new THREE.Mesh(new THREE.SphereGeometry(rand(1.6, 2.4), 12, 10), S.mat('fabric', pick([0x3f6a2a, 0x4f7a34, 0x365a22]))); crown.position.set(x, WALK + 3.8, z); crown.castShadow = true; scene.add(crown); merge.push(crown); K.obstacles.push([x - 0.3, x + 0.3, z - 0.3, z + 0.3]); }
       K.cyl(3, 0.6, S.mat('stone', 0xb0aaa2), cx, WALK + 0.3, cz); K.obstacles.push([cx - 3, cx + 3, cz - 3, cz + 3]); const water = new THREE.Mesh(new THREE.CircleGeometry(2.7, 32), S.mat('liquid', 0x6aa8c8)); water.rotation.x = -Math.PI / 2; water.position.set(cx, WALK + 0.62, cz); scene.add(water);
       for (const [x, z, ry] of [[cx - 8, cz, Math.PI / 2], [cx + 8, cz, -Math.PI / 2], [cx, cz - 8, 0], [cx, cz + 8, Math.PI]]) { K.box(2, 0.45, 0.6, S.mat('wood', 0x8a5a34), x, WALK + 0.45, z, { ry, outline: true }); K.slots.push({ x, y: WALK + 0.68, z, k: 'shelf', max: 0.35 }); }
       floorSlots(cx, cz); continue;
@@ -137,6 +138,20 @@ export function buildCity(ctx, K, { spray }) {
   }
   // parked cars along the curbs
   for (const c of [-50, 0, 50]) for (const t of [-80, -32, 18, 66]) { if (Math.random() < 0.7) cars.push([c - 4, t + rand(-4, 4), 0]); if (Math.random() < 0.5) cars.push([t + rand(-4, 4), c + 4, Math.PI / 2]); }
+  // traffic lights at the nine inner crossings: north-south and east-west take turns
+  const lamp = c => new THREE.MeshBasicMaterial({ color: c }), SIG = { ns: { r: lamp(0x330000), y: lamp(0x332200), g: lamp(0x003310) }, ew: { r: lamp(0x330000), y: lamp(0x332200), g: lamp(0x003310) } };
+  const signals = { t: 0, state(axis) { const p = this.t % 20, ns = p < 8 ? 'green' : p < 10 ? 'yellow' : 'red', ew = p >= 10 && p < 18 ? 'green' : p >= 18 ? 'yellow' : 'red'; return axis === 'ns' ? ns : ew; } };
+  const pole = S.mat('metal', 0x2a2e34), boxM = S.mat('plastic', 0x1a1a1e), bulb = new THREE.SphereGeometry(0.11, 10, 8);
+  for (const x of [-50, 0, 50]) for (const z of [-50, 0, 50]) for (const [sx, sz] of [[1, 1], [-1, -1]]) {
+    const px = x + sx * 6.8, pz = z + sz * 6.8; merge.push(K.cyl(0.07, 4, pole, px, WALK + 2, pz, { outline: false, seg: 8 })); K.obstacles.push([px - 0.15, px + 0.15, pz - 0.15, pz + 0.15]);
+    for (const [axis, ry] of [['ns', sz > 0 ? 0 : Math.PI], ['ew', sx > 0 ? Math.PI / 2 : -Math.PI / 2]]) {
+      const g = new THREE.Group(); g.position.set(px, WALK + 3.6, pz); g.rotation.y = ry; scene.add(g);
+      const hous = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.9, 0.22), boxM); g.add(hous); merge.push(hous);
+      ['r', 'y', 'g'].forEach((c, i) => { const b = new THREE.Mesh(bulb, SIG[axis][c]); b.position.set(0, 0.28 - i * 0.28, 0.12); g.add(b); merge.push(b); });
+    }
+  }
+  K.updates.push((t, dt = 0.016) => { signals.t += dt; for (const axis of ['ns', 'ew']) { const st = signals.state(axis), M = SIG[axis];
+    M.r.color.setHex(st === 'red' ? 0xff2a2a : 0x330000); M.y.color.setHex(st === 'yellow' ? 0xffc020 : 0x332200); M.g.color.setHex(st === 'green' ? 0x2aff6a : 0x003310); } });
   // the waterfront along the south edge, skyline everywhere else
   const sea = new THREE.Mesh(new THREE.PlaneGeometry(900, 300), R ? new THREE.MeshStandardMaterial({ color: 0x2a5a78, roughness: 0.08, metalness: 0.4 }) : S.mat('plastic', 0x3a7aa0));
   sea.rotation.x = -Math.PI / 2; sea.position.set(0, -0.8, HALF + 160); scene.add(sea); mapRects.push([-HALF - 15, HALF + 8, HALF + 15, HALF + 15, '#3a7aa0']);
@@ -148,16 +163,26 @@ export function buildCity(ctx, K, { spray }) {
   for (const [x, z, w, d] of [[0, -HALF - 1, L + 4, 1], [0, HALF + 1, L + 4, 1], [-HALF - 1, 0, 1, L + 4], [HALF + 1, 0, 1, L + 4]]) K.box(w, 6, d, S.mat('plastic', 0), x, 3, z).visible = false; // keep things in the city
   K.decal(spray('NO TRESPASSING', '#f4e6c8', 90), 6, 1.4, -25, WALK + 1.2, 75 - 16.06, Math.PI);
   K.bounds = [-HALF + 0.5, HALF - 0.5, -HALF + 0.5, HALF - 0.5];
+  // draw all the static stone, glass and steel as a handful of big batches; the originals stay (hidden) for hits and decals
+  const groups = new Map();
+  for (const m of merge) {
+    m.updateMatrixWorld(true); const k = m.material.uuid; if (!groups.has(k)) groups.set(k, { mat: m.material, geos: [], cast: false });
+    const gr = groups.get(k), g = m.geometry.clone().applyMatrix4(m.matrixWorld);
+    for (const a of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(a)) g.deleteAttribute(a);
+    gr.geos.push(g); gr.cast ||= m.castShadow;
+    if (K.statics.includes(m)) m.visible = false; else m.removeFromParent();
+  }
+  for (const { mat, geos, cast } of groups.values()) { const g = mergeGeometries(geos, false); if (!g) continue; const mesh = new THREE.Mesh(g, mat); mesh.castShadow = cast; mesh.receiveShadow = true; scene.add(mesh); geos.forEach(x => x.dispose()); }
 
   // ---- sky, sun and weather (runs every frame)
   const hemi = new THREE.HemisphereLight(0xcfe0ff, 0x4a4440, 0.6); scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xfff0d8, 3); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 220 }); sun.shadow.bias = -0.0004; scene.add(sun, sun.target);
+  const sun = new THREE.DirectionalLight(0xfff0d8, 3); sun.castShadow = !LOW; // phones skip the sun's shadow pass: it costs as much as the whole scene sun.shadow.mapSize.set(LOW ? 1024 : 2048, LOW ? 1024 : 2048);
+  const SH = LOW ? 22 : 32; Object.assign(sun.shadow.camera, { left: -SH, right: SH, top: SH, bottom: -SH, near: 1, far: 220 }); sun.shadow.bias = -0.0004; scene.add(sun, sun.target);
   let sky = null;
   if (R) { sky = new Sky(); sky.scale.setScalar(4000); scene.add(sky); Object.assign(sky.material.uniforms, {}); sky.material.uniforms.turbidity.value = 6; sky.material.uniforms.rayleigh.value = 1.6; sky.material.uniforms.mieCoefficient.value = 0.004; sky.material.uniforms.mieDirectionalG.value = 0.8; }
-  scene.fog = new THREE.Fog(0x9ab0c8, 60, 340);
-  const pool = []; for (let i = 0; i < 6; i++) { const l = new THREE.PointLight(0xffd7a0, 0, 22, 1.6); scene.add(l); pool.push(l); } // street lights near you
-  const rainGeo = new THREE.BufferGeometry(), N = 2600, rp = new Float32Array(N * 3); for (let i = 0; i < N; i++) { rp[i * 3] = rand(-25, 25); rp[i * 3 + 1] = rand(0, 22); rp[i * 3 + 2] = rand(-25, 25); }
+  const FAR = LOW ? 170 : 340; scene.fog = new THREE.Fog(0x9ab0c8, 60, FAR);
+  const pool = []; for (let i = 0; i < (LOW ? 3 : 6); i++) { const l = new THREE.PointLight(0xffd7a0, 0, 22, 1.6); scene.add(l); pool.push(l); } // street lights near you
+  const rainGeo = new THREE.BufferGeometry(), N = LOW ? 900 : 2600, rp = new Float32Array(N * 3); for (let i = 0; i < N; i++) { rp[i * 3] = rand(-25, 25); rp[i * 3 + 1] = rand(0, 22); rp[i * 3 + 2] = rand(-25, 25); }
   rainGeo.setAttribute('position', new THREE.BufferAttribute(rp, 3));
   const rain = new THREE.Points(rainGeo, new THREE.PointsMaterial({ color: 0xc8d8f0, size: 0.1, transparent: true, opacity: 0.7, depthWrite: false })); rain.visible = false; rain.frustumCulled = false; scene.add(rain);
   const day = { t: 0.66, len: 420, rain: 0, rainTarget: 0, nextWeather: rand(90, 160) }; // 0.25 sunrise, 0.5 noon, 0.75 sunset; a full day takes 7 minutes
@@ -174,9 +199,9 @@ export function buildCity(ctx, K, { spray }) {
     if (sky) { sky.material.uniforms.sunPosition.value.copy(dir); sky.material.uniforms.rayleigh.value = 1.6 + day.rain * 2; scene.background = null; }
     else { tmp.copy(bgNight).lerp(bgDay, lightK).lerp(bgDusk, dusk * 0.6); scene.background = tmp.clone(); }
     scene.fog.color.copy(tmp.copy(bgNight).lerp(bgDay, lightK).lerp(bgDusk, dusk * 0.5)).lerp(new THREE.Color(0x707884), day.rain * 0.6);
-    scene.fog.far = 340 - day.rain * 180;
+    scene.fog.far = FAR - day.rain * FAR * 0.5;
     winMat.emissiveIntensity = night * 1.6; for (const n of neonSigns) n.material.opacity = 0.35 + 0.65 * night;
-    for (const h of heads) h.material.color.setHex(night > 0.3 ? 0xffe6b0 : 0x332a1a);
+    heads.mat && heads.mat.color.setHex(night > 0.3 ? 0xffe6b0 : 0x332a1a);
     poolT -= dt; if (poolT <= 0) { poolT = 0.5; const near = lampSpots.map(p => [p, (p.x - follow.x) ** 2 + (p.z - follow.z) ** 2]).sort((a, b) => a[1] - b[1]).slice(0, pool.length); near.forEach(([p], i) => pool[i].position.copy(p)); }
     for (const l of pool) l.intensity = night * (R ? 26 : 10);
     // weather: now and then a shower rolls through; roads go dark and shiny
@@ -187,5 +212,5 @@ export function buildCity(ctx, K, { spray }) {
     if (R) { asphalt.roughness = 1 - day.rain * 0.75; asphalt.color.setScalar(1 - day.rain * 0.35); asphalt.envMapIntensity = S.envI * (0.7 + day.rain * 1.4); }
     else asphalt.color.setScalar(1 - day.rain * 0.3);
   });
-  return { mapRects, cars, day, follow };
+  return { mapRects, cars, day, follow, signals, far: LOW ? 220 : 420 };
 }

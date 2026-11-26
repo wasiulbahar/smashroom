@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=16';
-import { SCENES } from './scenes.js?v=16';
-import { createItems, DEFS } from './items.js?v=16';
-import * as A from './audio.js?v=16';
-import { preloadItemModels } from './models.js?v=16';
-import { createClayFigure, preloadClayBody } from './clay.js?v=16';
-import { createReplay } from './replay.js?v=16';
-import { clayBody } from './clay.js?v=16';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=17';
+import { SCENES } from './scenes.js?v=17';
+import { createItems, DEFS } from './items.js?v=17';
+import * as A from './audio.js?v=17';
+import { preloadItemModels } from './models.js?v=17';
+import { createClayFigure, preloadClayBody } from './clay.js?v=17';
+import { createReplay } from './replay.js?v=17';
+import { clayBody } from './clay.js?v=17';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -915,16 +916,23 @@ function placePreset(i) {
 }
 
 // ---------- open world: drivable cars, first/third person, mini-map
-let cars = [], driving = null, view = save.view || 'fp', tpCam = null, avatar = null, mapBg = null, mapT = 0, engine = null, skidT = 0, chase = null;
+let cars = [], driving = null, view = save.view || 'fp', tpCam = null, avatar = null, mapBg = null, mapT = 0, engine = null, skidT = 0, chase = null, traffic = [];
 const CAR_HALF = [1.0, 2.25];
 function carMesh(color) {
-  const M = S.mat, g = new THREE.Group(), body = DEFS.carbody.make(M, color).mesh, glass = [], lights = [];
-  g.add(body); S.outline(body, 1.03);
+  const M = S.mat, g = new THREE.Group(), glass = [], lights = [];
+  const merged = parts => { // one mesh per material: a car is a handful of draw calls instead of thirty
+    const by = new Map(); parts.updateMatrixWorld(true);
+    parts.traverse(m => { if (!m.isMesh) return; const k = m.material.uuid; if (!by.has(k)) by.set(k, { mat: m.material, geos: [] }); const ge = m.geometry.clone().applyMatrix4(m.matrixWorld); for (const a of Object.keys(ge.attributes)) if (!['position', 'normal', 'uv'].includes(a)) ge.deleteAttribute(a); by.get(k).geos.push(ge.index ? ge : ge); });
+    return [...by.values()].map(({ mat, geos }) => new THREE.Mesh(mergeGeometries(geos.map(x => x.index ? x.toNonIndexed() : x), false), mat));
+  };
+  for (const m of merged(DEFS.carbody.make(M, color).mesh)) { g.add(m); S.outline(m, 1.03); }
   const pane = (w, h, x, y, z, ry, rx) => { const p = DEFS.carglass.make(M, 0x9fb7c4, { w, h }).mesh; p.position.set(x, y, z); p.rotation.set(rx, ry, 0); g.add(p); glass.push(p); };
   pane(1.56, 0.6, 0, 1.15, 0.6, 0, -0.5); pane(1.56, 0.5, 0, 1.15, -1.05, 0, 0.5);
   for (const s of [-1, 1]) for (const z of [0.15, -0.55]) pane(0.62, 0.42, s * 0.84, 1.13, z, Math.PI / 2, 0);
-  for (const s of [-1, 1]) { const f = DEFS.carlight.make(M, 0xfff6d0, { w: 0.34, h: 0.14, glow: true }).mesh; f.position.set(s * 0.62, 0.72, 2.12); g.add(f); lights.push(f);
-    const r = DEFS.carlight.make(M, 0xff2a2a, { w: 0.3, h: 0.12, glow: true }).mesh; r.position.set(s * 0.65, 0.72, -2.12); g.add(r); lights.push(r); }
+  const lg = new THREE.Group();
+  for (const s of [-1, 1]) { const f = DEFS.carlight.make(M, 0xfff6d0, { w: 0.34, h: 0.14, glow: true }).mesh; f.position.set(s * 0.62, 0.72, 2.12); lg.add(f);
+    const r = DEFS.carlight.make(M, 0xff2a2a, { w: 0.3, h: 0.12, glow: true }).mesh; r.position.set(s * 0.65, 0.72, -2.12); lg.add(r); }
+  for (const m of merged(lg)) { g.add(m); lights.push(m); }
   g.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
   scene.add(g); return { g, glass, lights };
 }
@@ -933,7 +941,7 @@ function wheelShapes(body, on) { // parked cars rest on four balls; a driven car
   else while (body.shapes.length > 2) body.removeShape(body.shapes[body.shapes.length - 1]);
 }
 function setupOpenWorld() {
-  cars = []; driving = null; engine?.stop(); engine = null; chase = null; mapBg = null;
+  cars = []; traffic = []; driving = null; engine?.stop(); engine = null; chase = null; mapBg = null; human.weapon = null;
   if (avatar) { avatar.removeFromParent(); avatar = null; }
   if (!tpCam) tpCam = new THREE.PerspectiveCamera(save.set.fov, innerWidth / innerHeight, 0.05, 900);
   tpCam.far = room.far || 80; tpCam.fov = save.set.fov; tpCam.updateProjectionMatrix();
@@ -947,11 +955,13 @@ function setupOpenWorld() {
     const car = { body, ...carMesh(color), hp: 100, dead: false, speed: 0, alarm: null, smokeT: 0, color };
     body.addEventListener('collide', e => carImpact(car, e)); cars.push(car);
   }
+  if (room.signals) spawnTraffic(S.quality === 'low' ? 6 : 11);
   syncCars();
+  if (room.open || view === 'tp') loadHuman();
 }
 const carYaw = car => { const q = car.body.quaternion; return Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x)); };
-function syncCars() { for (const c of cars) { c.g.position.copy(c.body.interpolatedPosition || c.body.position); c.g.quaternion.copy(c.body.interpolatedQuaternion || c.body.quaternion); } }
-function nearCar() { let best = null, bd = 3.2; for (const c of cars) { if (c.dead) continue; const d = Math.hypot(c.body.position.x - player.x, c.body.position.z - player.z); if (d < bd) { bd = d; best = c; } } return best; }
+function syncCars() { for (const c of cars) { const b = c.body, ai = !!c.ai; c.g.position.copy(ai ? b.position : b.interpolatedPosition || b.position); c.g.quaternion.copy(ai ? b.quaternion : b.interpolatedQuaternion || b.quaternion); } } // traffic is placed directly each frame
+function nearCar() { let best = null, bd = 3.2; for (const c of cars) { if (c.dead || c.ai) continue; const d = Math.hypot(c.body.position.x - player.x, c.body.position.z - player.z); if (d < bd) { bd = d; best = c; } } return best; }
 function carKey() {
   if (!cars.length || state !== 'play' || paused) return false;
   if (driving) { exitCar(); return true; }
@@ -996,6 +1006,7 @@ function updateDriving(dt) {
 }
 function carImpact(car, e) {
   const v = Math.abs(e.contact.getImpactVelocityAlongNormal()); if (v < 2.5 || state !== 'play') return;
+  if (car.ai && (cars.some(c => c.body === e.body && !c.ai) || v > 6)) freeTraffic(car);
   const other = e.body, it = I.list.find(i => i.body === other && !i.dead), oc = cars.find(c => c.body === other);
   if (it) { if (it.def.hp !== Infinity || it.key === 'hydrant') { const dir = new THREE.Vector3(car.body.velocity.x, 0.4, car.body.velocity.z).normalize(); setTimeout(() => !it.dead && I.shatter(it, dir, Math.min(9, v), true), 0); } else return; }
   if (oc && oc !== car) damageCar(oc, v * 0.8);
@@ -1021,6 +1032,7 @@ function breakCarWindow(car, point) {
   A.at(wp, () => A.SFX.glass(1, 1)); I.sparks_(wp, 10);
 }
 function hitCar(car, point, dir) {
+  if (car.ai) freeTraffic(car);
   damageCar(car, 7 + (CW.power || 1) * 3, point); addMark(point, dir.clone().negate(), 'dent', 0.25);
   if (!car.vehicle) { car.body.wakeUp(); car.body.velocity.x += dir.x * 0.4; car.body.velocity.z += dir.z * 0.4; }
   recoil = 1; freeze(35); shake = Math.max(shake, 0.12); emit('hit');
@@ -1033,8 +1045,67 @@ function wreckCar(car) {
   if (car === driving) exitCar(true);
   addStat('wrecks'); popup('Wrecked!', { x: p.x, y: p.y + 2, z: p.z }, 'big');
 }
+// ---------- traffic: cars that drive the lanes, wait at red lights and stop for whatever is in front of them
+const GRID = [-100, -50, 0, 50, 100], LANE = 1.8;
+const inner = v => v > -100 && v < 100;
+function spawnTraffic(n) {
+  for (let i = 0; i < n; i++) {
+    const axis = Math.random() < 0.5 ? 'x' : 'z', line = pick(GRID), from = pick(GRID.slice(0, 4)), sgn = Math.random() < 0.5 ? 1 : -1;
+    const a = sgn > 0 ? from : from + 50, d = axis === 'x' ? new THREE.Vector3(sgn, 0, 0) : new THREE.Vector3(0, 0, sgn);
+    const node = axis === 'x' ? new THREE.Vector3(a, 0, line) : new THREE.Vector3(line, 0, a);
+    if (Math.hypot(node.x - player.x, node.z - player.z) < 25) continue;
+    const color = pick([0xb3202a, 0x2a5ab3, 0x2a8a4a, 0xd9a22a, 0x8a8f96, 0xe8e8ec, 0xd8c020]);
+    const body = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, position: new CANNON.Vec3(node.x, 0, node.z) });
+    body.addShape(new CANNON.Box(new CANNON.Vec3(0.9, 0.42, 2.1)), new CANNON.Vec3(0, 0.62, 0)); body.addShape(new CANNON.Box(new CANNON.Vec3(0.82, 0.24, 0.9)), new CANNON.Vec3(0, 1.22, -0.22)); world.addBody(body);
+    const car = { body, ...carMesh(color), hp: 100, dead: false, speed: 0, alarm: null, smokeT: 0, color, ai: { node, d, s: rand(5, 40), v: 6, next: null, turn: null } };
+    body.addEventListener('collide', e => carImpact(car, e)); cars.push(car); traffic.push(car); pickNext(car.ai);
+  }
+}
+function pickNext(ai) { // at the next crossing: straight, left or right, never off the map or back the way it came
+  const end = ai.node.clone().addScaledVector(ai.d, 50), opts = [];
+  for (const d of [ai.d, new THREE.Vector3(-ai.d.z, 0, ai.d.x), new THREE.Vector3(ai.d.z, 0, -ai.d.x)]) { const n = end.clone().addScaledVector(d, 50); if (Math.abs(n.x) <= 100.1 && Math.abs(n.z) <= 100.1) opts.push(d); }
+  ai.next = opts.length ? (opts.includes(ai.d) && Math.random() < 0.55 ? ai.d : pick(opts)) : ai.d.clone().negate();
+}
+const laneRight = d => new THREE.Vector3(-d.z, 0, d.x);
+function freeTraffic(car) {
+  const ai = car.ai; if (!ai) return; car.ai = null; traffic = traffic.filter(c => c !== car);
+  const b = car.body, v = b.velocity.clone(); b.type = CANNON.Body.DYNAMIC; b.mass = 900; wheelShapes(b, true); b.updateMassProperties(); b.velocity.copy(v); b.angularDamping = 0.5; b.linearDamping = 0.08; b.wakeUp();
+}
+function blocked(car, pos, dir) { // anything in the lane ahead: another car, you, your car
+  for (const o of cars) { if (o === car) continue; const dx = o.body.position.x - pos.x, dz = o.body.position.z - pos.z, ahead = dx * dir.x + dz * dir.z, side = Math.abs(dx * dir.z - dz * dir.x); if (ahead > 0 && ahead < 8.5 && side < 1.9) return true; }
+  if (!driving) { const dx = player.x - pos.x, dz = player.z - pos.z, ahead = dx * dir.x + dz * dir.z, side = Math.abs(dx * dir.z - dz * dir.x); if (ahead > 0 && ahead < 6 && side < 1.6) return true; }
+  return false;
+}
+function updateTraffic(dt) {
+  if (!traffic.length || dt <= 0) return;
+  for (const car of traffic) {
+    const ai = car.ai, b = car.body, end = ai.node.clone().addScaledVector(ai.d, 50), left = 50 - ai.s;
+    const cross = inner(end.x) && inner(end.z), axis = ai.d.x ? 'ew' : 'ns', light = cross && room.signals ? room.signals.state(axis) : 'green';
+    let pos, dir;
+    if (ai.turn) { const T = ai.turn, k = T.k, p = new THREE.Vector3().copy(T.p0).multiplyScalar((1 - k) ** 2).addScaledVector(T.p1, 2 * (1 - k) * k).addScaledVector(T.p2, k * k);
+      dir = new THREE.Vector3().copy(T.p1).sub(T.p0).multiplyScalar(2 * (1 - k)).addScaledVector(new THREE.Vector3().copy(T.p2).sub(T.p1), 2 * k).normalize(); pos = p; }
+    else { pos = ai.node.clone().addScaledVector(ai.d, ai.s).addScaledVector(laneRight(ai.d), LANE); dir = ai.d; }
+    let target = ai.turn ? (ai.turn.straight ? 9 : 5.5) : 9;
+    if (!ai.turn && cross && light !== 'green' && left > 7.5 && left < 16) target = 0; // red or amber: wait at the line
+    if (blocked(car, pos, dir)) target = 0;
+    ai.v += Math.max(-9 * dt, Math.min(3 * dt, target - ai.v));
+    const step = Math.max(0, ai.v) * dt;
+    if (ai.turn) { ai.turn.k += step / ai.turn.len; if (ai.turn.k >= 1) { ai.node = end.clone(); ai.d = ai.next; ai.s = 7; ai.turn = null; pickNext(ai); } }
+    else { ai.s += step; if (ai.s >= 43) { const n2 = ai.next, endN = end, p0 = pos.clone(), p2 = endN.clone().addScaledVector(n2, 7).addScaledVector(laneRight(n2), LANE);
+      const straight = n2.equals(ai.d), p1 = straight ? p0.clone().add(p2).multiplyScalar(0.5) : endN.clone().addScaledVector(laneRight(ai.d), LANE).addScaledVector(laneRight(n2), LANE).sub(endN).add(endN);
+      if (!straight) { p1.copy(endN).addScaledVector(laneRight(ai.d), LANE).addScaledVector(laneRight(n2), LANE); }
+      ai.turn = { p0, p1, p2, k: 0, len: p0.distanceTo(p1) + p1.distanceTo(p2), straight }; } }
+    const yaw = Math.atan2(dir.x, dir.z), np = new CANNON.Vec3(pos.x, 0, pos.z);
+    b.velocity.set((np.x - b.position.x) / dt, 0, (np.z - b.position.z) / dt); b.position.copy(np); b.quaternion.setFromEuler(0, yaw, 0);
+    car.speed = Math.max(0, ai.v);
+  }
+}
+let cullT = 0;
 function updateCars(dt, now) {
-  if (!cars.length) return; syncCars();
+  if (!cars.length) return; updateTraffic(dt); syncCars();
+  if ((cullT -= dt) <= 0) { cullT = 0.3; const far2 = (S.quality === 'low' ? 70 : 110) ** 2, itemFar2 = (S.quality === 'low' ? 45 : 75) ** 2; // past the fog nothing needs drawing
+    for (const c of cars) c.g.visible = c === driving || (c.body.position.x - player.x) ** 2 + (c.body.position.z - player.z) ** 2 < far2;
+    if (room.open) for (const it of I.list) if (!it.dead && !it.fixed) it.mesh.visible = (it.body.position.x - player.x) ** 2 + (it.body.position.z - player.z) ** 2 < itemFar2; }
   for (const c of cars) {
     if (c.dead || c.hp > 55) continue; c.smokeT -= dt; if (c.smokeT > 0) continue; c.smokeT = c.hp > 25 ? 0.18 : 0.08;
     const hood = c.g.localToWorld(new THREE.Vector3(0, 1.1, 1.6));
@@ -1056,13 +1127,31 @@ function cockpitCamera() { // first person in the car: the driver's seat, lookin
   camera.position.copy(c.g.localToWorld(new THREE.Vector3(0.38, 1.28, 0.05)));
   camera.quaternion.copy(c.g.quaternion).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch * 0.6, Math.PI + (player.yaw - (carYaw(c) + Math.PI)) * 0, 0, 'YXZ')));
 }
+const human = { src: null, p: null, mixer: null, acts: {}, cur: null, weapon: null };
+function loadHuman() { // CC0 animated human by Quaternius; the clay mannequin stands in until it arrives
+  return human.p ||= import('three/addons/loaders/FBXLoader.js').then(({ FBXLoader }) => new FBXLoader().loadAsync('assets/models/human/human.fbx')).then(o => {
+    const tex = new THREE.TextureLoader().load(`assets/models/human/${pick(['ClothedLightSkin', 'ClothedDarkSkin', 'ClothedLightSkin1', 'ClothedDarkSkin2'])}.png`); tex.colorSpace = THREE.SRGBColorSpace; tex.magFilter = THREE.NearestFilter;
+    o.scale.setScalar(0.0033); o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.userData.noOutline = true; m.userData.tex = tex; } });
+    human.src = o; human.mixer = new THREE.AnimationMixer(o);
+    for (const clip of o.animations) human.acts[clip.name.split('|').pop()] = human.mixer.clipAction(clip);
+    if (human.acts.Punch) { human.acts.Punch.setLoop(THREE.LoopOnce); human.acts.Punch.clampWhenFinished = false; }
+    if (avatar && avatar !== o) { avatar.removeFromParent(); avatar = null; } return o;
+  }).catch(e => { console.warn('character failed to load', e); return null; });
+}
+function humanPlay(name, fade = 0.2) { const a = human.acts[name]; if (!a || human.cur === a) return; a.reset().play(); if (human.cur) human.cur.crossFadeTo(a, fade, false); human.cur = a; }
 function ensureAvatar() {
+  if (human.src) { // dress it for this look, hand it the weapon
+    if (avatar !== human.src) { avatar?.removeFromParent(); avatar = human.src; scene.add(avatar); avatar.traverse(m => { if (m.isMesh) m.material = S.mat('plastic', 0xffffff, { map: m.userData.tex }); }); human.weapon = null; }
+    if (human.weapon !== opts.weapon) { const hand = avatar.getObjectByName('RightHand'); hand?.children.filter(c => c.userData.held).forEach(c => hand.remove(c));
+      if (hand && !W.hands) { avatar.updateMatrixWorld(true); const ws = hand.getWorldScale(new THREE.Vector3()).x || 1; const wm = buildWeapon(opts.weapon); wm.userData.held = true; wm.scale.setScalar(1 / ws); wm.rotation.set(Math.PI / 2, 0, 0); wm.position.set(0, 0.08 / ws, 0.02 / ws); hand.add(wm); } human.weapon = opts.weapon; } // the bones carry their own scale: size the weapon from the hand's real size
+    return avatar;
+  }
   if (avatar || !clayBody()) return avatar; const B = clayBody(), skin = S.mat('clay', 0xc8906a), shirt = S.mat('fabric', pick([0x2a4a7a, 0x7a2a2a, 0x2a6a4a, 0x3a3a42])), jeans = S.mat('fabric', 0x2a3048);
   avatar = new THREE.Group(); avatar.userData.parts = {};
   for (const [key, mat] of [['head', skin], ['torso', shirt], ['armL', shirt], ['armR', shirt], ['legL', jeans], ['legR', jeans]]) { if (!B[key]) continue; const m = new THREE.Mesh(B[key].geo, mat); m.position.copy(B[key].pivot); m.castShadow = true; avatar.add(m); avatar.userData.parts[key] = m; }
   S.outline(avatar, 1.02); scene.add(avatar); return avatar;
 }
-function toggleView() { view = view === 'fp' ? 'tp' : 'fp'; save.view = view; persist(); toast(view === 'tp' ? 'Third person' : 'First person'); }
+function toggleView() { view = view === 'fp' ? 'tp' : 'fp'; if (view === 'tp') loadHuman(); save.view = view; persist(); toast(view === 'tp' ? 'Third person' : 'First person'); }
 const groundY = (x, z) => { const h = surfaceHit(new THREE.Vector3(x, 4, z), new THREE.Vector3(0, -1, 0), 6); return h ? h.point.y : 0; };
 function viewCamera(dt) {
   const tp = state === 'play' && ((driving && view !== 'fp') || (!driving && view === 'tp'));
@@ -1075,7 +1164,10 @@ function viewCamera(dt) {
   }
   // over the shoulder on foot: the character walks, the weapon swings in front of it
   const y0 = groundY(player.x, player.z), moving = keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD || Math.hypot(joy.x, joy.y) > 0.1;
-  if (a) { a.position.set(player.x, y0, player.z); a.rotation.y = player.yaw + Math.PI; const P = a.userData.parts, sw = moving ? Math.sin(player.bob) * 0.55 : 0;
+  pivot.visible = false; // the character holds the weapon now
+  if (a && a === human.src) { a.position.set(player.x, y0, player.z); a.rotation.y = player.yaw + Math.PI; human.mixer.update(dt);
+    humanPlay(swingT >= 0 && human.acts.Punch ? 'Punch' : moving ? (keys.ShiftLeft ? 'Run' : 'Walk') : 'Idle', swingT >= 0 ? 0.08 : 0.2); }
+  else if (a) { a.position.set(player.x, y0, player.z); a.rotation.y = player.yaw + Math.PI; const P = a.userData.parts, sw = moving ? Math.sin(player.bob) * 0.55 : 0;
     if (P.legL) P.legL.rotation.x = sw; if (P.legR) P.legR.rotation.x = -sw; if (P.armL) P.armL.rotation.set(-sw * 0.7, 0, -1.15); if (P.armR) P.armR.rotation.set(swingT >= 0 ? -1.4 + Math.sin(swingT * Math.PI) * 1.2 : sw * 0.7 - 0.25, 0, 1.15); } // the body comes in a T-pose: arms down by the sides
   const head = new THREE.Vector3(player.x, y0 + 1.62, player.z), f = camera.getWorldDirection(new THREE.Vector3()), r = new THREE.Vector3(-f.z, 0, f.x).normalize();
   let want = head.clone().addScaledVector(f, -3.3).addScaledVector(r, 0.55).add({ x: 0, y: 0.35, z: 0 });
@@ -1459,4 +1551,4 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, fal
 renderMode();
 opts.mode = 'stylized'; build(); opts.mode = null; // background behind the first screen
 requestAnimationFrame(frame);
-window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; }, get cars() { return cars; }, get driving() { return driving; }, carKey, toggleView, get view() { return view; } };
+window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; }, get cars() { return cars; }, get traffic() { return traffic; }, get renderer() { return renderer; }, get driving() { return driving; }, carKey, toggleView, get view() { return view; } };
