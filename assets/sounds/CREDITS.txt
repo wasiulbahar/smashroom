@@ -20,3 +20,5 @@ Sounds in this folder are CC0 (public domain).
 - wave: 'Beach Ocean Waves' (jasinski), opengameart.org, CC0
 - birds: 'Ambient Bird Sounds' by isaiah658, opengameart.org, CC0
 - rain: '30 CC0 SFX loops' (rain) by rubberduck, opengameart.org, CC0
+- engine: 'Racing car engine sound loops' by domasx2, opengameart.org, CC0
+- skid: 'SuperTuxKart sound effects', opengameart.org, CC0

@@ -18,6 +18,7 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Wreck the room.** Tables and shelves give way after enough hits, lights pop and go dark, walls crack into holes.
 - **Missions and achievements.** Short timed missions pop up during classic and zen rounds; 17 achievements are tracked across rounds.
 - **Use the wreckage.** Legs, boards and beams from wrecked tables and shelves can be picked up and swung.
+- **Open city.** Free roam a 4x4-block city with a park, gas station, parking lot, building site and waterfront. Day turns to night, showers roll through and the roads go shiny. Get into any parked car (E), drive it, ram things and wreck it. V switches between first person and a third-person view with a visible character; cars have a chase camera and a cockpit view. A mini-map shows where you are.
 - **Smash your stress.** Type what's bothering you in the lobby; the words are written on plates, TVs and the clay figure for you to smash. They never leave the device.
 - **Build & smash.** A no-timer mode: place domino runs, crate towers, glass pyramids, TV walls, bottle pins, plate towers and gas-can rows (keys 1 to 7), then knock them down.
 - **New tools.** A paintball gun (colour splats everywhere, pops glass), a bowling ball and a fire extinguisher that blasts foam.

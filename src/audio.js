@@ -35,10 +35,10 @@ export function at(p, fn) { // every sound started inside fn comes from point p
 // a looping recording fixed at point p (a burst pipe); returns a handle to fade it out
 export function loopAt(set, p, gain = 1, rate = 1) {
   if (!ac || !has(set)) return null;
-  const s = ac.createBufferSource(), b = bufs[set][0]; s.buffer = b; s.loop = true; s.playbackRate.value = rate; s.loopStart = 0.06; s.loopEnd = b.duration - 0.06; // skip the mp3 padding at both ends
+  const s = ac.createBufferSource(), b = bufs[set][0]; s.buffer = b; s.loop = true; s.playbackRate.value = rate; if (!WAV.has(set)) { s.loopStart = 0.06; s.loopEnd = b.duration - 0.06; } // skip the mp3 padding at both ends
   const g = ac.createGain(); g.gain.value = gain;
   at(p, () => s.connect(g).connect(B())); s.start();
-  return { set: v => g.gain.setTargetAtTime(v, ac.currentTime, 0.4), stop() { g.gain.setTargetAtTime(0, ac.currentTime, 0.5); setTimeout(() => { try { s.stop(); } catch (e) {} }, 2500); } };
+  return { set: v => g.gain.setTargetAtTime(v, ac.currentTime, 0.15), rate: v => s.playbackRate.setTargetAtTime(v, ac.currentTime, 0.08), stop() { g.gain.setTargetAtTime(0, ac.currentTime, 0.5); setTimeout(() => { try { s.stop(); } catch (e) {} }, 2500); } };
 }
 export function listener(p, f) {
   if (!ac) return; const l = ac.listener;
@@ -116,11 +116,12 @@ const SYN = {
 };
 
 // recorded CC0 samples (assets/sounds, see CREDITS.txt); generated sounds are the fallback until they load
-const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6, type: 1, door: 2, keys: 2, siren: 1, alarm: 1, pball: 3, roll: 1, scuff: 3, wave: 3, birds: 1, rain: 1 };
+const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6, type: 1, door: 2, keys: 2, siren: 1, alarm: 1, pball: 3, roll: 1, scuff: 3, wave: 3, birds: 1, rain: 1, engine: 1, skid: 1 };
 const bufs = {};
+const WAV = new Set(['engine']); // tiny seamless loops stay WAV: mp3 adds gaps at the loop point
 function loadSamples() {
   for (const [set, n] of Object.entries(SETS)) for (let i = 0; i < n; i++)
-    fetch(`assets/sounds/${set}_${i}.mp3`).then(r => r.arrayBuffer()).then(b => ac.decodeAudioData(b)).then(d => (bufs[set] ??= []).push(d)).catch(() => {});
+    fetch(`assets/sounds/${set}_${i}.${WAV.has(set) ? 'wav' : 'mp3'}`).then(r => r.arrayBuffer()).then(b => ac.decodeAudioData(b)).then(d => (bufs[set] ??= []).push(d)).catch(() => {});
 }
 const has = k => bufs[k] && bufs[k].length;
 function smp(set, gain = 1, rate = 1, delay = 0) {
@@ -150,6 +151,7 @@ export const SFX = {
       : kind === 'clay' ? smp('punch', 0.25 * i, 0.6) : smp('plastic', 0.3 * i, rand(1.1, 1.5));
     if (!ok) SYN.clink(kind, i);
   },
+  skid(i = 1) { smp('skid', i, rand(0.9, 1.1)); },
   pball(i = 1) { smp('pball', i, rand(0.95, 1.08)); }, // paintball marker: built from real slap, hiss and click recordings
   splat(i = 1) { smp('slap', 0.55 * i, rand(0.75, 0.9)); smp('splash', 0.35 * i, rand(1.4, 1.8), 0.005); }, // a paintball bursting
   roll(i = 1) { smp('roll', i, rand(0.9, 1.05)); }, // a bowling ball rolling away
@@ -238,6 +240,8 @@ function ambLoop(set, g, lp = 20000, tries = 0) {
   const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; const gn = ac.createGain(); gn.gain.value = g;
   s.connect(f).connect(gn).connect(amb); s.start(); ambNodes.push(s);
 }
+let rainGain = null;
+export function setRain(v) { if (rainGain) rainGain.gain.setTargetAtTime(v * 0.4, ac.currentTime, 1); }
 export function startAmbience(kind) {
   stopAmbience(); if (!ac || !kind) return;
   const every = (ms, fn) => ambTimers.push(setInterval(() => { if (Math.random() < 0.5) fn(now()); }, ms));
@@ -274,6 +278,8 @@ export function startAmbience(kind) {
     const wave = () => far('wave', rand(0.35, 0.55), { lp: 7000, rate: rand(0.85, 1.05) }); wave();
     tick(2800, () => { if (Math.random() < 0.8) setTimeout(wave, rand(0, 900)); });
     every(8000, t => nz(t, 4, 'bandpass', rand(250, 500), 0.5, 0.05, amb, rand(150, 300))); }
+  rainGain = null;
+  if (kind === 'city' && has('rain')) { const b = bufs.rain[0], s = ac.createBufferSource(); s.buffer = b; s.loop = true; s.loopStart = 0.06; s.loopEnd = b.duration - 0.06; rainGain = ac.createGain(); rainGain.gain.value = 0; s.connect(rainGain).connect(amb); s.start(); ambNodes.push(s); }
   if (kind === 'city') { // night street: traffic a block away, a car passing, footsteps, a door
     loopNoise('lowpass', 260, 0.5, 0.09);
     every(6000, t => nz(t, 3, 'bandpass', rand(220, 420), 0.7, 0.1, amb, rand(140, 260)));

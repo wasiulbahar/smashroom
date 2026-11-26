@@ -88,6 +88,7 @@ kbd{background:var(--bg);border:2px solid var(--ink);border-radius:5px;padding:0
 .box .lbl{font-size:11px;color:var(--muted)}
 .box .val{font-size:30px;line-height:1.05}
 #tl{left:14px}#tr{right:14px;text-align:right}
+#minimap{position:absolute;right:14px;top:104px;width:150px;height:150px;border:3px solid var(--ink);border-radius:50%;background:#1a1622;opacity:.92}
 #palette{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:6px;flex-wrap:wrap;justify-content:center;pointer-events:auto;max-width:94vw}
 #palette button{font-family:Rubik,sans-serif;font-size:12px;font-weight:600;color:var(--text);background:rgba(20,13,31,.78);border:2px solid var(--ink);border-radius:10px;padding:5px 9px;cursor:pointer}
 #palette kbd{background:var(--yellow);color:var(--ink);border-radius:4px;padding:0 5px;margin-right:5px;font-family:Bungee,Impact,sans-serif;font-size:11px}
@@ -180,6 +181,7 @@ details.about p{margin:6px 0}
   <div class="box" id="tl"><div class="lbl">Time</div><div class="val" id="time">2:00</div></div>
   <div class="box" id="tr"><div class="lbl">Score</div><div class="val" id="score">0</div><div class="sub"><span id="smashed">0</span> smashed</div><div class="sub" id="extra"></div></div>
   <div id="palette" class="hidden"><button data-p="0"><kbd>1</kbd>Dominoes</button><button data-p="1"><kbd>2</kbd>Crate tower</button><button data-p="2"><kbd>3</kbd>Glass pyramid</button><button data-p="3"><kbd>4</kbd>Old TV wall</button><button data-p="4"><kbd>5</kbd>Bottle pins</button><button data-p="5"><kbd>6</kbd>Plate towers</button><button data-p="6"><kbd>7</kbd>Gas cans</button></div>
+  <canvas id="minimap" class="hidden" width="170" height="170"></canvas>
   <div id="heat" class="hidden"><span class="stars"></span><small id="heatLbl"></small></div>
   <div id="combo"></div>
   <div id="cross"></div><div id="hint"></div><div id="charge"><div id="chargeFill"></div></div>
@@ -207,7 +209,7 @@ details.about p{margin:6px 0}
     <div class="modes">
       <button class="card mode" data-mode="stylized">
         <b>Stylized</b>
-        <ul><li>Bright cartoon look with bold outlines</li><li>All eleven rooms, every weapon</li><li>Smooth and light</li></ul>
+        <ul><li>Bright cartoon look with bold outlines</li><li>All twelve places, every weapon</li><li>Smooth and light</li></ul>
         <div class="req">Runs well on almost anything, including phones and older laptops.</div>
       </button>
       <button class="card mode real" data-mode="realistic">
@@ -221,7 +223,7 @@ details.about p{margin:6px 0}
       <summary>What is SMASHROOM?</summary>
       <h2>A rage room in your browser</h2>
       <p>A rage room, also called a smash room or break room, is a place where you break things to let off stress. SMASHROOM is a free online rage room game: no download, no account, on PC or phone.</p>
-      <p>Pick one of nine rooms: a classic rage room, an abandoned building, a haunted house, a corporate office, a kitchen, an apartment, a car yard, a clay studio, a city street at night, or two calm rooms: a sunny greenhouse and a beach shack at sunset. Write what's bothering you and it appears on things in the room. Build domino runs and towers, then knock them down with a bowling ball, splat everything with a paintball gun, and sweep up the mess afterwards. Grab a baseball bat, sledgehammer, crowbar or frying pan and smash glass, plates, TVs, printers, tables, shelves, lights, windows and walls. Pick things up and throw them, or hit things with whatever you are holding. In the clay studio you can punch, slap and kick a clay statue.</p>
+      <p>Pick one of nine rooms, or free roam a whole open city with day and night, rain and cars you can drive and wreck: a classic rage room, an abandoned building, a haunted house, a corporate office, a kitchen, an apartment, a car yard, a clay studio, a city street at night, or two calm rooms: a sunny greenhouse and a beach shack at sunset. Write what's bothering you and it appears on things in the room. Build domino runs and towers, then knock them down with a bowling ball, splat everything with a paintball gun, and sweep up the mess afterwards. Grab a baseball bat, sledgehammer, crowbar or frying pan and smash glass, plates, TVs, printers, tables, shelves, lights, windows and walls. Pick things up and throw them, or hit things with whatever you are holding. In the clay studio you can punch, slap and kick a clay statue.</p>
       <h2>Modes</h2>
       <p>Classic (two minutes, chase a high score), Zen (no timer), Time attack (clear the room fast) and Target practice. Missions, combos, achievements and unlockable weapons keep it going.</p>
       <h2>Questions</h2>
@@ -330,6 +332,6 @@ details.about p{margin:6px 0}
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=15"></script>
+<script type="module" src="src/main.js?v=16"></script>
 </body>
 </html>

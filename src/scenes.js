@@ -1,8 +1,9 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=15';
-import { loadModel, fitInto } from './models.js?v=15';
+import { canvasTex } from './style.js?v=16';
+import { buildCity } from './city.js?v=16';
+import { loadModel, fitInto } from './models.js?v=16';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -482,6 +483,13 @@ export const SCENES = {
       K.hemi(0x8090c0, 0x201820, K.v(0.25, 0.7));
       K.light('dir', 0x9fb0ff, K.v(0.8, 0.5), -6, 14, 8, { target: [0, 0, 0], shadow: true, size: 16 });
       return { ...K, heat: true, pool: ['gascan', 'gascan', 'bottle', 'bottle', 'bottle', 'tv', 'crt', 'monitor', 'cinder', 'crate', 'speaker', 'microwave', 'chair', 'lamp', 'jar', 'vase', 'pot', 'laptop', 'mug'], start: { x: 0, z: 12 }, amb: 'city', photoSpots: [[-1.6, -10, 0.2], [1.6, -10, -0.2]] };
+    },
+  },
+  city: {
+    name: 'Open city', desc: 'Free roam a whole city: day and night, rain, a gas station, a park, a building site. Get in any parked car with E; V switches between first and third person.', exposure: 1, env: 0.5, heat: true, open: true,
+    build(ctx) {
+      const K = kit(ctx), c = buildCity(ctx, K, { spray });
+      return { ...K, ...c, heat: true, open: true, far: 900, batch: 70, cityCars: c.cars, pool: ['gascan', 'gascan', 'bottle', 'bottle', 'bottle', 'tv', 'crt', 'monitor', 'cinder', 'cinder', 'crate', 'crate', 'speaker', 'microwave', 'chair', 'stool', 'lamp', 'jar', 'vase', 'pot', 'laptop', 'mug', 'flowerpot'], start: { x: 3, z: 12 }, amb: 'city', photoSpots: [[-7, 22, 0], [7, 30, 0]] };
     },
   },
   greenhouse: {

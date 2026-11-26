@@ -1,8 +1,8 @@
 // Breakable things: definitions, spawning, shattering.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=15';
-import { itemModel, fitInto } from './models.js?v=15';
+import { canvasTex } from './style.js?v=16';
+import { itemModel, fitInto } from './models.js?v=16';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -212,6 +212,10 @@ export const DEFS = {
       for (const [x, z] of [[-0.47, -0.47], [0.47, -0.47], [-0.47, 0.47], [0.47, 0.47]]) g.add(m(bx(0.06, 2.1, 0.06), red, x, 0, z));
       for (const [x, z, ry] of [[0, -0.47, 0], [-0.47, 0, Math.PI / 2], [0.47, 0, Math.PI / 2], [0, 0.47, 0]]) g.add(m(bx(0.86, 1.7, 0.012), M('glass', c), x, 0.05, z, 0, ry));
       g.add(m(bx(0.3, 0.4, 0.12), M('metal', 0x2a2a30), 0, 0.2, -0.38)); return { mesh: g, shape: boxS(0.5, 1.15, 0.5), halfH: 1.15 }; } },
+  // the city's gas station: pumps that blow up when they break
+  pump: { kind: 'explosive', hp: 2, pts: 80, mass: 0, bv: 99, size: 0.8, spots: [], colors: [0xd8d8dc, 0xc8202a],
+    fixed: true, make: (M, c) => ({ mesh: grp(m(bx(0.7, 1.8, 0.5), M('paint', c)), m(bx(0.5, 0.35, 0.02), M('emissive', 0x1a3a2a), 0, 0.45, 0.26), m(bx(0.72, 0.25, 0.52), M('paint', 0xc8202a), 0, 0.82),
+      m(cyl(0.03, 0.03, 0.9, 8), M('plastic', 0x111111), 0.38, -0.2, 0.1), m(bx(0.08, 0.2, 0.08), M('metal', 0x3a3a3e), 0.4, 0.3, 0.12)), shape: boxS(0.36, 0.9, 0.27), halfH: 0.9 }) },
   // Build & smash: dominoes to line up and knock over
   domino: { kind: 'wood', hp: 1, pts: 3, mass: 0.5, bv: 9, size: 0.3, spots: [], colors: [0xf2f0e8, 0xd8202a, 0x1e1e24, 0x2a6ad8, 0xf0c020],
     make: (M, c) => ({ mesh: grp(m(bx(0.25, 0.5, 0.05), M('plastic', c)), m(bx(0.2, 0.012, 0.052), M('plastic', c === 0x1e1e24 ? 0xf2f0e8 : 0x1e1e24))), shape: boxS(0.125, 0.25, 0.025), halfH: 0.25 }) },

@@ -17,7 +17,8 @@ const SPEC = {
   legR: { name: 'leg', side: -1, tough: 1.3, pts: 30, maxD: 0.03, rad: 0.75 },
 };
 
-let BODY = null; // { key: { geo, pivot } }, each geometry's origin at its joint
+let BODY = null;
+export const clayBody = () => BODY; // the city's third-person character reuses these parts // { key: { geo, pivot } }, each geometry's origin at its joint
 export const preloadClayBody = () => BODY ? Promise.resolve() : fetch('assets/models/body/body.json').then(r => r.json()).then(d => {
   const out = {};
   for (const [key, part] of Object.entries(d.parts)) {

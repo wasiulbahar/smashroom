@@ -146,7 +146,7 @@ export function makeStyle(name, renderer, quality) {
   };
   S.resize = (w, h) => S.composer && S.composer.setSize(w, h);
   S.render = (scene, camera, t) => {
-    if (S.composer) { S.grainPass.uniforms.time.value = t % 10; S.composer.render(); } else renderer.render(scene, camera);
+    if (S.composer) { for (const p of S.composer.passes) if ('camera' in p) p.camera = camera; S.grainPass.uniforms.time.value = t % 10; S.composer.render(); } else renderer.render(scene, camera); // the camera can change (third person, driving)
   };
   return S;
 }

@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=15';
-import { SCENES } from './scenes.js?v=15';
-import { createItems, DEFS } from './items.js?v=15';
-import * as A from './audio.js?v=15';
-import { preloadItemModels } from './models.js?v=15';
-import { createClayFigure, preloadClayBody } from './clay.js?v=15';
-import { createReplay } from './replay.js?v=15';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=16';
+import { SCENES } from './scenes.js?v=16';
+import { createItems, DEFS } from './items.js?v=16';
+import * as A from './audio.js?v=16';
+import { preloadItemModels } from './models.js?v=16';
+import { createClayFigure, preloadClayBody } from './clay.js?v=16';
+import { createReplay } from './replay.js?v=16';
+import { clayBody } from './clay.js?v=16';
 
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -21,7 +22,7 @@ const gpu = detectGPU(renderer);
 // ---------- saved progress (this browser only)
 const SAVE_KEY = 'smashroom.v2';
 const save = (() => { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { return {}; } })();
-save.points ??= 0; save.smashed ??= 0; save.best ??= {}; save.vol ??= { master: 1, music: 1, sfx: 1 }; save.set ??= {}; save.set = { sens: 1, invert: false, fov: 72, shake: true, ...save.set }; save.stats ??= {}; save.ach ??= {}; save.words ??= '';
+save.points ??= 0; save.smashed ??= 0; save.best ??= {}; save.vol ??= { master: 1, music: 1, sfx: 1 }; save.set ??= {}; save.set = { sens: 1, invert: false, fov: 72, shake: true, ...save.set }; save.stats ??= {}; save.ach ??= {}; save.words ??= ''; save.view ??= 'fp';
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
 
 const WEAPONS = {
@@ -82,9 +83,9 @@ function build() {
   spawnPhotos();
   boomLight = new THREE.PointLight(0xffa040, 0, 12, 2); scene.add(boomLight); fx = [];
   applyBlackout();
-  held = null; hlTarget = null; hlMeshes = []; charging = false; swingT = -1; marks = []; puffs = []; smokers = []; recoil = 0; swingHold = 0; loose = []; wallHits = []; pipes.forEach(P => P.sound?.stop()); pipes = []; resetHeat(); resetTools();
+  held = null; hlTarget = null; hlMeshes = []; charging = false; swingT = -1; marks = []; puffs = []; smokers = []; recoil = 0; swingHold = 0; loose = []; wallHits = []; pipes.forEach(P => P.sound?.stop()); pipes = []; resetHeat(); resetTools(); setupOpenWorld();
 }
-const batchSize = () => Math.min(S.quality === 'low' ? 24 : 36, Math.max(16, Math.ceil(room.slots.length * 0.5))); // bigger rooms hold more
+const batchSize = () => room.batch ? (S.quality === 'low' ? 40 : room.batch) : Math.min(S.quality === 'low' ? 24 : 36, Math.max(16, Math.ceil(room.slots.length * 0.5))); // bigger rooms hold more
 function spawnPhotos() {
   if (!photoTex || !room.photoSpots) return;
   if (I.list.some(i => i.key === 'cutout' && !i.dead)) return;
@@ -309,7 +310,7 @@ function heldImpact(hit) {
   if (it.hp <= 0) { held = null; it.held = false; it.body.type = CANNON.Body.DYNAMIC; it.byHeld = true; popup('Broke it!', it.body.position, 'small'); I.shatter(it, camera.getWorldDirection(v2), 3, true); }
 }
 function startSwing(type = defaultAttack()) {
-  if (swingT >= 0 || state !== 'play' || paused) return;
+  if (swingT >= 0 || state !== 'play' || paused || driving) return;
   if (held) { atk = 'held'; CW = heldStats(held); swingT = 0; hitDone = false; swingHold = 0; A.SFX.whoosh(CW.heavy); return; }
   if (W.tool) { atk = 'tool'; CW = W; swingT = 0; hitDone = true; swingHold = 0; useTool(); return; } // tools fire on the press; foam and broom keep going while held
   if (type !== 'swing' && !W.hands) type = 'swing';
@@ -341,6 +342,7 @@ function doHit() {
   if (atk === 'held') heldImpact(hits.length > 0 || lampHit);
   for (const c of I.chunks) { const p = c.body.position; v3.set(p.x - origin.x, p.y - origin.y, p.z - origin.z);
     if (v3.length() < CW.reach && v3.normalize().dot(fwd) > CW.cone - 0.15) { c.body.wakeUp(); c.body.velocity.set(dir.x * 6 + rand(-1, 1), 2 + rand(0, 2), dir.z * 6 + rand(-1, 1)); } }
+  if (!hits.length && !lampHit && cars.length) { const ch = carRayHit(origin, fwd, CW.reach + 0.4); if (ch) { hitCar(ch.car, ch.point, fwd); return; } }
   if (!hits.length && !lampHit) {
     const h = surfaceHit(origin, fwd, CW.reach + 0.3), f = h && h.object.userData.furn;
     if (f && !f.dead) { hitFurniture(f, h, dir, 1.5 * (CW.power || 1) * (heavyNow ? 2 : 1) * (W.hands && atk !== 'held' ? 0.5 : 1)); if (atk === 'held') heldImpact(true); return; }
@@ -532,7 +534,7 @@ const ACH = [
   ['collapse', 'Bring the house down', 'Wreck 5 shelves or tables', 'collapses', 5], ['lamps', 'Lights out', 'Smash 10 lights', 'lamps', 10],
   ['holes', 'Wall puncher', 'Smash 5 holes in walls', 'holes', 5], ['car', 'Car wrecker', 'Break every window and light on the car in one round', 'carclear', 1],
   ['combo', 'Unstoppable', 'Reach a 20x combo', 'combo', 20], ['menace', 'Absolute menace', 'Smash 45 things in one round', 'round', 45],
-  ['missions', 'Mission ace', 'Complete 20 missions', 'missions', 20], ['wanted', 'Most wanted', 'Reach five stars of heat Downtown', 'stars', 5], ['letgo', 'Let it go', 'Smash 25 things with your own words on them', 'words', 25], ['tidy', 'Spotless', 'Sweep a whole room clean', 'spotless', 1], ['builder', 'Architect', 'Set up 20 builds in Build & smash', 'builds', 20],
+  ['missions', 'Mission ace', 'Complete 20 missions', 'missions', 20], ['wanted', 'Most wanted', 'Reach five stars of heat Downtown', 'stars', 5], ['letgo', 'Let it go', 'Smash 25 things with your own words on them', 'words', 25], ['tidy', 'Spotless', 'Sweep a whole room clean', 'spotless', 1], ['builder', 'Architect', 'Set up 20 builds in Build & smash', 'builds', 20], ['wrecker', 'Demolition derby', 'Wreck 5 cars in the open city', 'wrecks', 5],
 ].map(([id, name, desc, stat, need]) => ({ id, name, desc, stat, need }));
 const REWARD = { collapse: 'Fire axe', missions: 'Golden bat', lamps: 'Blackout mode (any room, by flashlight)' };
 let achQueue = [], achUntil = 0, persistT = 0;
@@ -912,6 +914,184 @@ function placePreset(i) {
   applyWords(); A.SFX.grab(); popup(PRESETS[i], { x: base.x, y: base.y + 0.6, z: base.z }, 'small'); addStat('builds');
 }
 
+// ---------- open world: drivable cars, first/third person, mini-map
+let cars = [], driving = null, view = save.view || 'fp', tpCam = null, avatar = null, mapBg = null, mapT = 0, engine = null, skidT = 0, chase = null;
+const CAR_HALF = [1.0, 2.25];
+function carMesh(color) {
+  const M = S.mat, g = new THREE.Group(), body = DEFS.carbody.make(M, color).mesh, glass = [], lights = [];
+  g.add(body); S.outline(body, 1.03);
+  const pane = (w, h, x, y, z, ry, rx) => { const p = DEFS.carglass.make(M, 0x9fb7c4, { w, h }).mesh; p.position.set(x, y, z); p.rotation.set(rx, ry, 0); g.add(p); glass.push(p); };
+  pane(1.56, 0.6, 0, 1.15, 0.6, 0, -0.5); pane(1.56, 0.5, 0, 1.15, -1.05, 0, 0.5);
+  for (const s of [-1, 1]) for (const z of [0.15, -0.55]) pane(0.62, 0.42, s * 0.84, 1.13, z, Math.PI / 2, 0);
+  for (const s of [-1, 1]) { const f = DEFS.carlight.make(M, 0xfff6d0, { w: 0.34, h: 0.14, glow: true }).mesh; f.position.set(s * 0.62, 0.72, 2.12); g.add(f); lights.push(f);
+    const r = DEFS.carlight.make(M, 0xff2a2a, { w: 0.3, h: 0.12, glow: true }).mesh; r.position.set(s * 0.65, 0.72, -2.12); g.add(r); lights.push(r); }
+  g.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+  scene.add(g); return { g, glass, lights };
+}
+function wheelShapes(body, on) { // parked cars rest on four balls; a driven car rides on raycast wheels instead
+  if (on) for (const [x, z] of [[0.85, 1.35], [-0.85, 1.35], [0.85, -1.35], [-0.85, -1.35]]) body.addShape(new CANNON.Sphere(0.34), new CANNON.Vec3(x, 0.34, z));
+  else while (body.shapes.length > 2) body.removeShape(body.shapes[body.shapes.length - 1]);
+}
+function setupOpenWorld() {
+  cars = []; driving = null; engine?.stop(); engine = null; chase = null; mapBg = null;
+  if (avatar) { avatar.removeFromParent(); avatar = null; }
+  if (!tpCam) tpCam = new THREE.PerspectiveCamera(save.set.fov, innerWidth / innerHeight, 0.05, 900);
+  tpCam.far = room.far || 80; tpCam.fov = save.set.fov; tpCam.updateProjectionMatrix();
+  if (room.far) { camera.far = room.far; camera.updateProjectionMatrix(); }
+  $('minimap').classList.toggle('hidden', !room.mapRects);
+  for (const [x, z, ry] of room.cityCars || []) {
+    const color = pick([0xb3202a, 0x2a5ab3, 0x2a8a4a, 0xd9a22a, 0x8a8f96, 0x1a1a1e, 0xe8e8ec, 0x6a2a8a]);
+    const body = new CANNON.Body({ mass: 900, position: new CANNON.Vec3(x, 0.02, z), allowSleep: true, sleepSpeedLimit: 0.3, sleepTimeLimit: 0.6 });
+    body.addShape(new CANNON.Box(new CANNON.Vec3(0.9, 0.42, 2.1)), new CANNON.Vec3(0, 0.62, 0)); body.addShape(new CANNON.Box(new CANNON.Vec3(0.82, 0.24, 0.9)), new CANNON.Vec3(0, 1.22, -0.22));
+    wheelShapes(body, true); body.quaternion.setFromEuler(0, ry, 0); body.angularDamping = 0.5; body.linearDamping = 0.08; world.addBody(body); body.sleep();
+    const car = { body, ...carMesh(color), hp: 100, dead: false, speed: 0, alarm: null, smokeT: 0, color };
+    body.addEventListener('collide', e => carImpact(car, e)); cars.push(car);
+  }
+  syncCars();
+}
+const carYaw = car => { const q = car.body.quaternion; return Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x)); };
+function syncCars() { for (const c of cars) { c.g.position.copy(c.body.interpolatedPosition || c.body.position); c.g.quaternion.copy(c.body.interpolatedQuaternion || c.body.quaternion); } }
+function nearCar() { let best = null, bd = 3.2; for (const c of cars) { if (c.dead) continue; const d = Math.hypot(c.body.position.x - player.x, c.body.position.z - player.z); if (d < bd) { bd = d; best = c; } } return best; }
+function carKey() {
+  if (!cars.length || state !== 'play' || paused) return false;
+  if (driving) { exitCar(); return true; }
+  const c = !held && nearCar(); if (!c) return false; enterCar(c); return true;
+}
+function enterCar(car) {
+  const b = car.body; wheelShapes(b, false); b.wakeUp(); b.position.y += 0.15;
+  const v = new CANNON.RaycastVehicle({ chassisBody: b, indexRightAxis: 0, indexUpAxis: 1, indexForwardAxis: 2 });
+  for (const [x, z] of [[0.85, 1.35], [-0.85, 1.35], [0.85, -1.35], [-0.85, -1.35]])
+    v.addWheel({ radius: 0.34, directionLocal: new CANNON.Vec3(0, -1, 0), suspensionStiffness: 40, suspensionRestLength: 0.32, frictionSlip: 2.6, dampingRelaxation: 2.4, dampingCompression: 4.5, maxSuspensionForce: 1e6, rollInfluence: 0.02,
+      axleLocal: new CANNON.Vec3(-1, 0, 0), chassisConnectionPointLocal: new CANNON.Vec3(x, 0.62, z), maxSuspensionTravel: 0.3, customSlidingRotationalSpeed: -30, useCustomSlidingRotationalSpeed: true });
+  v.addToWorld(world); car.vehicle = v; driving = car; car.alarm?.stop(); car.alarm = null;
+  if (held) dropHeld(); setHighlight(null);
+  engine = A.loopAt('engine', null, 0.35, 0.8); A.SFX.door?.(0.6); toast(isTouch ? 'Joystick to drive · Grab to get out' : 'W/S drive · A/D steer · Space handbrake · E get out · V camera');
+  emit('drive');
+}
+function exitCar(eject) {
+  const car = driving; if (!car) return;
+  car.vehicle.removeFromWorld(world); car.vehicle = null; wheelShapes(car.body, true); driving = null; engine?.stop(); engine = null;
+  const yaw = carYaw(car), side = eject ? 2.6 : 1.7, x = car.body.position.x + Math.cos(yaw) * side, z = car.body.position.z - Math.sin(yaw) * side;
+  player.x = x; player.z = z; player.yaw = yaw + Math.PI; player.pitch = -0.1; updatePlayer(0);
+}
+function updateDriving(dt) {
+  const car = driving, v = car.vehicle, b = car.body; if (!v) return;
+  let thr = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - joy.y;
+  let steer = (keys.KeyA || keys.ArrowLeft ? 1 : 0) - (keys.KeyD || keys.ArrowRight ? 1 : 0) - joy.x;
+  thr = Math.max(-1, Math.min(1, thr)); steer = Math.max(-1, Math.min(1, steer));
+  const q = b.quaternion, fwd = q.vmult(new CANNON.Vec3(0, 0, 1)), right = q.vmult(new CANNON.Vec3(1, 0, 0)), vf = b.velocity.dot(fwd), vs = b.velocity.dot(right);
+  car.speed = b.velocity.length();
+  const maxF = car.dead ? 0 : 3300 * (car.hp > 30 ? 1 : 0.55), hand = keys.Space;
+  let force = 0, brake = 0;
+  if (thr > 0) force = vf < -1 ? 0 : maxF * thr; else if (thr < 0) { if (vf > 1.2) brake = 60 * -thr; else force = maxF * 0.55 * thr; } else brake = 2;
+  if (thr > 0 && vf < -1) brake = 60;
+  for (const i of [2, 3]) { v.applyEngineForce(-force, i); v.setBrake(hand ? 90 : brake, i); }
+  for (const i of [0, 1]) { v.setBrake(brake, i); v.setSteeringValue(steer * 0.55 * (1 - Math.min(0.65, car.speed / 38)), i); }
+  b.velocity.y = Math.min(b.velocity.y, 6);
+  player.x = b.position.x; player.z = b.position.z; player.bob += dt * 2;
+  if (engine) { engine.rate(0.75 + Math.min(1.6, Math.abs(vf) / 14) + (thr !== 0 ? 0.15 : 0)); engine.set(0.28 + Math.min(0.25, Math.abs(thr) * 0.15 + car.speed / 120)); }
+  skidT -= dt; if ((Math.abs(vs) > 4.5 || (hand && car.speed > 8)) && skidT <= 0) { skidT = 0.45; A.SFX.skid(Math.min(1, Math.abs(vs) / 9 + 0.3)); }
+  const [bx1, bx2, bz1, bz2] = room.bounds; if (b.position.x < bx1 - 2 || b.position.x > bx2 + 2 || b.position.z < bz1 - 2 || b.position.z > bz2 + 2) { b.position.set(Math.max(bx1, Math.min(bx2, b.position.x)), 0.6, Math.max(bz1, Math.min(bz2, b.position.z))); b.velocity.setZero(); }
+  if (b.quaternion.vmult(new CANNON.Vec3(0, 1, 0)).y < 0.2 && car.speed < 1) { b.quaternion.setFromEuler(0, carYaw(car), 0); b.position.y += 1; } // flipped: put it back on its wheels
+}
+function carImpact(car, e) {
+  const v = Math.abs(e.contact.getImpactVelocityAlongNormal()); if (v < 2.5 || state !== 'play') return;
+  const other = e.body, it = I.list.find(i => i.body === other && !i.dead), oc = cars.find(c => c.body === other);
+  if (it) { if (it.def.hp !== Infinity || it.key === 'hydrant') { const dir = new THREE.Vector3(car.body.velocity.x, 0.4, car.body.velocity.z).normalize(); setTimeout(() => !it.dead && I.shatter(it, dir, Math.min(9, v), true), 0); } else return; }
+  if (oc && oc !== car) damageCar(oc, v * 0.8);
+  if (it && v < 6) return; // small things don't hurt the car much
+  damageCar(car, v);
+}
+function damageCar(car, v, point) {
+  if (car.dead) return; const tnow = performance.now(); if (!point && tnow - (car.lastHit || 0) < 350) return; car.lastHit = tnow; // one crash fires many contacts: count it once
+  car.hp -= Math.max(0, v - 3) * 3.6;
+  const p = car.body.position;
+  if (v > 5 || point) breakCarWindow(car, point);
+  A.at(p, () => { A.SFX.metal(Math.min(1.2, v / 8), 0.6); if (v > 7) A.SFX.crash?.(Math.min(1, v / 12)) || A.SFX.metal(1, 0.5); });
+  if (car === driving) { shake = Math.max(shake, Math.min(0.5, v / 25)); kick = Math.min(0.08, kick + v / 200); vibrate(Math.min(120, v * 8)); }
+  else if (!car.alarm && room.heat) { car.alarm = A.loopAt('alarm', { x: p.x, y: 0.9, z: p.z }, 0.5); setTimeout(() => { car.alarm?.stop(); car.alarm = null; }, 9000); emit('alarm'); }
+  if (state === 'play') { addScore(Math.round(v * 3), { x: p.x, y: p.y + 1.6, z: p.z }, v > 8 ? 'big' : 'small'); addHeat(2 + v * 0.3); bumpCombo(); }
+  if (car.hp <= 0) wreckCar(car);
+}
+function breakCarWindow(car, point) {
+  const live = car.glass.filter(g => g.visible); if (!live.length) return;
+  let pane = live[0]; if (point) { let bd = 1e9; for (const g of live) { const d = g.getWorldPosition(v4).distanceTo(point); if (d < bd) { bd = d; pane = g; } } } else pane = pick(live);
+  pane.visible = false; const wp = pane.getWorldPosition(new THREE.Vector3());
+  for (let i = 0; i < 12; i++) I.shard('glass', rand(0.02, 0.05), 0xcfe0ea, wp, car.body.velocity, new THREE.Vector3(rand(-1, 1), 0.5, rand(-1, 1)).normalize(), 2, 0.5);
+  A.at(wp, () => A.SFX.glass(1, 1)); I.sparks_(wp, 10);
+}
+function hitCar(car, point, dir) {
+  damageCar(car, 7 + (CW.power || 1) * 3, point); addMark(point, dir.clone().negate(), 'dent', 0.25);
+  if (!car.vehicle) { car.body.wakeUp(); car.body.velocity.x += dir.x * 0.4; car.body.velocity.z += dir.z * 0.4; }
+  recoil = 1; freeze(35); shake = Math.max(shake, 0.12); emit('hit');
+}
+function wreckCar(car) {
+  car.dead = true; const p = car.body.position;
+  explode({ x: p.x, y: p.y + 0.8, z: p.z });
+  const burnt = S.mat('paint', 0x1a1816); car.g.traverse(m => { if (m.isMesh && !m.userData.ol) { if (car.glass.includes(m) || car.lights.includes(m)) m.visible = false; else m.material = burnt; } });
+  car.body.velocity.y += 5; car.body.angularVelocity.set(rand(-2, 2), rand(-1, 1), rand(-2, 2));
+  if (car === driving) exitCar(true);
+  addStat('wrecks'); popup('Wrecked!', { x: p.x, y: p.y + 2, z: p.z }, 'big');
+}
+function updateCars(dt, now) {
+  if (!cars.length) return; syncCars();
+  for (const c of cars) {
+    if (c.dead || c.hp > 55) continue; c.smokeT -= dt; if (c.smokeT > 0) continue; c.smokeT = c.hp > 25 ? 0.18 : 0.08;
+    const hood = c.g.localToWorld(new THREE.Vector3(0, 1.1, 1.6));
+    puff(hood, c.hp > 25 ? 0x6a6a6a : 0x2a2622, 1, 0.5, 0.9, 0.5); if (c.hp <= 25) puff(hood, 0xff7a20, 1, 0.3, 1.2, 0.7);
+  }
+}
+function carRayHit(origin, dir, far) {
+  ray.set(origin, dir); ray.far = far; const hit = ray.intersectObjects(cars.map(c => c.g), true).find(h => !h.object.userData.ol);
+  if (!hit) return null; let o = hit.object; while (o.parent && !cars.some(c => c.g === o)) o = o.parent; return { car: cars.find(c => c.g === o), point: hit.point };
+}
+function pushOutOfCars() { // walking into a car stops you at its side
+  for (const c of cars) { const yaw = carYaw(c), dx = player.x - c.body.position.x, dz = player.z - c.body.position.z, cs = Math.cos(yaw), sn = Math.sin(yaw);
+    let lx = dx * cs - dz * sn, lz = dx * sn + dz * cs; const ex = CAR_HALF[0] + 0.3 - Math.abs(lx), ez = CAR_HALF[1] + 0.3 - Math.abs(lz);
+    if (ex <= 0 || ez <= 0) continue; if (ex < ez) lx += Math.sign(lx || 1) * ex; else lz += Math.sign(lz || 1) * ez;
+    player.x = c.body.position.x + lx * cs + lz * sn; player.z = c.body.position.z - lx * sn + lz * cs; }
+}
+function cockpitCamera() { // first person in the car: the driver's seat, looking where the car points (mouse looks around)
+  if (view !== 'fp') return; const c = driving; c.g.updateMatrixWorld();
+  camera.position.copy(c.g.localToWorld(new THREE.Vector3(0.38, 1.28, 0.05)));
+  camera.quaternion.copy(c.g.quaternion).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch * 0.6, Math.PI + (player.yaw - (carYaw(c) + Math.PI)) * 0, 0, 'YXZ')));
+}
+function ensureAvatar() {
+  if (avatar || !clayBody()) return avatar; const B = clayBody(), skin = S.mat('clay', 0xc8906a), shirt = S.mat('fabric', pick([0x2a4a7a, 0x7a2a2a, 0x2a6a4a, 0x3a3a42])), jeans = S.mat('fabric', 0x2a3048);
+  avatar = new THREE.Group(); avatar.userData.parts = {};
+  for (const [key, mat] of [['head', skin], ['torso', shirt], ['armL', shirt], ['armR', shirt], ['legL', jeans], ['legR', jeans]]) { if (!B[key]) continue; const m = new THREE.Mesh(B[key].geo, mat); m.position.copy(B[key].pivot); m.castShadow = true; avatar.add(m); avatar.userData.parts[key] = m; }
+  S.outline(avatar, 1.02); scene.add(avatar); return avatar;
+}
+function toggleView() { view = view === 'fp' ? 'tp' : 'fp'; save.view = view; persist(); toast(view === 'tp' ? 'Third person' : 'First person'); }
+const groundY = (x, z) => { const h = surfaceHit(new THREE.Vector3(x, 4, z), new THREE.Vector3(0, -1, 0), 6); return h ? h.point.y : 0; };
+function viewCamera(dt) {
+  const tp = state === 'play' && ((driving && view !== 'fp') || (!driving && view === 'tp'));
+  const a = ensureAvatar(); if (a) a.visible = state === 'play' && !driving && view === 'tp';
+  if (!tp) return camera;
+  if (driving) { // chase camera behind the car
+    const g = driving.g, want = g.localToWorld(new THREE.Vector3(0, 2.9, -7.2)), look = g.localToWorld(new THREE.Vector3(0, 1.1, 3));
+    if (!chase) chase = want.clone(); chase.lerp(want, Math.min(1, dt * 5)); chase.y = Math.max(chase.y, 1.2);
+    tpCam.position.copy(chase); tpCam.lookAt(look); return tpCam;
+  }
+  // over the shoulder on foot: the character walks, the weapon swings in front of it
+  const y0 = groundY(player.x, player.z), moving = keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD || Math.hypot(joy.x, joy.y) > 0.1;
+  if (a) { a.position.set(player.x, y0, player.z); a.rotation.y = player.yaw + Math.PI; const P = a.userData.parts, sw = moving ? Math.sin(player.bob) * 0.55 : 0;
+    if (P.legL) P.legL.rotation.x = sw; if (P.legR) P.legR.rotation.x = -sw; if (P.armL) P.armL.rotation.set(-sw * 0.7, 0, -1.15); if (P.armR) P.armR.rotation.set(swingT >= 0 ? -1.4 + Math.sin(swingT * Math.PI) * 1.2 : sw * 0.7 - 0.25, 0, 1.15); } // the body comes in a T-pose: arms down by the sides
+  const head = new THREE.Vector3(player.x, y0 + 1.62, player.z), f = camera.getWorldDirection(new THREE.Vector3()), r = new THREE.Vector3(-f.z, 0, f.x).normalize();
+  let want = head.clone().addScaledVector(f, -3.3).addScaledVector(r, 0.55).add({ x: 0, y: 0.35, z: 0 });
+  const d = want.clone().sub(head), L = d.length(), h = surfaceHit(head, d.normalize(), L); if (h) want = head.clone().addScaledVector(d, Math.max(0.4, h.point.distanceTo(head) - 0.25));
+  tpCam.position.copy(want); tpCam.lookAt(head.clone().addScaledVector(f, 8)); return tpCam;
+}
+function drawMinimap(now) {
+  if (!room.mapRects || now - mapT < 66) return; mapT = now;
+  const cv = $('minimap'), g = cv.getContext('2d'), W = cv.width, span = 230, k = W / span, tx = x => W / 2 + x * k, tz = z => W / 2 + z * k;
+  if (!mapBg) { mapBg = document.createElement('canvas'); mapBg.width = mapBg.height = W; const b = mapBg.getContext('2d'); b.fillStyle = '#1a1622'; b.fillRect(0, 0, W, W);
+    for (const [x1, z1, x2, z2, col] of room.mapRects) { b.fillStyle = col; b.fillRect(tx(x1), tz(z1), (x2 - x1) * k, (z2 - z1) * k); } }
+  g.drawImage(mapBg, 0, 0);
+  for (const c of cars) { g.fillStyle = c.dead ? '#222' : c === driving ? '#ffc531' : '#6ab8ff'; g.fillRect(tx(c.body.position.x) - 2, tz(c.body.position.z) - 2, 4, 4); }
+  g.save(); g.translate(tx(player.x), tz(player.z)); g.rotate(-player.yaw); g.fillStyle = '#ff4f9a'; g.beginPath(); g.moveTo(0, -7); g.lineTo(5, 5); g.lineTo(0, 2); g.lineTo(-5, 5); g.closePath(); g.fill(); g.restore();
+}
+
 // ---------- blackout: any room in the dark with a flashlight (unlocked by "Lights out")
 function applyBlackout() {
   if (!opts.dark || !save.ach.lamps) return;
@@ -959,7 +1139,7 @@ function endSession() {
   if ((!attack || cleared) && !['build', 'clean'].includes(opts.gm)) { list.push(entry); list.sort((a, b) => attack ? a.time - b.time : b.score - a.score); save.best[key] = list.slice(0, 5); }
   persist();
   const fresh = Object.keys(WEAPONS).filter(k => unlocked(k) && !before.includes(k));
-  if (siren) { siren.stop(); siren = null; } alarms.forEach(a => a.sound?.stop()); toolStop(); $('palette').classList.add('hidden');
+  if (siren) { siren.stop(); siren = null; } alarms.forEach(a => a.sound?.stop()); toolStop(); if (driving) exitCar(); cars.forEach(c => { c.alarm?.stop(); c.alarm = null; }); A.setRain(0); $('palette').classList.add('hidden');
   $('cleanBtn').classList.toggle('hidden', opts.gm === 'clean' || I.chunks.length < 12);
   $('rating').textContent = opts.gm === 'clean' ? (I.chunks.length === 0 ? 'Spotless. Feel better?' : `Swept ${swept} pieces`) : busted ? 'Busted! The cops got you' : attack ? (cleared ? `Cleared in ${fmtTime(elapsed)}` : 'Room not cleared')
     : opts.gm === 'zen' ? 'Feeling better?' : opts.gm === 'targets' ? `${targetsHit} targets hit`
@@ -1020,7 +1200,7 @@ document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
   opts.mode = b.dataset.mode; $('modeScreen').classList.add('hidden'); renderLobby(); $('lobby').classList.remove('hidden'); build();
   if (opts.mode === 'realistic') modelsReady = modelsReady || preloadItemModels().then(() => { if (state === 'menu' && opts.mode === 'realistic') build(); });
 });
-$('scenes').onclick = e => { const b = e.target.closest('.card'); if (!b) return; opts.scene = b.dataset.s; if (opts.scene === 'studio') opts.weapon = 'hands'; renderLobby(); build(); };
+$('scenes').onclick = e => { const b = e.target.closest('.card'); if (!b) return; opts.scene = b.dataset.s; if (opts.scene === 'studio') opts.weapon = 'hands'; if (opts.scene === 'city' && opts.gm === 'classic') opts.gm = 'zen'; renderLobby(); build(); };
 $('weapons').onclick = e => { const b = e.target.closest('.card'); if (!b || b.classList.contains('locked')) return; opts.weapon = b.dataset.w; renderLobby(); equip(opts.weapon); };
 $('words').value = save.words;
 $('words').oninput = () => { save.words = $('words').value.slice(0, 120); persist(); };
@@ -1093,7 +1273,8 @@ addEventListener('keydown', e => {
   keys[e.code] = true; if (state !== 'play' || paused || e.repeat) return;
   if (e.code === 'Space') startSwing(W.hands ? 'kick' : 'swing');
   if (e.code === 'KeyF') W.hands ? startSwing('slap') : grabOrThrow();
-  if (e.code === 'KeyE') grabOrThrow();
+  if (e.code === 'KeyV') toggleView();
+  if (e.code === 'KeyE') { if (carKey()) return; grabOrThrow(); }
   if (e.code === 'KeyQ') dropHeld();
   if (opts.gm === 'build' && state === 'play' && /^Digit[1-7]$/.test(e.code)) placePreset(+e.code.slice(5) - 1);
   if (e.code === 'KeyT' && tut) tutDone(true);
@@ -1104,7 +1285,7 @@ let joyId = null, joyO = null, lookId = null, lookLast = null;
 const tl = $('touch');
 tl.addEventListener('pointerdown', e => {
   if (e.target.id === 'smashBtn') { mouseHeld = true; startSwing(); return; }
-  if (e.target.id === 'grabBtn') { grabOrThrow(); return; }
+  if (e.target.id === 'grabBtn') { if (!carKey()) grabOrThrow(); return; }
   if (e.target.id === 'kickBtn') { startSwing('kick'); return; }
   if (e.clientX < innerWidth * 0.45 && joyId === null) { joyId = e.pointerId; joyO = { x: e.clientX, y: e.clientY }; const j = $('joy'); j.style.left = e.clientX + 'px'; j.style.top = e.clientY + 'px'; j.classList.remove('hidden'); }
   else if (lookId === null) { lookId = e.pointerId; lookLast = { x: e.clientX, y: e.clientY }; }
@@ -1138,6 +1319,7 @@ function updatePlayer(dt) {
       player.x += push[0]; player.z += push[1];
     }
   }
+  pushOutOfCars();
   if (len > 0.1) {
     player.bob += dt * 9;
     const ph = Math.floor(player.bob / Math.PI);
@@ -1182,7 +1364,9 @@ function frame(now) {
 
   if (playing) {
     if (!tut) timeLeft -= rdt; // the clock waits while you learn
-    updatePlayer(rdt); updateTut(); updateMission(now); updateLamps(now); updatePipes(dt, now); updateHeat(rdt, now); updateTools(rdt, now); updateSpills(rdt);
+    if (driving) updateDriving(rdt); else updatePlayer(rdt);
+    updateCars(rdt, now); if (room.follow) { room.follow.x = player.x; room.follow.z = player.z; A.setRain(room.day ? room.day.rain : 0); }
+    updateTut(); updateMission(now); updateLamps(now); updatePipes(dt, now); updateHeat(rdt, now); updateTools(rdt, now); updateSpills(rdt);
     if (mouseHeld && swingT < 0) startSwing();
     if (swingT >= 0) {
       // holding the button pauses a weapon swing at the top to wind up a heavy hit
@@ -1232,7 +1416,8 @@ function frame(now) {
   }
   if (state === 'play') {
     camera.position.set(player.x, 1.65 + Math.sin(player.bob * 2) * 0.02, player.z);
-    camera.rotation.set(player.pitch + (save.set.shake ? kick : 0), player.yaw, 0); pivot.visible = true;
+    camera.rotation.set(player.pitch + (save.set.shake ? kick : 0), player.yaw, 0); pivot.visible = !driving;
+    if (driving) cockpitCamera();
     kick *= Math.pow(0.0005, rdt);
   } else {
     orbit += rdt * 0.1; pivot.visible = false;
@@ -1253,7 +1438,8 @@ function frame(now) {
     const rage = now < rageUntil;
     $('rageFill').style.width = (rage ? (rageUntil - now) / 80 : rageMeter) + '%';
     $('rageTxt').textContent = rage ? 'Rage mode x2' : 'Rage';
-    const hint = held ? (isTouch ? 'Smash hits with it · Throw throws it' : `Click to hit with the ${nameOf(held.key)} · E throws · hold right-click for a power throw · Q drop`)
+    const nc = !driving && !held && cars.length ? nearCar() : null;
+    const hint = driving ? (isTouch ? `Grab: get out · ${Math.round(driving.speed * 3.6)} km/h` : `E get out · V camera · Space handbrake · ${Math.round(driving.speed * 3.6)} km/h`) : nc ? (isTouch ? 'Grab: get in the car' : 'E: get in the car · V: switch camera') : held ? (isTouch ? 'Smash hits with it · Throw throws it' : `Click to hit with the ${nameOf(held.key)} · E throws · hold right-click for a power throw · Q drop`)
       : hlTarget ? (isTouch ? `Grab the ${nameOf(hlTarget.key)}` : `E or right-click: grab the ${nameOf(hlTarget.key)}`)
       : W.hands && !isTouch ? 'Click punch · F slap · Space kick' : '';
     $('kickBtn').classList.toggle('hidden', !W.hands);
@@ -1264,11 +1450,13 @@ function frame(now) {
   }
   showAch(now);
   A.listener(camera.position, camera.getWorldDirection(v2)); A.setMuffle(state === 'play' && (now < slowUntil || now < deafUntil));
-  S.render(scene, camera, t);
+  const rc = viewCamera(rdt);
+  if (state === 'play') drawMinimap(now);
+  S.render(scene, rc, t);
 }
-addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); if (camera) { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); } S?.resize(innerWidth, innerHeight); });
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); if (camera) { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); } if (tpCam) { tpCam.aspect = innerWidth / innerHeight; tpCam.updateProjectionMatrix(); } S?.resize(innerWidth, innerHeight); });
 
 renderMode();
 opts.mode = 'stylized'; build(); opts.mode = null; // background behind the first screen
 requestAnimationFrame(frame);
-window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; } };
+window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; }, get cars() { return cars; }, get driving() { return driving; }, carKey, toggleView, get view() { return view; } };
