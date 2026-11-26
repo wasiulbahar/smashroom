@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=17';
-import { SCENES } from './scenes.js?v=17';
-import { createItems, DEFS } from './items.js?v=17';
-import * as A from './audio.js?v=17';
-import { preloadItemModels } from './models.js?v=17';
-import { createClayFigure, preloadClayBody } from './clay.js?v=17';
-import { createReplay } from './replay.js?v=17';
-import { clayBody } from './clay.js?v=17';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=18';
+import { SCENES } from './scenes.js?v=18';
+import { createItems, DEFS } from './items.js?v=18';
+import * as A from './audio.js?v=18';
+import { preloadItemModels } from './models.js?v=18';
+import { createClayFigure, preloadClayBody } from './clay.js?v=18';
+import { createReplay } from './replay.js?v=18';
+import { clayBody } from './clay.js?v=18';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const $ = id => document.getElementById(id);
@@ -917,28 +917,70 @@ function placePreset(i) {
 
 // ---------- open world: drivable cars, first/third person, mini-map
 let cars = [], driving = null, view = save.view || 'fp', tpCam = null, avatar = null, mapBg = null, mapT = 0, engine = null, skidT = 0, chase = null, traffic = [];
-const CAR_HALF = [1.0, 2.25];
-function carMesh(color) {
+const SEDAN = { mass: 900, force: 3300, steer: 0.55, slip: 2.6, half: [0.9, 0.42, 2.1], hy: 0.62, cabin: [0.82, 0.24, 0.9, 1.22, -0.22], r: 0.34, conn: 0.62, pitch: 0.75, ext: [1.0, 2.25],
+  wheels: [[0.85, 1.35], [-0.85, 1.35], [0.85, -1.35], [-0.85, -1.35]] };
+const CAR_TYPES = {
+  sedan: { ...SEDAN, name: 'Sedan' },
+  taxi: { ...SEDAN, name: 'Taxi', pitch: 0.8 },
+  van: { name: 'Van', mass: 1500, force: 3500, steer: 0.45, slip: 2.1, half: [0.97, 0.9, 2.35], hy: 1.25, cabin: null, r: 0.37, conn: 0.66, pitch: 0.58, ext: [1.07, 2.45],
+    wheels: [[0.88, 1.6], [-0.88, 1.6], [0.88, -1.6], [-0.88, -1.6]] },
+  sports: { name: 'Sports car', mass: 820, force: 5600, steer: 0.62, slip: 3.4, half: [0.97, 0.3, 2.15], hy: 0.55, cabin: [0.72, 0.19, 0.85, 0.98, -0.25], r: 0.33, conn: 0.58, pitch: 0.98, ext: [1.07, 2.3],
+    wheels: [[0.88, 1.38], [-0.88, 1.38], [0.88, -1.38], [-0.88, -1.38]] },
+};
+const pickType = () => { const r = Math.random(); return r < 0.4 ? 'sedan' : r < 0.55 ? 'taxi' : r < 0.77 ? 'van' : 'sports'; };
+const typeColor = t => t === 'taxi' ? 0xf2c21a : pick(t === 'sports' ? [0xd01820, 0x1a5ad8, 0xf0f0f0, 0x101014, 0xf07a10, 0x2ab04a] : t === 'van' ? [0xe8e8ec, 0x8a8f96, 0x2a5ab3, 0x5a3a24, 0x2a6a4a] : [0xb3202a, 0x2a5ab3, 0x2a8a4a, 0xd9a22a, 0x8a8f96, 0x1a1a1e, 0xe8e8ec, 0x6a2a8a]);
+function carBody(type, x, z, ry, kin) { // the chassis (and cabin) as boxes; parked cars also rest on four wheel balls
+  const T = CAR_TYPES[type], b = new CANNON.Body(kin ? { mass: 0, type: CANNON.Body.KINEMATIC, position: new CANNON.Vec3(x, 0, z) } : { mass: T.mass, position: new CANNON.Vec3(x, 0.02, z), allowSleep: true, sleepSpeedLimit: 0.3, sleepTimeLimit: 0.6 });
+  b.carType = T; b.addShape(new CANNON.Box(new CANNON.Vec3(...T.half)), new CANNON.Vec3(0, T.hy, 0));
+  if (T.cabin) b.addShape(new CANNON.Box(new CANNON.Vec3(T.cabin[0], T.cabin[1], T.cabin[2])), new CANNON.Vec3(0, T.cabin[3], T.cabin[4]));
+  if (!kin) { wheelShapes(b, true); b.angularDamping = 0.5; b.linearDamping = 0.08; }
+  b.quaternion.setFromEuler(0, ry, 0); world.addBody(b); return b;
+}
+function carMesh(color, type = 'sedan') {
   const M = S.mat, g = new THREE.Group(), glass = [], lights = [];
   const merged = parts => { // one mesh per material: a car is a handful of draw calls instead of thirty
     const by = new Map(); parts.updateMatrixWorld(true);
     parts.traverse(m => { if (!m.isMesh) return; const k = m.material.uuid; if (!by.has(k)) by.set(k, { mat: m.material, geos: [] }); const ge = m.geometry.clone().applyMatrix4(m.matrixWorld); for (const a of Object.keys(ge.attributes)) if (!['position', 'normal', 'uv'].includes(a)) ge.deleteAttribute(a); by.get(k).geos.push(ge.index ? ge : ge); });
     return [...by.values()].map(({ mat, geos }) => new THREE.Mesh(mergeGeometries(geos.map(x => x.index ? x.toNonIndexed() : x), false), mat));
   };
-  for (const m of merged(DEFS.carbody.make(M, color).mesh)) { g.add(m); S.outline(m, 1.03); }
   const pane = (w, h, x, y, z, ry, rx) => { const p = DEFS.carglass.make(M, 0x9fb7c4, { w, h }).mesh; p.position.set(x, y, z); p.rotation.set(rx, ry, 0); g.add(p); glass.push(p); };
-  pane(1.56, 0.6, 0, 1.15, 0.6, 0, -0.5); pane(1.56, 0.5, 0, 1.15, -1.05, 0, 0.5);
-  for (const s of [-1, 1]) for (const z of [0.15, -0.55]) pane(0.62, 0.42, s * 0.84, 1.13, z, Math.PI / 2, 0);
-  const lg = new THREE.Group();
-  for (const s of [-1, 1]) { const f = DEFS.carlight.make(M, 0xfff6d0, { w: 0.34, h: 0.14, glow: true }).mesh; f.position.set(s * 0.62, 0.72, 2.12); lg.add(f);
-    const r = DEFS.carlight.make(M, 0xff2a2a, { w: 0.3, h: 0.12, glow: true }).mesh; r.position.set(s * 0.65, 0.72, -2.12); lg.add(r); }
+  const B = new THREE.Group(), paint = M('paint', color), dark = M('plastic', 0x15151a), box = (w, h, d, mat, x, y, z, rx = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.rotation.x = rx; B.add(m); return m; };
+  const wheel = (r, wd, x, z) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, wd, 20), dark); m.position.set(x, r, z); m.rotation.z = Math.PI / 2; B.add(m); const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.55, wd + 0.02, 14), M('metal', 0xb8bcc4)); hub.position.copy(m.position); hub.rotation.z = Math.PI / 2; B.add(hub); };
+  let lightAt;
+  if (type === 'van') { // tall box van: big windscreen, sliding-door side, flat back
+    box(1.94, 1.8, 4.7, paint, 0, 1.25, 0); box(1.98, 0.24, 0.16, dark, 0, 0.45, 2.38); box(1.98, 0.24, 0.16, dark, 0, 0.45, -2.38); box(1.4, 0.3, 0.04, dark, 0, 0.8, 2.36); box(0.02, 0.06, 1.3, dark, 0.98, 1.2, -0.6); box(0.02, 0.06, 1.3, dark, -0.98, 1.2, -0.6);
+    for (const [x, z] of CAR_TYPES.van.wheels) wheel(0.37, 0.26, x, z);
+    pane(1.72, 0.72, 0, 1.72, 2.37, 0, -0.12); pane(1.5, 0.5, 0, 1.75, -2.37, 0, 0);
+    for (const s of [-1, 1]) { pane(0.9, 0.6, s * 0.98, 1.72, 1.55, Math.PI / 2, 0); pane(1.4, 0.45, s * 0.98, 1.78, -0.6, Math.PI / 2, 0); }
+    lightAt = { fy: 0.85, fz: 2.37, fx: 0.72, ry: 1.2, rz: -2.37 };
+  } else if (type === 'sports') { // low wedge with a small raked cabin and a rear wing
+    box(1.94, 0.46, 4.3, paint, 0, 0.53, 0); box(1.8, 0.16, 1.2, paint, 0, 0.82, 1.4, -0.12); box(1.46, 0.34, 1.7, paint, 0, 0.96, -0.3); box(1.6, 0.05, 0.32, dark, 0, 1.02, -2.0); for (const s of [-1, 1]) box(0.05, 0.22, 0.12, dark, s * 0.6, 0.88, -2.0);
+    box(1.96, 0.12, 0.14, dark, 0, 0.36, 2.14); box(1.96, 0.12, 0.14, dark, 0, 0.36, -2.14);
+    for (const [x, z] of CAR_TYPES.sports.wheels) wheel(0.33, 0.3, x, z);
+    pane(1.4, 0.48, 0, 1.0, 0.66, 0, -0.95); pane(1.3, 0.36, 0, 1.0, -1.2, 0, 0.8);
+    for (const s of [-1, 1]) pane(1.25, 0.3, s * 0.74, 0.98, -0.3, Math.PI / 2, 0);
+    lightAt = { fy: 0.62, fz: 2.16, fx: 0.68, ry: 0.66, rz: -2.16 };
+  } else { // sedan and taxi
+    B.add(DEFS.carbody.make(M, color).mesh);
+    pane(1.56, 0.6, 0, 1.15, 0.6, 0, -0.5); pane(1.56, 0.5, 0, 1.15, -1.05, 0, 0.5);
+    for (const s of [-1, 1]) for (const z of [0.15, -0.55]) pane(0.62, 0.42, s * 0.84, 1.13, z, Math.PI / 2, 0);
+    if (type === 'taxi') { box(0.62, 0.2, 0.3, M('emissive', 0xfff2b0), 0, 1.58, -0.22); box(1.82, 0.08, 0.02, M('plastic', 0x15151a), 0, 0.78, 0); }
+    lightAt = { fy: 0.72, fz: 2.12, fx: 0.62, ry: 0.72, rz: -2.12 };
+  }
+  for (const m of merged(B)) { g.add(m); if (m.material !== undefined && m.material.type !== 'MeshBasicMaterial') S.outline(m, 1.03); }
+  if (type === 'taxi') { const t = canvasTex(256, 64, (c2, w, h) => { c2.fillStyle = '#fff2b0'; c2.fillRect(0, 0, w, h); c2.fillStyle = '#15151a'; c2.font = '900 46px Rubik, Arial'; c2.textAlign = 'center'; c2.textBaseline = 'middle'; c2.fillText('TAXI', w / 2, h / 2 + 2); });
+    for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.16), new THREE.MeshBasicMaterial({ map: t })); p.position.set(0, 1.58, -0.22 + s * 0.152); p.rotation.y = s > 0 ? 0 : Math.PI; g.add(p); } }
+  const lg = new THREE.Group(), L = lightAt;
+  for (const s of [-1, 1]) { const f = DEFS.carlight.make(M, 0xfff6d0, { w: 0.34, h: 0.14, glow: true }).mesh; f.position.set(s * L.fx, L.fy, L.fz); lg.add(f);
+    const r = DEFS.carlight.make(M, 0xff2a2a, { w: 0.3, h: 0.12, glow: true }).mesh; r.position.set(s * L.fx, L.ry, L.rz); lg.add(r); }
   for (const m of merged(lg)) { g.add(m); lights.push(m); }
   g.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
   scene.add(g); return { g, glass, lights };
 }
 function wheelShapes(body, on) { // parked cars rest on four balls; a driven car rides on raycast wheels instead
-  if (on) for (const [x, z] of [[0.85, 1.35], [-0.85, 1.35], [0.85, -1.35], [-0.85, -1.35]]) body.addShape(new CANNON.Sphere(0.34), new CANNON.Vec3(x, 0.34, z));
-  else while (body.shapes.length > 2) body.removeShape(body.shapes[body.shapes.length - 1]);
+  const T = body.carType || SEDAN, base = T.cabin ? 2 : 1;
+  if (on) for (const [x, z] of T.wheels) body.addShape(new CANNON.Sphere(T.r), new CANNON.Vec3(x, T.r, z));
+  else while (body.shapes.length > base) body.removeShape(body.shapes[body.shapes.length - 1]);
 }
 function setupOpenWorld() {
   cars = []; traffic = []; driving = null; engine?.stop(); engine = null; chase = null; mapBg = null; human.weapon = null;
@@ -948,11 +990,8 @@ function setupOpenWorld() {
   if (room.far) { camera.far = room.far; camera.updateProjectionMatrix(); }
   $('minimap').classList.toggle('hidden', !room.mapRects);
   for (const [x, z, ry] of room.cityCars || []) {
-    const color = pick([0xb3202a, 0x2a5ab3, 0x2a8a4a, 0xd9a22a, 0x8a8f96, 0x1a1a1e, 0xe8e8ec, 0x6a2a8a]);
-    const body = new CANNON.Body({ mass: 900, position: new CANNON.Vec3(x, 0.02, z), allowSleep: true, sleepSpeedLimit: 0.3, sleepTimeLimit: 0.6 });
-    body.addShape(new CANNON.Box(new CANNON.Vec3(0.9, 0.42, 2.1)), new CANNON.Vec3(0, 0.62, 0)); body.addShape(new CANNON.Box(new CANNON.Vec3(0.82, 0.24, 0.9)), new CANNON.Vec3(0, 1.22, -0.22));
-    wheelShapes(body, true); body.quaternion.setFromEuler(0, ry, 0); body.angularDamping = 0.5; body.linearDamping = 0.08; world.addBody(body); body.sleep();
-    const car = { body, ...carMesh(color), hp: 100, dead: false, speed: 0, alarm: null, smokeT: 0, color };
+    const type = pickType(), color = typeColor(type), body = carBody(type, x, z, ry, false); body.sleep();
+    const car = { body, ...carMesh(color, type), type: CAR_TYPES[type], hp: type === 'van' ? 130 : 100, dead: false, speed: 0, alarm: null, smokeT: 0, color };
     body.addEventListener('collide', e => carImpact(car, e)); cars.push(car);
   }
   if (room.signals) spawnTraffic(S.quality === 'low' ? 6 : 11);
@@ -970,17 +1009,26 @@ function carKey() {
 function enterCar(car) {
   const b = car.body; wheelShapes(b, false); b.wakeUp(); b.position.y += 0.15;
   const v = new CANNON.RaycastVehicle({ chassisBody: b, indexRightAxis: 0, indexUpAxis: 1, indexForwardAxis: 2 });
-  for (const [x, z] of [[0.85, 1.35], [-0.85, 1.35], [0.85, -1.35], [-0.85, -1.35]])
-    v.addWheel({ radius: 0.34, directionLocal: new CANNON.Vec3(0, -1, 0), suspensionStiffness: 40, suspensionRestLength: 0.32, frictionSlip: 2.6, dampingRelaxation: 2.4, dampingCompression: 4.5, maxSuspensionForce: 1e6, rollInfluence: 0.02,
-      axleLocal: new CANNON.Vec3(-1, 0, 0), chassisConnectionPointLocal: new CANNON.Vec3(x, 0.62, z), maxSuspensionTravel: 0.3, customSlidingRotationalSpeed: -30, useCustomSlidingRotationalSpeed: true });
+  const T = car.type;
+  for (const [x, z] of T.wheels)
+    v.addWheel({ radius: T.r, directionLocal: new CANNON.Vec3(0, -1, 0), suspensionStiffness: T === CAR_TYPES.van ? 34 : T === CAR_TYPES.sports ? 52 : 40, suspensionRestLength: 0.32, frictionSlip: T.slip, dampingRelaxation: 2.4, dampingCompression: 4.5, maxSuspensionForce: 1e6, rollInfluence: 0.02,
+      axleLocal: new CANNON.Vec3(-1, 0, 0), chassisConnectionPointLocal: new CANNON.Vec3(x, T.conn, z), maxSuspensionTravel: 0.3, customSlidingRotationalSpeed: -30, useCustomSlidingRotationalSpeed: true });
   v.addToWorld(world); car.vehicle = v; driving = car; car.alarm?.stop(); car.alarm = null;
   if (held) dropHeld(); setHighlight(null);
-  engine = A.loopAt('engine', null, 0.35, 0.8); A.SFX.door?.(0.6); toast(isTouch ? 'Joystick to drive · Grab to get out' : 'W/S drive · A/D steer · Space handbrake · E get out · V camera');
+  engine = A.loopAt('engine', null, 0.35, T.pitch); radio(false); toast(isTouch ? `${T.name}: joystick to drive · Grab to get out` : `${T.name}: W/S drive · A/D steer · Space handbrake · R radio · E get out · V camera`);
   emit('drive');
+}
+const STATIONS = ['SMASH FM', 'Chill Waves', 'Radio off']; let station = 0;
+function radio(next) { // in the car the music becomes a radio: R changes station
+  if (next) { station = (station + 1) % STATIONS.length; A.SFX.static(); }
+  const st = STATIONS[station];
+  if (st === 'Radio off') A.setMusic(false, true); else { A.setMusicStyle(st === 'SMASH FM' ? 'heavy' : 'calm'); A.setMusic(true, true); }
+  if (next || station !== 2) toast(`Radio: ${st}`);
 }
 function exitCar(eject) {
   const car = driving; if (!car) return;
   car.vehicle.removeFromWorld(world); car.vehicle = null; wheelShapes(car.body, true); driving = null; engine?.stop(); engine = null;
+  A.setMusicStyle(opts.gm === 'zen' || room.calm ? 'calm' : 'heavy'); A.setMusic(opts.music, true); // the radio goes off with the engine
   const yaw = carYaw(car), side = eject ? 2.6 : 1.7, x = car.body.position.x + Math.cos(yaw) * side, z = car.body.position.z - Math.sin(yaw) * side;
   player.x = x; player.z = z; player.yaw = yaw + Math.PI; player.pitch = -0.1; updatePlayer(0);
 }
@@ -991,15 +1039,15 @@ function updateDriving(dt) {
   thr = Math.max(-1, Math.min(1, thr)); steer = Math.max(-1, Math.min(1, steer));
   const q = b.quaternion, fwd = q.vmult(new CANNON.Vec3(0, 0, 1)), right = q.vmult(new CANNON.Vec3(1, 0, 0)), vf = b.velocity.dot(fwd), vs = b.velocity.dot(right);
   car.speed = b.velocity.length();
-  const maxF = car.dead ? 0 : 3300 * (car.hp > 30 ? 1 : 0.55), hand = keys.Space;
+  const T = car.type, maxF = car.dead ? 0 : T.force * (car.hp > 30 ? 1 : 0.55), hand = keys.Space;
   let force = 0, brake = 0;
   if (thr > 0) force = vf < -1 ? 0 : maxF * thr; else if (thr < 0) { if (vf > 1.2) brake = 60 * -thr; else force = maxF * 0.55 * thr; } else brake = 2;
   if (thr > 0 && vf < -1) brake = 60;
   for (const i of [2, 3]) { v.applyEngineForce(-force, i); v.setBrake(hand ? 90 : brake, i); }
-  for (const i of [0, 1]) { v.setBrake(brake, i); v.setSteeringValue(steer * 0.55 * (1 - Math.min(0.65, car.speed / 38)), i); }
+  for (const i of [0, 1]) { v.setBrake(brake, i); v.setSteeringValue(steer * T.steer * (1 - Math.min(0.65, car.speed / 38)), i); }
   b.velocity.y = Math.min(b.velocity.y, 6);
   player.x = b.position.x; player.z = b.position.z; player.bob += dt * 2;
-  if (engine) { engine.rate(0.75 + Math.min(1.6, Math.abs(vf) / 14) + (thr !== 0 ? 0.15 : 0)); engine.set(0.28 + Math.min(0.25, Math.abs(thr) * 0.15 + car.speed / 120)); }
+  if (engine) { engine.rate(T.pitch + Math.min(1.6, Math.abs(vf) / 14) + (thr !== 0 ? 0.15 : 0)); engine.set(0.28 + Math.min(0.25, Math.abs(thr) * 0.15 + car.speed / 120)); }
   skidT -= dt; if ((Math.abs(vs) > 4.5 || (hand && car.speed > 8)) && skidT <= 0) { skidT = 0.45; A.SFX.skid(Math.min(1, Math.abs(vs) / 9 + 0.3)); }
   const [bx1, bx2, bz1, bz2] = room.bounds; if (b.position.x < bx1 - 2 || b.position.x > bx2 + 2 || b.position.z < bz1 - 2 || b.position.z > bz2 + 2) { b.position.set(Math.max(bx1, Math.min(bx2, b.position.x)), 0.6, Math.max(bz1, Math.min(bz2, b.position.z))); b.velocity.setZero(); }
   if (b.quaternion.vmult(new CANNON.Vec3(0, 1, 0)).y < 0.2 && car.speed < 1) { b.quaternion.setFromEuler(0, carYaw(car), 0); b.position.y += 1; } // flipped: put it back on its wheels
@@ -1054,10 +1102,8 @@ function spawnTraffic(n) {
     const a = sgn > 0 ? from : from + 50, d = axis === 'x' ? new THREE.Vector3(sgn, 0, 0) : new THREE.Vector3(0, 0, sgn);
     const node = axis === 'x' ? new THREE.Vector3(a, 0, line) : new THREE.Vector3(line, 0, a);
     if (Math.hypot(node.x - player.x, node.z - player.z) < 25) continue;
-    const color = pick([0xb3202a, 0x2a5ab3, 0x2a8a4a, 0xd9a22a, 0x8a8f96, 0xe8e8ec, 0xd8c020]);
-    const body = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, position: new CANNON.Vec3(node.x, 0, node.z) });
-    body.addShape(new CANNON.Box(new CANNON.Vec3(0.9, 0.42, 2.1)), new CANNON.Vec3(0, 0.62, 0)); body.addShape(new CANNON.Box(new CANNON.Vec3(0.82, 0.24, 0.9)), new CANNON.Vec3(0, 1.22, -0.22)); world.addBody(body);
-    const car = { body, ...carMesh(color), hp: 100, dead: false, speed: 0, alarm: null, smokeT: 0, color, ai: { node, d, s: rand(5, 40), v: 6, next: null, turn: null } };
+    const type = pickType(), color = typeColor(type), body = carBody(type, node.x, node.z, 0, true);
+    const car = { body, ...carMesh(color, type), type: CAR_TYPES[type], hp: type === 'van' ? 130 : 100, dead: false, speed: 0, alarm: null, smokeT: 0, color, ai: { node, d, s: rand(5, 40), v: 6, next: null, turn: null } };
     body.addEventListener('collide', e => carImpact(car, e)); cars.push(car); traffic.push(car); pickNext(car.ai);
   }
 }
@@ -1069,7 +1115,7 @@ function pickNext(ai) { // at the next crossing: straight, left or right, never 
 const laneRight = d => new THREE.Vector3(-d.z, 0, d.x);
 function freeTraffic(car) {
   const ai = car.ai; if (!ai) return; car.ai = null; traffic = traffic.filter(c => c !== car);
-  const b = car.body, v = b.velocity.clone(); b.type = CANNON.Body.DYNAMIC; b.mass = 900; wheelShapes(b, true); b.updateMassProperties(); b.velocity.copy(v); b.angularDamping = 0.5; b.linearDamping = 0.08; b.wakeUp();
+  const b = car.body, v = b.velocity.clone(); b.type = CANNON.Body.DYNAMIC; b.mass = car.type.mass; wheelShapes(b, true); b.updateMassProperties(); b.velocity.copy(v); b.angularDamping = 0.5; b.linearDamping = 0.08; b.wakeUp();
 }
 function blocked(car, pos, dir) { // anything in the lane ahead: another car, you, your car
   for (const o of cars) { if (o === car) continue; const dx = o.body.position.x - pos.x, dz = o.body.position.z - pos.z, ahead = dx * dir.x + dz * dir.z, side = Math.abs(dx * dir.z - dz * dir.x); if (ahead > 0 && ahead < 8.5 && side < 1.9) return true; }
@@ -1118,13 +1164,13 @@ function carRayHit(origin, dir, far) {
 }
 function pushOutOfCars() { // walking into a car stops you at its side
   for (const c of cars) { const yaw = carYaw(c), dx = player.x - c.body.position.x, dz = player.z - c.body.position.z, cs = Math.cos(yaw), sn = Math.sin(yaw);
-    let lx = dx * cs - dz * sn, lz = dx * sn + dz * cs; const ex = CAR_HALF[0] + 0.3 - Math.abs(lx), ez = CAR_HALF[1] + 0.3 - Math.abs(lz);
+    let lx = dx * cs - dz * sn, lz = dx * sn + dz * cs; const E = c.type ? c.type.ext : SEDAN.ext, ex = E[0] + 0.3 - Math.abs(lx), ez = E[1] + 0.3 - Math.abs(lz);
     if (ex <= 0 || ez <= 0) continue; if (ex < ez) lx += Math.sign(lx || 1) * ex; else lz += Math.sign(lz || 1) * ez;
     player.x = c.body.position.x + lx * cs + lz * sn; player.z = c.body.position.z - lx * sn + lz * cs; }
 }
 function cockpitCamera() { // first person in the car: the driver's seat, looking where the car points (mouse looks around)
   if (view !== 'fp') return; const c = driving; c.g.updateMatrixWorld();
-  camera.position.copy(c.g.localToWorld(new THREE.Vector3(0.38, 1.28, 0.05)));
+  camera.position.copy(c.g.localToWorld(new THREE.Vector3(0.38, c.type === CAR_TYPES.van ? 1.85 : c.type === CAR_TYPES.sports ? 1.0 : 1.28, c.type === CAR_TYPES.van ? 1.4 : 0.05)));
   camera.quaternion.copy(c.g.quaternion).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch * 0.6, Math.PI + (player.yaw - (carYaw(c) + Math.PI)) * 0, 0, 'YXZ')));
 }
 const human = { src: null, p: null, mixer: null, acts: {}, cur: null, weapon: null };
@@ -1366,6 +1412,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') startSwing(W.hands ? 'kick' : 'swing');
   if (e.code === 'KeyF') W.hands ? startSwing('slap') : grabOrThrow();
   if (e.code === 'KeyV') toggleView();
+  if (e.code === 'KeyR' && driving) radio(true);
   if (e.code === 'KeyE') { if (carKey()) return; grabOrThrow(); }
   if (e.code === 'KeyQ') dropHeld();
   if (opts.gm === 'build' && state === 'play' && /^Digit[1-7]$/.test(e.code)) placePreset(+e.code.slice(5) - 1);
@@ -1531,7 +1578,7 @@ function frame(now) {
     $('rageFill').style.width = (rage ? (rageUntil - now) / 80 : rageMeter) + '%';
     $('rageTxt').textContent = rage ? 'Rage mode x2' : 'Rage';
     const nc = !driving && !held && cars.length ? nearCar() : null;
-    const hint = driving ? (isTouch ? `Grab: get out · ${Math.round(driving.speed * 3.6)} km/h` : `E get out · V camera · Space handbrake · ${Math.round(driving.speed * 3.6)} km/h`) : nc ? (isTouch ? 'Grab: get in the car' : 'E: get in the car · V: switch camera') : held ? (isTouch ? 'Smash hits with it · Throw throws it' : `Click to hit with the ${nameOf(held.key)} · E throws · hold right-click for a power throw · Q drop`)
+    const hint = driving ? (isTouch ? `Grab: get out · ${Math.round(driving.speed * 3.6)} km/h` : `${driving.type.name} · E get out · V camera · Space handbrake · R radio · ${Math.round(driving.speed * 3.6)} km/h`) : nc ? (isTouch ? 'Grab: get in the car' : 'E: get in the car · V: switch camera') : held ? (isTouch ? 'Smash hits with it · Throw throws it' : `Click to hit with the ${nameOf(held.key)} · E throws · hold right-click for a power throw · Q drop`)
       : hlTarget ? (isTouch ? `Grab the ${nameOf(hlTarget.key)}` : `E or right-click: grab the ${nameOf(hlTarget.key)}`)
       : W.hands && !isTouch ? 'Click punch · F slap · Space kick' : '';
     $('kickBtn').classList.toggle('hidden', !W.hands);

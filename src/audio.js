@@ -151,6 +151,7 @@ export const SFX = {
       : kind === 'clay' ? smp('punch', 0.25 * i, 0.6) : smp('plastic', 0.3 * i, rand(1.1, 1.5));
     if (!ok) SYN.clink(kind, i);
   },
+  static(i = 1) { if (!ac) return; const t = now(); nz(t, 0.3, 'bandpass', 2400, 0.4, 0.22 * i); nz(t + 0.05, 0.12, 'highpass', 5000, 0.7, 0.1 * i); }, // radio tuning between stations
   skid(i = 1) { smp('skid', i, rand(0.9, 1.1)); },
   pball(i = 1) { smp('pball', i, rand(0.95, 1.08)); }, // paintball marker: built from real slap, hiss and click recordings
   splat(i = 1) { smp('slap', 0.55 * i, rand(0.75, 0.9)); smp('splash', 0.35 * i, rand(1.4, 1.8), 0.005); }, // a paintball bursting
