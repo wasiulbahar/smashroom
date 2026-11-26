@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { makeStyle, detectGPU, canvasTex } from './style.js?v=23';
-import { SCENES } from './scenes.js?v=23';
-import { createItems, DEFS } from './items.js?v=23';
-import * as A from './audio.js?v=23';
-import { preloadItemModels } from './models.js?v=23';
-import { createClayFigure, preloadClayBody } from './clay.js?v=23';
-import { createReplay } from './replay.js?v=23';
-import { clayBody } from './clay.js?v=23';
+import { makeStyle, detectGPU, canvasTex } from './style.js?v=24';
+import { SCENES } from './scenes.js?v=24';
+import { createItems, DEFS } from './items.js?v=24';
+import * as A from './audio.js?v=24';
+import { preloadItemModels } from './models.js?v=24';
+import { createClayFigure, preloadClayBody } from './clay.js?v=24';
+import { createReplay } from './replay.js?v=24';
+import { clayBody } from './clay.js?v=24';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const $ = id => document.getElementById(id);
@@ -38,6 +38,7 @@ const WEAPONS = {
   katana: { name: 'Katana', desc: 'Fast and razor sharp: slices things clean in two along your swing.', power: 3, reach: 2.2, cone: 0.86, speed: 0.24, knock: 3, slice: true },
   wreck: { name: 'Wrecking ball', desc: 'Calls down a crane ball that swings through whatever you point at.', tool: 'wreck', speed: 0.5, power: 0, reach: 1, cone: 1, knock: 0 },
   blower: { name: 'Leaf blower', desc: 'Hold to blast shards, dust and light things across the room.', tool: 'blow', speed: 0.2, power: 0, reach: 6, cone: 1, knock: 0 },
+  cannon: { name: 'Ball cannon', desc: 'Fires heavy iron balls that smash through whatever is in the way. Press 8 for a ramp, 9 for a trampoline.', tool: 'cannon', speed: 0.9, power: 0, reach: 1, cone: 1, knock: 0 },
   grav: { name: 'Gravity gun', desc: 'Click to lift anything, even a TV or a car. Click again to fling it.', tool: 'grav', speed: 0.3, power: 0, reach: 15, cone: 1, knock: 0 },
   paintball: { name: 'Paintball gun', desc: 'Splat the room in colour. Pops glass, knocks small things over. Hold to keep firing.', tool: 'paint', speed: 0.14, power: 0, reach: 30, cone: 1, knock: 2 },
   bowling: { name: 'Bowling ball', desc: 'Roll a heavy ball into rows of bottles, stacks and dominoes.', tool: 'bowl', speed: 0.7, power: 0, reach: 1, cone: 1, knock: 0 },
@@ -85,7 +86,7 @@ function build() {
   pivot = new THREE.Group(); camera.add(pivot); equip(opts.weapon);
   const sea = season(); if (sea && room.pool.length) room.pool = room.pool.concat(SEASON_ITEMS[sea]); // holiday things mixed into the room
   I.batch(room.pool, room.slots, opts.gm === 'build' ? 10 : batchSize());
-  applyWords(); fireworks = []; fwT = 0; room.extra = []; broken = 0; rushT = performance.now() + 4000; pressT = 0; pressSnd?.stop(); pressSnd = null; beltT = 0; boss = null; bossAt = performance.now() + 25000; $('boss').classList.add('hidden');
+  applyWords(); fireworks = []; fwT = 0; room.extra = []; broken = 0; fires = []; fireSnd?.stop(); fireSnd = null; fireLight = null; toys = 0; jumpT = 0; floorHits = []; basement = null; floorY = 0; fall = null; storm = null; rushT = performance.now() + 4000; pressT = 0; pressSnd?.stop(); pressSnd = null; beltT = 0; boss = null; bossAt = performance.now() + 25000; $('boss').classList.add('hidden');
   I.onBossHit = it => { it.pop = 1; A.at(it.body.position, () => A.SFX[it.def.kind]?.(0.5, 0.7)); shake = Math.max(shake, 0.08); };
   if (!room.open && !room.calm && room.pool.length && opts.gm !== 'build' && Math.random() < 0.45) dominoRun();
   if (Math.random() < 0.7) I.pyramid(room.slots);
@@ -115,6 +116,7 @@ function buildWeapon(key) {
   if (key === 'katana') { add(C(0.018, 0.018, 0.26, 10), 'fabric', 0x1a1a22, 0.13); add(B(0.1, 0.016, 0.06), 'metal', 0xc8a040, 0.27); add(B(0.032, 0.86, 0.006), 'metal', 0xe8ecf0, 0.71); add(B(0.03, 0.04, 0.006), 'metal', 0xe8ecf0, 1.15); }
   if (key === 'wreck') { add(B(0.09, 0.15, 0.05), 'plastic', 0xf0c020, 0, 0, -0.1); add(B(0.05, 0.025, 0.01), 'plastic', 0xc8202a, 0.04, 0, -0.07); const a = add(C(0.004, 0.004, 0.2, 6), 'metal', 0x2a2a2e, 0.17, 0.03, -0.1); g.userData.pose = 'gun'; }
   if (key === 'blower') { add(B(0.14, 0.16, 0.22), 'plastic', 0xd86a1a, -0.05, 0, 0); const t = add(C(0.04, 0.03, 0.6, 14), 'plastic', 0x2a2a2e, 0, 0, -0.38); t.rotation.x = Math.PI / 2; add(B(0.03, 0.1, 0.03), 'plastic', 0x2a2a2e, 0.09, 0, 0.05); g.userData.pose = 'gun'; }
+  if (key === 'cannon') { const b = add(C(0.07, 0.085, 0.5, 18), 'metal', 0x2a2a2e, 0, 0, -0.18); b.rotation.x = Math.PI / 2; add(new THREE.TorusGeometry(0.075, 0.015, 8, 18), 'metal', 0x8a6a2a, 0, 0, -0.43); add(B(0.12, 0.1, 0.16), 'wood', 0x6a4a2a, -0.06, 0, 0.08); add(B(0.04, 0.12, 0.05), 'plastic', 0x1a1a1e, -0.1, 0, 0.12); g.userData.pose = 'gun'; }
   if (key === 'grav') { add(B(0.1, 0.12, 0.34), 'metal', 0x3a3e48, 0, 0, -0.05); for (const s of [-1, 1]) { const p = add(B(0.012, 0.012, 0.2), 'metal', 0xb8bcc4, 0.04 * s, 0.03 * s, -0.3); }
     add(new THREE.SphereGeometry(0.035, 14, 10), 'emissive', 0x6ad8ff, 0, 0, -0.24); add(B(0.04, 0.12, 0.05), 'plastic', 0x1a1a1e, -0.08, 0, 0.06); g.userData.pose = 'gun'; }
   if (key === 'paintball') { const b = add(B(0.07, 0.11, 0.32), 'plastic', 0x1e2a1e, 0, 0, -0.12); add(B(0.05, 0.14, 0.06), 'plastic', 0x1e2a1e, -0.09, 0.04); const br = add(C(0.016, 0.016, 0.34, 10), 'metal', 0x2a2a2e, 0.03, 0, -0.42); br.rotation.x = Math.PI / 2; add(new THREE.SphereGeometry(0.05, 14, 10), 'plastic', 0xf0c020, 0.08, 0, -0.08); g.userData.pose = 'gun'; }
@@ -210,7 +212,7 @@ function crackScreen(it) {
 function onBreak(it, fromHit) {
   const d = it.def, p = it.body.position;
   const sz = Math.min(1.2, d.size), rate = Math.max(0.7, Math.min(1.15, 1.22 - sz * 0.55)), lv = Math.max(0.85, Math.min(1.25, 0.8 + sz * 0.5));
-  A.at(p, () => { (A.SFX[d.kind] || A.SFX.plastic)(lv, rate); if (sz > 0.4) A.SFX.body(lv); }); // small things ring high and light, big things low and loud
+  const zl = room.zen ? 0.5 : 1; A.at(p, () => { (A.SFX[d.kind] || A.SFX.plastic)(lv * zl, rate * (room.zen ? 0.9 : 1)); if (sz > 0.4) A.SFX.body(lv * zl); }); // zen garden: softer, lower // small things ring high and light, big things low and loud
   const big = d.size > 0.45 || (fromHit && heavyNow);
   puff(p, DUST[d.kind] || 0xbbbbbb, big ? 6 : 3, 0.2 + sz * 0.5, 0.25, d.kind === 'glass' ? 0.25 : 0.5);
   if (d.kind === 'electronics') smokers.push({ p: new THREE.Vector3(p.x, p.y, p.z), until: performance.now() + 2200 });
@@ -260,6 +262,7 @@ function explode(p, src) {
   if (chain.n >= 2 && state === 'play') { banner('Chain reaction x' + chain.n); addScore(20 * chain.n, P, 'big'); maxStat('chainLen', chain.n); }
   for (const f of room.furniture) { if (f.dead) continue; const c = f.parts[0].position, d = c.distanceTo(P); if (d < R + 0.6) { f.hp -= 7 * (1 - d / (R + 0.6)) + 2; if (f.hp <= 0) collapse(f, c.clone().sub(P).setY(0).normalize()); } }
   for (const L of room.lamps) if (!L.broken && L.pos.distanceTo(P) < R + 0.5) breakLamp(L);
+  for (const f of room.furniture) if (!f.dead && f.parts[0].position.distanceTo(P) < R + 0.8) ignite(f, true);
   A.at(P, () => A.SFX.boom()); puff(P, 0x3a3632, 8, 1.1, 0.8, 0.6);
   if (Math.hypot(P.x - player.x, P.z - player.z) < 5) { deafUntil = now + 1500; A.SFX.ring(); }
   shake = Math.max(shake, 0.7); flash(0.5); freeze(110); slowUntil = now + 700; vibrate(150); kick = Math.min(0.12, kick + 0.08);
@@ -276,6 +279,7 @@ function explode(p, src) {
     const f = 1 - d / R, dir = new THREE.Vector3(q.x - P.x, q.y - P.y + 0.3, q.z - P.z).normalize();
     if (!it.fixed) { it.body.wakeUp(); it.born = 0; it.body.velocity.set(it.body.velocity.x + dir.x * 14 * f, it.body.velocity.y + dir.y * 10 * f + 4 * f, it.body.velocity.z + dir.z * 14 * f); }
     const lit = it.def.kind === 'explosive' && d < R * 0.8 && !it.chain; if (lit) it.chain = chain; // gas cans nearby go off in turn
+    if (burnable(it) && d < R * 1.1) ignite(it);
     if (it.def.hp !== Infinity && (d < R * 0.65 || lit)) { it.blasted = true; it.blast = blast; setTimeout(() => { if (!it.dead) I.shatter(it, dir, 6 * f + 2, false); }, 50 + d * 120); }
   }
   for (const c of I.chunks) { const q = c.body.position, d = Math.hypot(q.x - P.x, q.y - P.y, q.z - P.z); if (d < R) { const f = 1 - d / R; c.body.wakeUp(); c.body.velocity.set((q.x - P.x) / d * 12 * f, 3 + 8 * f, (q.z - P.z) / d * 12 * f); } }
@@ -536,7 +540,7 @@ function markNear(p, type, size, color) {
 
 // ---------- scoring helpers
 function startRage() { rageMeter = 0; rageUntil = performance.now() + 8000; banner('Rage mode'); A.SFX.rage(); slowUntil = performance.now() + 400; document.body.classList.add('rage'); }
-function addScore(n, p, cls) { if (state !== 'play') return; score += n; replay.mark(n); popup('+' + n, p, cls); }
+function addScore(n, p, cls) { if (state !== 'play' || room.zen) return; /* the zen garden keeps no score */ score += n; replay.mark(n); popup('+' + n, p, cls); }
 function popup(text, p, cls = '') {
   v1.set(p.x, p.y + 0.15, p.z).project(camera); if (v1.z > 1) return;
   const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = text;
@@ -841,6 +845,7 @@ function useTool() {
   if (W.tool === 'foam' && !foamSnd) foamSnd = A.loopAt('spray', camera.position, 0.5, 1.35);
   if (W.tool === 'blow' && !foamSnd) foamSnd = A.loopAt('engine', null, 0.22, 2.5);
   if (W.tool === 'wreck') wreckingBall();
+  if (W.tool === 'cannon') fireCannon();
   if (W.tool === 'grav') gravClick();
 }
 function updateTools(dt, now) {
@@ -876,7 +881,7 @@ function updateTools(dt, now) {
   if (W.tool === 'foam') {
     if (!on) toolStop();
     else {
-      const { o, f } = toolOrigin(); foamT += dt;
+      const { o, f } = toolOrigin(); foamT += dt; douse(o, f, 4.5);
       puff(o.clone().addScaledVector(f, 0.15), 0xffffff, 2, 0.22, 0, 0.75, 0.8, f.clone().multiplyScalar(7));
       if (foamT > 0.07) { foamT = 0; const d = f.clone().add({ x: rand(-0.14, 0.14), y: rand(-0.14, 0.1), z: rand(-0.14, 0.14) }).normalize(), h = surfaceHit(o, d, 4.5); if (h) addMark(h.point, h.normal, 'foam', rand(0.3, 0.55), 0xffffff); }
       for (const it of I.list) { if (it.dead || it.fixed || it.held) continue; const q = it.body.position, v = new THREE.Vector3(q.x - o.x, q.y - o.y, q.z - o.z), dist = v.length(); if (dist > 4 || v.normalize().dot(f) < 0.86) continue;
@@ -1002,7 +1007,7 @@ function groundPound() { // jump and slam: a shockwave through everything around
       if (it.def.hp !== Infinity && d < 2.6 && (it.def.size < 0.4 || it.key === 'mini' || it.key === 'minitree')) setTimeout(() => !it.dead && I.shatter(it, new THREE.Vector3(q.x - P.x, 0.6, q.z - P.z).normalize(), 3, false), 40 + d * 60); }
     for (const c of I.chunks) { const q = c.body.position, d = Math.hypot(q.x - P.x, q.z - P.z); if (d < R) { c.body.wakeUp(); c.body.velocity.y += 5 * (1 - d / R); } }
     for (const f of room.furniture) { if (f.dead) continue; const c = f.parts[0].position, d = Math.hypot(c.x - P.x, c.z - P.z); if (d < 2.6) { f.hp -= 4; if (f.hp <= 0) collapse(f, new THREE.Vector3(c.x - P.x, 0, c.z - P.z).normalize()); } }
-    if (state === 'play') { addScore(10, P, 'small'); emit('pound'); addStat('pounds'); }
+    if (state === 'play') { addScore(10, P, 'small'); emit('pound'); addStat('pounds'); if (floorY === 0) poundFloor(P); }
   }, 380);
 }
 
@@ -1467,6 +1472,145 @@ function updateMachines(dt, now) {
     if (beltT <= 0 && live) { beltT = 1.1; for (const b of room.belts) if (Math.random() < 0.7 && I.list.filter(i => !i.dead && Math.abs(i.body.position.z - b.z) < 0.4 && i.body.position.y > b.y - 0.1).length < 12) { const it = I.add(pick(room.beltKeys), b.x1, b.y, b.z + rand(-0.08, 0.08), rand(0, 6)); it.born = now; } }
   }
 }
+// ---------- Fire: blasts set wood alight, flames spread to whatever is close, the extinguisher puts them out
+let fires = [], fireTex = null, fireSnd = null, fireLight = null, fireT = 0;
+const burnable = it => it.def.kind === 'wood' && !it.dead && !it.held;
+function flameTex() {
+  if (fireTex) return fireTex; const c = document.createElement('canvas'); c.width = 64; c.height = 96; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 70, 2, 32, 58, 34); gr.addColorStop(0, 'rgba(255,214,120,.95)'); gr.addColorStop(0.3, 'rgba(255,130,30,.8)'); gr.addColorStop(0.7, 'rgba(210,50,5,.4)'); gr.addColorStop(1, 'rgba(160,20,0,0)');
+  g.fillStyle = gr; g.beginPath(); g.moveTo(32, 2); g.bezierCurveTo(58, 40, 62, 92, 32, 94); g.bezierCurveTo(2, 92, 6, 40, 32, 2); g.fill();
+  return (fireTex = new THREE.CanvasTexture(c));
+}
+function ignite(tg, furn) {
+  if (!tg || tg.fire || tg.dead) return;
+  const size = furn ? 0.7 : Math.max(0.3, Math.min(0.9, tg.def.size * 1.3)), n = furn ? 6 : 3, sprites = [];
+  for (let i = 0; i < n; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTex(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false }));
+    s.userData.o = furn ? new THREE.Vector3(rand(-0.6, 0.6), 0, rand(-0.3, 0.3)) : new THREE.Vector3(rand(-0.1, 0.1), 0, rand(-0.1, 0.1)); s.userData.ph = rand(0, 6); s.scale.set(0.01, 0.01, 1); scene.add(s); sprites.push(s); }
+  const f = { tg, furn, sprites, size, t: 0, life: furn ? rand(10, 14) : rand(5, 8), smoke: 0 }; tg.fire = f; fires.push(f);
+}
+const firePos = f => f.furn ? f.tg.parts[0].position : f.tg.mesh.position;
+function updateFire(dt, now) {
+  if (!fireLight || fireLight.parent !== scene) { fireLight = new THREE.PointLight(0xff8a30, 0, 9, 2); scene.add(fireLight); }
+  fires = fires.filter(f => {
+    if (f.tg.dead || f.out) { f.sprites.forEach(s => { scene.remove(s); s.material.dispose(); }); f.tg.fire = null; return false; }
+    f.t += dt; const p = firePos(f), grow = Math.min(1, f.t / 1.2), top = f.furn ? 0.05 : f.tg.def.size * 0.3;
+    f.sprites.forEach((s, i) => { const k = grow * f.size * (0.85 + 0.25 * Math.sin(now * 0.018 + s.userData.ph) + 0.1 * Math.sin(now * 0.041 + i)); s.scale.set(k * 0.75, k * 1.3, 1); s.position.copy(p).add(s.userData.o).y += top + k * 0.5; });
+    if ((f.smoke -= dt) < 0) { f.smoke = 0.35; puff(new THREE.Vector3(p.x, p.y + top + f.size, p.z), 0x2a2622, 1, 0.35 * f.size + 0.2, 0.9, 0.3, 2.2); }
+    if (f.t > f.life) { // burnt through
+      if (f.furn) { f.tg.hp = 0; collapse(f.tg, new THREE.Vector3(rand(-1, 1), 0, rand(-1, 1)).normalize()); }
+      else if (state === 'play') I.shatter(f.tg, new THREE.Vector3(0, 1, 0), 1, false);
+      f.out = true; }
+    return true; });
+  if ((fireT -= dt) < 0 && fires.length) { fireT = 0.8; // spread to wood close by, cook gas cans
+    for (const f of fires.slice()) { if (f.t < 1.5) continue; const p = firePos(f), r = f.furn ? 1.4 : 1;
+      for (const it of I.list) { if (it.dead || it.fire || it.held) continue; const q = it.body.position, d = Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z); if (d > r) continue;
+        if (burnable(it) && Math.random() < 0.4) ignite(it); if (it.def.kind === 'explosive' && (it.cook = (it.cook || 0) + 0.8) > 2.4 && state === 'play') I.shatter(it, new THREE.Vector3(0, 1, 0), 3, false); }
+      for (const fu of room.furniture) if (!fu.dead && !fu.fire && fu.parts[0].position.distanceTo(p) < r + 0.4 && Math.random() < 0.3) ignite(fu, true); } }
+  const near = fires.reduce((m, f) => Math.min(m, Math.hypot(firePos(f).x - player.x, firePos(f).z - player.z)), 99);
+  if (fires.length) { const f0 = fires[0], p = firePos(f0); fireLight.position.set(p.x, p.y + 0.6, p.z); fireLight.intensity = (S.realistic ? 10 : 3) * Math.min(1.6, 0.6 + fires.length * 0.15) * (0.8 + Math.random() * 0.4); }
+  else fireLight.intensity = 0;
+  const g = fires.length ? Math.min(0.7, 0.18 + fires.length * 0.06) * Math.max(0, 1 - near / 14) : 0;
+  if (g > 0.01 && !fireSnd && state === 'play') fireSnd = A.loopAt('fire', null, 0, 1); if (fireSnd) { fireSnd.set(g); if (!fires.length) { fireSnd.stop(); fireSnd = null; } }
+}
+function douse(o, f, reach) { // foam over a fire puts it out
+  for (const fi of fires) { const p = firePos(fi), v = p.clone().sub(o), d = v.length(); if (d > reach || v.normalize().dot(f) < 0.8) continue;
+    fi.out = true; puff(p.clone().add({ x: 0, y: 0.3, z: 0 }), 0xe8e8ec, 4, 0.5, 0.8, 0.5, 1.6); if (state === 'play') { popup('Out!', { x: p.x, y: p.y + 0.6, z: p.z }, 'small'); addScore(5, p, 'small'); addStat('fires'); } }
+}
+
+// ---------- Toys: a ball cannon, ramps and trampolines (8 and 9 put them where you look)
+let toys = 0, jumpT = 0;
+function fireCannon() {
+  const o = camera.getWorldPosition(new THREE.Vector3()), f = camera.getWorldDirection(new THREE.Vector3()), r = 0.14, p = o.clone().addScaledVector(f, 0.9);
+  const body = new CANNON.Body({ mass: 14, shape: new CANNON.Sphere(r), position: new CANNON.Vec3(p.x, p.y - 0.1, p.z), linearDamping: 0.01, angularDamping: 0.05 }); body.velocity.set(f.x * 26, f.y * 26 + 1.5, f.z * 26);
+  body.addEventListener('collide', e => { const v = Math.abs(e.contact.getImpactVelocityAlongNormal()); if (v < 4) return;
+    const fu = room.furniture.find(q => !q.dead && q.parts.some(m => m.userData.body === e.body)); if (fu) { fu.hp -= v * 0.4; if (fu.hp <= 0) collapse(fu, new THREE.Vector3(body.velocity.x, 0, body.velocity.z).normalize()); }
+    A.at(body.position, () => A.SFX.thud('stone', Math.min(1, v / 14), 0.6)); });
+  world.addBody(body); const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 14), S.mat('metal', 0x26262a)); mesh.castShadow = true; scene.add(mesh); S.outline(mesh, 1.04);
+  balls.push({ body, mesh }); while (balls.length > 6) { const b = balls.shift(); world.removeBody(b.body); scene.remove(b.mesh); }
+  A.at(o, () => { A.SFX.stone(1.1, 0.45); A.SFX.body(1.2); }); puff(p, 0x8a8478, 4, 0.4, 0.3, 0.55, 1.2, f.clone().multiplyScalar(2)); shake = Math.max(shake, 0.25); kick = Math.min(0.12, kick + 0.07); recoil = 1; vibrate(60);
+}
+function placeToy(kind) {
+  if (state !== 'play' || paused || driving || room.open) return; if (toys >= 4) { toast('That is enough toys for one room'); return; }
+  const yaw = player.yaw, fw = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), c = new THREE.Vector3(player.x, 0, player.z).addScaledVector(fw, kind === 'ramp' ? 2.6 : 2);
+  const [x1, x2, z1, z2] = room.bounds; if (c.x < x1 + 0.6 || c.x > x2 - 0.6 || c.z < z1 + 0.6 || c.z > z2 - 0.6) { toast('Not enough room there'); return; }
+  const wood = S.surface('wood', 1, 1), add = (w, h, d, mat, y, rx = 0, phys = true) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(c.x, y, c.z); m.rotation.set(rx, yaw, 0, 'YXZ'); m.castShadow = m.receiveShadow = true; scene.add(m); S.outline(m, 1.02);
+    if (!phys) return m; const b = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2)), position: new CANNON.Vec3(c.x, y, c.z) }); b.quaternion.setFromEuler(rx, yaw, 0, 'YXZ'); world.addBody(b); room.statics.push(m); m.userData.body = b; return m; };
+  if (kind === 'ramp') { // a long board tipped up toward the far end: things rolling up it take off
+    const L = 2.6, a = 0.3; add(1.3, 0.08, L, wood, Math.sin(a) * L / 2, a); add(1.2, Math.sin(a) * L - 0.05, 0.08, S.mat('metal', 0x555a60), (Math.sin(a) * L) / 2, 0, false).position.addScaledVector(fw, L / 2 - 0.1);
+    room.obstacles.push([c.x - 1.2, c.x + 1.2, c.z - 1.2, c.z + 1.2]); // ponytail: square footprint around the tilted board
+    for (let k = 0; k < 3; k++) { const it = I.add(pick(['crate', 'tv', 'microwave', 'cinder']), c.x + fw.x * (L / 2 + 0.8 + k * 0.5), 0, c.z + fw.z * (L / 2 + 0.8 + k * 0.5), yaw); it.body.sleep(); }
+  } else { // trampoline: a springy pad on legs. Things bounce, and so do you if you walk onto it
+    const R = 0.9, pad = add(R * 2, 0.06, R * 2, S.mat('fabric', 0x1a1a22), 0.5); add(R * 2 + 0.16, 0.1, R * 2 + 0.16, S.mat('paint', 0x2a6ad8), 0.42, 0, false);
+    pad.userData.body.addEventListener('collide', e => { const b = e.body; if (!b.mass) return; b.wakeUp(); b.velocity.y = Math.max(6.5, Math.abs(b.velocity.y) * 0.95); A.at(b.position, () => A.SFX.bag?.(0.35)); });
+    (room.tramps ??= []).push({ x: c.x, z: c.z, r: R });
+  }
+  toys++; A.at(c, () => A.SFX.wood(0.6, 0.8)); puff(c.clone().add({ x: 0, y: 0.2, z: 0 }), 0xc8c0b4, 4, 0.5, 0.2, 0.45); emit('toy');
+}
+const jumpY = () => { const t = (performance.now() - jumpT) / 1000; return t < 0.9 ? Math.sin(t / 0.9 * Math.PI) * 1.5 : 0; };
+function updateTramps(now) { if (!room.tramps || now - jumpT < 900) return; for (const T of room.tramps) if (Math.hypot(player.x - T.x, player.z - T.z) < T.r) { jumpT = now; A.SFX.whoosh(false); vibrate(30); emit('bounce'); } }
+
+// ---------- Breakable floors: pound the same spot three times and you go through into a basement
+let floorHits = [], basement = null, floorY = 0, fall = null;
+function poundFloor(P) {
+  let h = floorHits.find(q => Math.hypot(q.x - P.x, q.z - P.z) < 1.5); if (!h) floorHits.push(h = { x: P.x, z: P.z, n: 0 }); h.n++;
+  if (h.n === 2) { addMark(new THREE.Vector3(P.x, 0.032, P.z), new THREE.Vector3(0, 1, 0), 'hole', 1.4); toast('The floor is giving way'); }
+  if (h.n >= 3 && !basement) breakFloor(P);
+}
+function breakFloor(P) {
+  if (room.open || room.space || room.gravity) return; const hit = surfaceHit(new THREE.Vector3(P.x, 0.5, P.z), new THREE.Vector3(0, -1, 0), 2), fl = hit && hit.object, sz = fl && fl.userData.size;
+  if (!sz || sz[1] > 0.3 || sz[0] < 4 || sz[2] < 4 || Math.abs(fl.position.y + 0.1) > 0.05) return;
+  const fx = fl.position.x, fz = fl.position.z, W = sz[0], D = sz[2], H = 1, BH = 3, BW = 6, BD = 6;
+  const hx = Math.max(fx - W / 2 + H + 0.4, Math.min(fx + W / 2 - H - 0.4, P.x)), hz = Math.max(fz - D / 2 + H + 0.4, Math.min(fz + D / 2 - H - 0.4, P.z));
+  world.removeBody(fl.userData.body); scene.remove(fl); room.statics.splice(room.statics.indexOf(fl), 1);
+  const mat = fl.material, box = (w, h, d, m, x, y, z) => { if (w > 0.02 && d > 0.02) room.box(w, h, d, m, x, y, z, { cast: false }); };
+  const x0 = fx - W / 2, x1 = fx + W / 2, z0 = fz - D / 2, z1 = fz + D / 2;
+  box(hx - H - x0, 0.2, D, mat, (x0 + hx - H) / 2, -0.1, fz); box(x1 - hx - H, 0.2, D, mat, (hx + H + x1) / 2, -0.1, fz);
+  box(2 * H, 0.2, hz - H - z0, mat, hx, -0.1, (z0 + hz - H) / 2); box(2 * H, 0.2, z1 - hz - H, mat, hx, -0.1, (hz + H + z1) / 2);
+  // the basement: bare concrete, one bulb, a ladder back up, and boxes of old stuff
+  const conc = S.surface('concreteFloor', 3, 3), wall = S.surface('blockWall', 3, 1.5), by = -BH;
+  room.box(BW, 0.2, BD, conc, hx, by - 0.1, hz, { cast: false }); room.box(BW, BH, 0.2, wall, hx, by + BH / 2, hz - BD / 2 - 0.1, { cast: false }); room.box(BW, BH, 0.2, wall, hx, by + BH / 2, hz + BD / 2 + 0.1, { cast: false });
+  room.box(0.2, BH, BD, wall, hx - BW / 2 - 0.1, by + BH / 2, hz, { cast: false }); room.box(0.2, BH, BD, wall, hx + BW / 2 + 0.1, by + BH / 2, hz, { cast: false });
+  const bulb = new THREE.PointLight(0xffd8a0, S.realistic ? 10 : 3, 8, 2); bulb.position.set(hx + 1.5, by + BH - 0.4, hz + 1.5); scene.add(bulb);
+  const rail = S.mat('metal', 0x8a8f96), lad = new THREE.Group(); for (const s of [-0.25, 0.25]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.05, BH + 0.5, 0.05), rail); r.position.set(s, 0, 0); lad.add(r); }
+  for (let k = 0; k < 9; k++) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.04), rail); r.position.y = -BH / 2 + 0.3 + k * 0.36; lad.add(r); } lad.position.set(hx, by + (BH + 0.5) / 2, hz - H + 0.12); scene.add(lad);
+  const stash = room.pool.filter(k => k !== 'gascan'); for (let i = 0; i < 12; i++) I.add(pick(stash.length ? stash : ['crate']), hx + rand(-BW / 2 + 0.6, BW / 2 - 0.6), by + 0.02, hz + rand(-BD / 2 + 0.8, BD / 2 - 0.6), rand(0, 6));
+  for (let i = 0; i < 22; i++) I.shard('stone', rand(0.05, 0.13), 0xb8b0a4, new THREE.Vector3(hx + rand(-0.8, 0.8), 0, hz + rand(-0.8, 0.8)), new CANNON.Vec3(), new THREE.Vector3(0, -1, 0), 2, 0.3);
+  for (const m of marks) if (Math.abs(m.position.x - hx) < H + 0.4 && Math.abs(m.position.z - hz) < H + 0.4 && m.position.y < 0.1) m.visible = false;
+  basement = { hx, hz, H, by, rect: [hx - BW / 2 + 0.35, hx + BW / 2 - 0.35, hz - BD / 2 + 0.35, hz + BD / 2 - 0.35], ladder: { x: hx, z: hz - H + 0.5 } };
+  puff(new THREE.Vector3(hx, 0.1, hz), 0xc8c0b4, 14, 0.9, 0.3, 0.6); A.at(new THREE.Vector3(hx, 0, hz), () => { A.SFX.stone(1.4, 0.5); A.SFX.boom(); }); shake = Math.max(shake, 0.7);
+  banner('Through the floor!'); addScore(150, new THREE.Vector3(hx, 0.3, hz), 'big'); emit('floor'); addStat('floors');
+}
+function updateFloor(dt, now) {
+  if (!basement) return; const B = basement, inHole = Math.abs(player.x - B.hx) < B.H - 0.25 && Math.abs(player.z - B.hz) < B.H - 0.25;
+  if (fall) { fall.v += 18 * dt * (fall.up ? -1 : 1); floorY += (fall.up ? 1 : -1) * Math.max(2, fall.up ? 3 : fall.v) * dt;
+    if (!fall.up && floorY <= B.by) { floorY = B.by; fall = null; shake = Math.max(shake, 0.35); A.SFX.land?.('stone', 1); vibrate(80); }
+    else if (fall?.up && floorY >= 0) { floorY = 0; fall = null; player.x = B.ladder.x; player.z = B.hz - B.H - 0.5; } return; }
+  if (floorY === 0 && inHole) { fall = { v: 0 }; A.SFX.whoosh(true); }
+  if (floorY < -0.5 && Math.hypot(player.x - B.ladder.x, player.z - B.ladder.z) < 0.55 && keys.KeyW) { fall = { v: 0, up: true }; toast('Climbing back up'); }
+}
+function playerRects() { return floorY < -0.5 && basement ? [basement.rect] : [room.bounds, ...(room.extra || [])]; }
+
+// ---------- Storms indoors: rain, lightning flashes, thunder, and now and then the power goes
+let storm = null;
+function startStorm() {
+  storm = null; if (!opts.storm || room.open || room.calm || OUTDOOR.has(opts.scene) || room.space) return;
+  const amb = new THREE.AmbientLight(0xd8e0ff, 0); amb.userData.keep = true; scene.add(amb); storm = { amb, next: performance.now() + rand(4000, 9000), cut: 0, lights: null }; A.storm();
+}
+function updateStorm(now) {
+  if (!storm || state !== 'play') return; const s = storm;
+  if (now > s.next) { s.next = now + rand(9000, 20000); const near = Math.random() < 0.4;
+    s.flashes = [now, now + 120, now + (near ? 260 : 400)]; flash(near ? 0.35 : 0.18); setTimeout(() => A.thunder(near), near ? 250 : rand(900, 2500));
+    if (near && !s.cut && Math.random() < 0.55) setTimeout(() => powerCut(true), 300); }
+  s.amb.intensity = (s.flashes || []).some(t => now > t && now < t + 70) ? (S.realistic ? 3 : 1.6) : 0;
+  if (s.cut && now > s.cut) { s.cut = 0; powerCut(false); }
+}
+function powerCut(off) {
+  const s = storm; if (!s) return;
+  if (off) { s.lights = []; scene.traverse(o => { if (o.isLight && !o.userData.keep && o !== fireLight && o !== boomLight) { s.lights.push([o, o.intensity]); o.intensity *= o.isHemisphereLight ? 0.12 : 0.03; } if (o.isMesh && o.visible && o.material?.isMeshBasicMaterial && o.material.toneMapped === false && !o.material.transparent) { s.glow = s.glow || []; s.glow.push(o); o.visible = false; } }); // light panels and bulbs go dark too
+    s.torch = new THREE.SpotLight(0xfff4e0, S.realistic ? 8 : 5, 14, 0.45, 0.5, 1); s.torch.userData.keep = true; s.torch.position.set(-0.1, 0.1, 0.25); s.torch.target.position.set(0, -0.15, -1); camera.add(s.torch, s.torch.target);
+    s.cut = performance.now() + rand(7000, 11000); A.SFX.zap(0.8); banner('Power cut!'); emit('powercut'); }
+  else { let k = 0; const back = () => { const on = k++ % 2 === 0 || k > 5; s.lights.forEach(([o, i]) => { o.intensity = on ? i : i * 0.03; }); (s.glow || []).forEach(m => { m.visible = on && !m.userData.broken; }); if (k <= 5) setTimeout(back, 90 + Math.random() * 120); else { camera.remove(s.torch, s.torch.target); s.lights = null; s.glow = null; } }; back(); }
+}
 // ---------- Domino runs: a snaking line across the floor that ends at gas cans
 function dominoRun() {
   const [x1, x2, z1, z2] = room.bounds, free = (x, z) => x > x1 && x < x2 && z > z1 && z < z2 && !room.obstacles.some(([a, b, c, d]) => x > a - 0.3 && x < b + 0.3 && z > c - 0.3 && z < d + 0.3) && Math.hypot(x - room.start.x, z - room.start.z) > 1.2;
@@ -1511,12 +1655,12 @@ function breakThrough(h) {
   return true;
 }
 function stayInside() { // keep the player in the room, or in any space opened up behind a wall
-  const rs = [room.bounds, ...(room.extra || [])]; if (rs.some(([a, b, c, d]) => player.x >= a && player.x <= b && player.z >= c && player.z <= d)) return;
+  const rs = playerRects(); if (rs.some(([a, b, c, d]) => player.x >= a && player.x <= b && player.z >= c && player.z <= d)) return;
   let best = null, bd = Infinity; for (const [a, b, c, d] of rs) { const x = Math.max(a, Math.min(b, player.x)), z = Math.max(c, Math.min(d, player.z)), dd = Math.hypot(x - player.x, z - player.z); if (dd < bd) { bd = dd; best = [x, z]; } }
   player.x = best[0]; player.z = best[1];
 }
 function updateRooms(dt, now) {
-  updateBoss(now); updateMachines(dt, now); updateFireworks(dt, now); updateMic(dt, now);
+  updateBoss(now); updateMachines(dt, now); updateFire(dt, now); updateTramps(now); updateFloor(dt, now); updateStorm(now); updateFireworks(dt, now); updateMic(dt, now);
   if (museumAlarm) { museumAlarm.light.intensity = Math.floor(now / 300) % 2 ? (S.realistic ? 60 : 25) : 0; if (now > museumAlarm.until) { museumAlarm.sound?.stop(); museumAlarm.light.intensity = 0; museumAlarm.done = true; } }
   for (const B of breaches) {
     if (now > B.until) { if (B.sound) { B.sound.stop(); B.sound = null; banner('Breach sealed'); } continue; }
@@ -1557,7 +1701,7 @@ async function startSession() {
   if (opts.mode === 'realistic' && modelsReady) { $('start').textContent = 'Loading…'; await modelsReady; $('start').textContent = 'Start smashing'; }
   build(); startMic();
   Object.assign(player, { x: room.start.x, z: room.start.z, yaw: 0, pitch: -0.18 });
-  timeLeft = opts.gm === 'targets' ? 90 : opts.gm === 'classic' ? SESSION : Infinity;
+  timeLeft = room.zen ? Infinity : opts.gm === 'targets' ? 90 : opts.gm === 'classic' ? SESSION : Infinity; document.body.classList.toggle('zen', !!room.zen);
   score = 0; smashed = 0; combo = 0; bestCombo = 0; rageMeter = 0; rageUntil = 0; byKind = {}; restocking = false; throws = 0;
   elapsed = 0; figureDowned = false; targetsHit = 0; kick = 0; goldenAt = performance.now() + 8000;
   if (opts.gm === 'attack') { I.batch(room.pool, room.slots, 8); I.pyramid(room.slots); }
@@ -1568,13 +1712,13 @@ async function startSession() {
   if (!save.tut || tutAgain) { tutAgain = false; startTut(); }
   for (const id of ['modeScreen', 'lobby', 'end', 'pause', 'achScreen']) $(id).classList.add('hidden');
   $('hud').classList.remove('hidden'); if (isTouch) $('touch').classList.remove('hidden');
-  A.setMusicStyle(opts.gm === 'zen' || room.calm ? 'calm' : 'heavy'); A.setMusic(opts.music, true); A.startAmbience(room.amb);
+  A.setMusicStyle(opts.gm === 'zen' || room.calm ? 'calm' : 'heavy'); A.setMusic(opts.music, true); A.startAmbience(room.amb); startStorm();
   banner({ classic: 'Go!', zen: 'Relax', attack: 'Clear the room!', targets: 'Hit the targets!', build: 'Build it, then break it' }[opts.gm]);
   $('palette').classList.toggle('hidden', opts.gm !== 'build'); if (W.tool === 'broom') spawnBin();
   if (!isTouch) lockMouse();
 }
 function endSession() {
-  state = 'end'; mouseHeld = false; dropHeld(); stopMic(); pressSnd?.stop(); pressSnd = null; setHighlight(null); document.exitPointerLock?.(); A.SFX.buzzer(); A.setMusic(opts.music, false); A.stopAmbience();
+  state = 'end'; mouseHeld = false; dropHeld(); stopMic(); pressSnd?.stop(); pressSnd = null; fireSnd?.stop(); fireSnd = null; setHighlight(null); document.exitPointerLock?.(); A.SFX.buzzer(); A.setMusic(opts.music, false); A.stopAmbience();
   document.body.classList.remove('rage'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden');
   const before = Object.keys(WEAPONS).filter(unlocked);
   save.points += score; save.smashed += smashed; maxStat('round', smashed);
@@ -1679,6 +1823,7 @@ $('watchAgain').onclick = () => replay.best && playReplay();
 $('saveClip').onclick = () => replay.download();
 $('quality').onchange = e => { opts.quality = e.target.value; build(); };
 $('mic').onchange = e => { opts.mic = e.target.checked; };
+$('storm').onchange = e => { opts.storm = e.target.checked; };
 $('season').onchange = e => { opts.season = e.target.value; build(); };
 $('music').onchange = e => { opts.music = e.target.checked; A.setMusic(opts.music, state === 'play'); };
 $('backMode').onclick = () => { $('lobby').classList.add('hidden'); renderMode(); };
@@ -1732,6 +1877,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyQ') dropHeld();
   if (opts.gm === 'build' && state === 'play' && /^Digit[1-7]$/.test(e.code)) placePreset(+e.code.slice(5) - 1);
   if (e.code === 'KeyT' && tut) tutDone(true);
+  if (e.code === 'Digit8') placeToy('ramp'); if (e.code === 'Digit9') placeToy('tramp');
 });
 addEventListener('keyup', e => keys[e.code] = false);
 
@@ -1771,7 +1917,7 @@ function updatePlayer(dt) {
   player.x += (mx * c + mz * s) * sp; player.z += (-mx * s + mz * c) * sp;
   stayInside();
   const R = 0.3;
-  for (const [x1, x2, z1, z2] of room.obstacles) {
+  if (floorY > -0.5) for (const [x1, x2, z1, z2] of room.obstacles) {
     if (player.x > x1 - R && player.x < x2 + R && player.z > z1 - R && player.z < z2 + R) {
       const push = [[x1 - R - player.x, 0], [x2 + R - player.x, 0], [0, z1 - R - player.z], [0, z2 + R - player.z]].sort((a, b) => Math.abs(a[0] + a[1]) - Math.abs(b[0] + b[1]))[0];
       player.x += push[0]; player.z += push[1];
@@ -1817,7 +1963,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   if (!scene) return;
   const rdt = Math.max(0, Math.min((now - last) / 1000, 0.05)); last = now; // never negative, so shake and fades cannot blow up
-  const dt = now < freezeUntil ? 0 : rdt * (now < slowUntil ? 0.25 : 1), t = now / 1000;
+  const dt = now < freezeUntil ? 0 : rdt * (now < slowUntil ? 0.25 : 1) * (room.zen ? 0.6 : 1), t = now / 1000; // zen: everything falls and breaks slowly
   const playing = state === 'play' && !paused;
 
   if (playing) {
@@ -1873,7 +2019,7 @@ function frame(now) {
     if (boomLight && boomLight.intensity > 0) boomLight.intensity = Math.max(0, boomLight.intensity * Math.pow(0.002, rdt) - 1);
   }
   if (state === 'play') {
-    camera.position.set(player.x, 1.65 + Math.sin(player.bob * 2) * 0.02 + poundY(), player.z);
+    camera.position.set(player.x, 1.65 + floorY + Math.sin(player.bob * 2) * 0.02 + poundY() + jumpY(), player.z);
     camera.rotation.set(player.pitch + (save.set.shake ? kick : 0), player.yaw, 0); pivot.visible = !driving;
     if (driving) cockpitCamera();
     kick *= Math.pow(0.0005, rdt);
@@ -1917,4 +2063,4 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, fal
 renderMode();
 opts.mode = 'stylized'; build(); opts.mode = null; // background behind the first screen
 requestAnimationFrame(frame);
-window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; }, get cars() { return cars; }, get traffic() { return traffic; }, get renderer() { return renderer; }, get driving() { return driving; }, carKey, toggleView, get view() { return view; }, get wrecks() { return wrecks; }, get grav() { return grav; }, get paused() { return paused; }, get boss() { return boss; }, spawnBoss, get elapsed() { return elapsed; } };
+window.__smash = { A, get I() { return I; }, get figure() { return figure; }, get W() { return W; }, startSwing, get swingT() { return swingT; }, tick(n = 1, ms = 16) { for (let i = 0; i < n; i++) { last = performance.now() - ms; frame(performance.now()); } }, get state() { return state; }, get S() { return S; }, player, startSession, get camera() { return camera; }, grab, throwHeld, findGrabTarget, opts, get room() { return room; }, get mission() { return mission; }, save, get shots() { return shots; }, get bin() { return bin; }, get swept() { return swept; }, get mouseHeld() { return mouseHeld; }, set mouseHeld(v) { mouseHeld = v; }, get shake() { return shake; }, get kick() { return kick; }, get cars() { return cars; }, get traffic() { return traffic; }, get renderer() { return renderer; }, get driving() { return driving; }, carKey, toggleView, get view() { return view; }, get wrecks() { return wrecks; }, get grav() { return grav; }, get paused() { return paused; }, get boss() { return boss; }, spawnBoss, get elapsed() { return elapsed; }, equip, placeToy, get basement() { return basement; }, get floorY() { return floorY; }, get storm() { return storm; }, get fires() { return fires; }, jumpY };

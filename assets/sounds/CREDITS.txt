@@ -23,3 +23,5 @@ Sounds in this folder are CC0 (public domain).
 - engine: 'Racing car engine sound loops' by domasx2, opengameart.org, CC0
 - skid: 'SuperTuxKart sound effects', opengameart.org, CC0
 - assets/models/human: 'Animated Human' by Quaternius, opengameart.org, CC0
+- fire: 'fireplace sound loop', opengameart.org/content/fireplace-sound-loop, CC0 (trimmed into a seamless loop)
+- thunder: 'Rain + Long Thunder' by WuxiaScrub, opengameart.org/content/rain-long-thunder, CC0 (thunder roll cut out)

@@ -17,7 +17,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SMASHROOM">
 <meta property="og:title" content="SMASHROOM: Free Online Rage Room Game">
-<meta property="og:description" content="Smash, throw and wreck everything in nineteen rooms and an open city, from an office to a space station. Then sweep up. A rage room in your browser, free, no download.">
+<meta property="og:description" content="Smash, throw and wreck everything in twenty rooms and an open city, from an office to a space station. Then sweep up. A rage room in your browser, free, no download.">
 <meta property="og:url" content="https://wasiulbahar.com/smashroom/">
 <meta property="og:image" content="https://wasiulbahar.com/smashroom/assets/share.jpg">
 <meta property="og:image:width" content="1200">
@@ -30,7 +30,7 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
  {"@type":["VideoGame","WebApplication"],"name":"SMASHROOM","alternateName":["Smash Room","Online Rage Room"],"url":"https://wasiulbahar.com/smashroom/","image":"https://wasiulbahar.com/smashroom/assets/share.jpg",
-  "description":"A free online rage room game. Smash and throw glass, plates, TVs, furniture and a car in nineteen rooms plus an open city, from a corporate office to a city street at night and a calm beach shack, or smash a clay statue with your bare hands.",
+  "description":"A free online rage room game. Smash and throw glass, plates, TVs, furniture and a car in twenty rooms plus an open city, from a corporate office to a city street at night and a calm beach shack, or smash a clay statue with your bare hands.",
   "genre":["Action","Simulation","Casual","Stress relief"],"keywords":"rage room, smash room, break room, online rage room, stress relief game, smashing game, destruction game, browser game, free online game",
   "applicationCategory":"GameApplication","operatingSystem":"Any (web browser)","gamePlatform":["Web browser","PC","Mobile"],"playMode":"SinglePlayer","inLanguage":"en","isAccessibleForFree":true,
   "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Wasiul Bahar","url":"https://wasiulbahar.com/"}},
@@ -112,6 +112,7 @@ kbd{background:var(--bg);border:2px solid var(--ink);border-radius:5px;padding:0
 #rageFill{height:100%;width:0;background:linear-gradient(90deg,var(--yellow),var(--pink))}
 #rage span{position:absolute;inset:0;text-align:center;font-size:12px;line-height:16px;color:var(--text);text-shadow:1px 1px 0 var(--ink)}
 #boss{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:min(360px,70vw);text-align:center;font-weight:800;color:#fff;text-shadow:2px 2px 0 var(--ink);font-size:14px}#boss>div{height:10px;margin-top:4px;border:2px solid var(--ink);border-radius:6px;background:rgba(0,0,0,.4);overflow:hidden}#bossFill{height:100%;width:100%;background:linear-gradient(90deg,var(--pink),var(--yellow));transition:width .15s}
+body.zen #tr,body.zen #combo,body.zen #rage{display:none}
 #banner{position:absolute;left:0;right:0;top:26%;text-align:center;font-size:clamp(36px,8vw,72px);color:var(--yellow);text-shadow:4px 4px 0 var(--pink),7px 7px 0 var(--ink);opacity:0}
 #banner.show{animation:ban 1.2s ease-out}
 @keyframes ban{0%{opacity:0;transform:scale(2)}15%{opacity:1;transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:translateY(-20px)}}
@@ -267,6 +268,7 @@ details.about p{margin:6px 0}
     <div class="row">
       <div class="opts">
         <label class="tog"><input type="checkbox" id="music" checked> Music</label>
+        <label class="tog" title="Indoor rooms only: rain, lightning, thunder, and the power can go out"><input type="checkbox" id="storm"> Thunderstorm</label>
         <label class="tog" title="Shout into your mic to fill the rage meter. Nothing is recorded or sent."><input type="checkbox" id="mic"> Scream to rage (mic)</label>
         <label class="tog">Holiday
           <select id="season"><option value="auto">Auto</option><option value="halloween">Halloween</option><option value="christmas">Christmas</option><option value="newyear">New Year</option><option value="off">Off</option></select>
@@ -292,7 +294,7 @@ details.about p{margin:6px 0}
     <div class="row" style="justify-content:center;margin-top:12px"><button class="btn alt" id="achBtn">Achievements</button><button class="btn alt" id="tutBtn">Play the tutorial</button></div>
     <p class="keys" id="keysDesk">
       <kbd>WASD</kbd> move · <kbd>Mouse</kbd> look · <kbd>Click</kbd> swing · hold to wind up a heavy swing<br>
-      <kbd>E</kbd> or <kbd>Right-click</kbd> grab what's highlighted · <kbd>Click</kbd> hit with it · <kbd>E</kbd> throw · hold <kbd>Right-click</kbd> power throw · <kbd>Q</kbd> drop · <kbd>G</kbd> ground pound · <kbd>V</kbd> camera · <kbd>Esc</kbd> pause<br>
+      <kbd>E</kbd> or <kbd>Right-click</kbd> grab what's highlighted · <kbd>Click</kbd> hit with it · <kbd>E</kbd> throw · hold <kbd>Right-click</kbd> power throw · <kbd>Q</kbd> drop · <kbd>G</kbd> ground pound (three times on one spot breaks the floor) · <kbd>8</kbd> ramp · <kbd>9</kbd> trampoline · <kbd>V</kbd> camera · <kbd>Esc</kbd> pause<br>
       Bare hands: <kbd>Click</kbd> punch · <kbd>F</kbd> slap · <kbd>Space</kbd> kick
     </p>
     <p class="note" id="lifetime"></p>
@@ -348,6 +350,6 @@ details.about p{margin:6px 0}
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=23"></script>
+<script type="module" src="src/main.js?v=24"></script>
 </body>
 </html>

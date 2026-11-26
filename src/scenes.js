@@ -1,9 +1,9 @@
 // Rooms. Each scene builds itself with the current style, so every scene works in both looks.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { canvasTex } from './style.js?v=23';
-import { buildCity } from './city.js?v=23';
-import { loadModel, fitInto } from './models.js?v=23';
+import { canvasTex } from './style.js?v=24';
+import { buildCity } from './city.js?v=24';
+import { loadModel, fitInto } from './models.js?v=24';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -490,6 +490,34 @@ export const SCENES = {
     build(ctx) {
       const K = kit(ctx), c = buildCity(ctx, K, { spray });
       return { ...K, ...c, heat: true, open: true, batch: 70, cityCars: c.cars, pool: ['gascan', 'gascan', 'bottle', 'bottle', 'bottle', 'tv', 'crt', 'monitor', 'cinder', 'cinder', 'crate', 'crate', 'speaker', 'microwave', 'chair', 'stool', 'lamp', 'jar', 'vase', 'pot', 'laptop', 'mug', 'flowerpot'], start: { x: 3, z: 12 }, amb: 'city', photoSpots: [[-7, 22, 0], [7, 30, 0]] };
+    },
+  },
+  zengarden: {
+    name: 'Zen garden', desc: 'No score, no clock. Raked sand, soft rain, wind chimes. Things break slowly and quietly.', exposure: 1, env: 0.6, calm: true,
+    build(ctx) {
+      const { scene, S } = ctx, K = kit(ctx), W = 14, D = 14;
+      const sand = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#d8ccb0'; g.fillRect(0, 0, w, h); g.strokeStyle = 'rgba(150,130,100,.45)'; g.lineWidth = 2; for (let y = 4; y < h; y += 10) { g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= w; x += 16) g.lineTo(x, y + Math.sin(x / 40) * 2); g.stroke(); } });
+      sand.wrapS = sand.wrapT = THREE.RepeatWrapping; sand.repeat.set(5, 5);
+      K.box(W, 0.2, D, S.mat('plastic', 0xffffff, { map: sand }), 0, -0.1, 0, { cast: false });
+      K.bounds = [-W / 2 + 0.6, W / 2 - 0.6, -D / 2 + 0.6, D / 2 - 0.6];
+      const bamboo = S.mat('paint', K.v(0x8a9a4a, 0x9aae58)), node = S.mat('paint', 0x6a7a34);
+      for (const [x0, z0, x1, z1] of [[-W / 2, -D / 2, W / 2, -D / 2], [-W / 2, D / 2, W / 2, D / 2], [-W / 2, -D / 2, -W / 2, D / 2], [W / 2, -D / 2, W / 2, D / 2]]) {
+        const L = Math.hypot(x1 - x0, z1 - z0), n = Math.round(L / 0.16);
+        for (let i = 0; i <= n; i++) { const t = i / n, h = rand(2.1, 2.5); K.cyl(0.07, h, i % 3 ? bamboo : node, x0 + (x1 - x0) * t, h / 2, z0 + (z1 - z0) * t, { outline: false, phys: false }); }
+        K.box(Math.abs(x1 - x0) || 0.3, 2.4, Math.abs(z1 - z0) || 0.3, S.mat('plastic', 0), (x0 + x1) / 2, 1.2, (z0 + z1) / 2).visible = false; }
+      const sky = canvasTex(4, 256, (g, w, h) => { const s = g.createLinearGradient(0, 0, 0, h); s.addColorStop(0, '#8a96a4'); s.addColorStop(1, '#d4d8d8'); g.fillStyle = s; g.fillRect(0, 0, w, h); });
+      scene.background = sky; scene.fog = new THREE.Fog(0xc8ccd0, 12, 32);
+      // a pond with stepping stones, raked rings around three rocks, stone lanterns, a low wooden deck
+      const pond = new THREE.Mesh(new THREE.CircleGeometry(1.8, 40), S.mat('glass', 0x4a7a8a)); pond.rotation.x = -Math.PI / 2; pond.position.set(3.6, 0.012, -3.2); scene.add(pond);
+      K.obstacles.push([1.9, 5.3, -4.9, -1.5]);
+      for (const [x, z, r] of [[-3.5, -3, 0.6], [-2.6, -2.2, 0.35], [-4.2, -1.8, 0.28], [1.2, 2.6, 0.45]]) { K.cyl(r, r * 1.2, S.mat('stone', 0x7a7672), x, r * 0.5, z, { rt: r * 0.6, seg: 7 });
+        const ring = new THREE.Mesh(new THREE.RingGeometry(r + 0.25, r + 0.3, 40), S.mat('paint', 0xb8aa8a)); ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.01, z); scene.add(ring); K.obstacles.push([x - r, x + r, z - r, z + r]); }
+      for (const [x, z] of [[-5.6, 5.4], [5.6, 5.4], [-5.6, -5.4]]) { const st = S.mat('stone', 0x8a8682); K.box(0.4, 0.9, 0.4, st, x, 0.45, z); K.box(0.7, 0.12, 0.7, st, x, 1.0, z); K.bulb(x, 1.2, z, 0xffd8a0, K.v(4, 1.6), { r: 0.08, dist: 4 }); K.box(0.8, 0.14, 0.8, st, x, 1.42, z); K.obstacles.push([x - 0.35, x + 0.35, z - 0.35, z + 0.35]); }
+      const wood = S.surface('wood', 2, 1); K.table(0, -5.7, 5, 0.9, 0.45, wood, wood, { solid: true });
+      K.table(-2.4, 3.6, 1.4, 0.7, 0.4, wood, wood, { solid: true }); K.table(3.4, 3.8, 1.4, 0.7, 0.4, wood, wood, { solid: true });
+      K.hemi(0xdde4ec, 0x8a8270, K.v(0.8, 1.15)); K.light('dir', 0xf4f0e8, K.v(1.8, 0.9), -6, 10, 4, { target: [0, 0, 0], shadow: true, size: 9 });
+      K.floor([[-1.5, 0], [1.5, -0.5], [0, 1.5], [-4.5, 1.5], [4.6, 1], [-1, -2.5], [5, -6], [-5, 3]]);
+      return { ...K, zen: true, calm: true, pool: ['vase', 'vase', 'pot', 'pot', 'flowerpot', 'flowerpot', 'teapot', 'cup', 'cup', 'bowl', 'bowl', 'jar', 'jug', 'plate', 'platestack', 'lamp'], start: { x: 0, z: 5.6 }, amb: 'zen', photoSpots: [] };
     },
   },
   greenhouse: {

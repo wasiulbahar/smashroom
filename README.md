@@ -7,7 +7,7 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 ## What's in it
 
 - **Two looks.** *Stylized* (bright cartoon, runs on almost anything) or *Realistic* (real textures and models, see-through glass, soft shadows, dust and glow; needs more PC power, quality drops automatically if it lags).
-- **Nineteen rooms, plus an open city.** Classic rage room, abandoned building, haunted house, corporate office, kitchen, apartment, car yard (smash whole cars), a clay studio and a Downtown city street, plus two calm rooms: a sunny greenhouse and a beach shack at sunset.
+- **Twenty rooms, plus an open city.** Classic rage room, abandoned building, haunted house, corporate office, kitchen, apartment, car yard (smash whole cars), a clay studio and a Downtown city street, plus two calm rooms: a sunny greenhouse and a beach shack at sunset.
 - **Clay figure.** A life-size clay statue of a human body that you punch, slap and kick with bare hands. Every hit leaves a dent, slaps turn its head, it sways and groans, arms, legs and head break off at the joints, and every third figure is a tougher gold boss.
 - **Four modes.** Classic (2 minutes), Zen (no timer, calm music), Time attack (clear the room as fast as you can) and Target practice (throw things at targets on the walls).
 - **Things that react.** Gas cans explode and set off chain reactions, golden items are worth 10× for a few seconds, and cup pyramids topple.
@@ -26,6 +26,11 @@ A rage room in your browser. Two minutes, one room, everything breaks.
 - **Break through walls.** Keep hitting the same spot and a wall gives way into a hidden room behind it, stocked with more things to smash.
 - **Bosses.** Every so often a giant version of something in the room drops in. It takes a lot of hits, has a health bar, and is worth 300 points.
 - **Phones and offline.** Touch controls with separate Grab, Throw (hold to throw harder) and Pound buttons; push the stick all the way to run. Install it to your home screen or desktop, and after the first visit it keeps working without a connection.
+- **Zen garden.** No score and no clock: raked sand, soft rain and wind chimes, and everything breaks in slow motion and quietly.
+- **Fire.** Explosions set wood alight. Flames spread to nearby furniture and crates, cook off gas cans, and burn things down; the fire extinguisher puts them out.
+- **Toys.** A ball cannon that fires heavy iron balls, plus ramps (8) and trampolines (9) you can drop anywhere. Walk onto a trampoline and you bounce too.
+- **Breakable floors.** Ground pound the same spot three times and you crash through into a basement full of old stuff. A ladder takes you back up.
+- **Thunderstorms.** Tick Thunderstorm in the lobby: rain, lightning, real thunder, and now and then the power cuts out and you carry on by flashlight.
 - **Holidays.** Pumpkins at Halloween, baubles and gifts at Christmas, and fireworks over the outdoor scenes at New Year. Picked by date, or choose one in the lobby.
 - **Scream to rage.** Optional: tick it in the lobby and shouting into your microphone fills the rage meter. The sound is only measured for loudness, never recorded or sent anywhere.
 - **Smash your stress.** Type what's bothering you in the lobby; the words are written on plates, TVs and the clay figure for you to smash. They never leave the device.

@@ -116,7 +116,7 @@ const SYN = {
 };
 
 // recorded CC0 samples (assets/sounds, see CREDITS.txt); generated sounds are the fallback until they load
-const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6, type: 1, door: 2, keys: 2, siren: 1, alarm: 1, pball: 3, roll: 1, scuff: 3, wave: 3, birds: 1, rain: 1, engine: 1, skid: 1 };
+const SETS = { glass: 7, glasshit: 2, ceramic: 5, crash: 3, wood: 4, stone: 3, metal: 6, metalfall: 5, rockfall: 9, woodfall: 2, thud: 3, punch: 5, slap: 5, clink: 5, debris: 4, plastic: 5, stepwood: 3, stepstone: 1, crack: 5, zap: 1, splash: 2, spray: 1, bag: 6, type: 1, door: 2, keys: 2, siren: 1, alarm: 1, pball: 3, roll: 1, scuff: 3, wave: 3, birds: 1, rain: 1, engine: 1, skid: 1, fire: 1, thunder: 1 };
 const bufs = {};
 const WAV = new Set(['engine']); // tiny seamless loops stay WAV: mp3 adds gaps at the loop point
 function loadSamples() {
@@ -241,6 +241,19 @@ function ambLoop(set, g, lp = 20000, tries = 0) {
   const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; const gn = ac.createGain(); gn.gain.value = g;
   s.connect(f).connect(gn).connect(amb); s.start(); ambNodes.push(s);
 }
+// storms indoors: rain on the windows and thunder rolling in from far off (CC0 recordings)
+export function storm() { if (ac) ambLoop('rain', 0.3, 2600); }
+export function thunder(near) { if (ac) far('thunder', near ? 0.9 : 0.5, { lp: near ? 9000 : 2200, rate: rand(0.85, 1.05) }); }
+// wind chimes: hollow tubes ring at their free-bar modes (1 : 2.76 : 5.40 : 8.93), each with its own decay
+const CHIME = [880, 987.8, 1108.7, 1318.5, 1480, 1760];
+export function chime(g = 0.05) {
+  if (!ac) return; const t = now(), f0 = CHIME[Math.floor(Math.random() * CHIME.length)] * rand(0.995, 1.005), pan = ac.createStereoPanner(); pan.pan.value = rand(-0.8, 0.8); pan.connect(sfx); // through the room echo
+  [[1, 1, 7], [2.756, 0.5, 3.5], [5.404, 0.25, 1.6], [8.933, 0.12, 0.8], [13.34, 0.05, 0.4]].forEach(([r, a, d]) => { for (const det of [1, rand(1.002, 1.006)]) { // two close modes beat slowly, like a real tube
+    const o = ac.createOscillator(), gn = ac.createGain(); o.frequency.value = f0 * r * det; gn.gain.setValueAtTime(0, t); gn.gain.linearRampToValueAtTime(g * a * 0.5, t + 0.002); gn.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(gn).connect(pan); o.start(t); o.stop(t + d + 0.1); } });
+}
+// a gust: several tubes knock together over a second or so (checked with earshot: reads as wind chimes)
+function chimeGust() { let at = 0; const n = 3 + Math.floor(rand(0, 6)); for (let k = 0; k < n; k++) { at += rand(50, 350); ambTimers.push(setTimeout(() => chime(rand(0.02, 0.06) * rand(0.5, 1)), at)); } }
 let rainGain = null;
 export function setRain(v) { if (rainGain) rainGain.gain.setTargetAtTime(v * 0.4, ac.currentTime, 1); }
 export function startAmbience(kind) {
@@ -284,6 +297,9 @@ export function startAmbience(kind) {
     const wave = () => far('wave', rand(0.35, 0.55), { lp: 7000, rate: rand(0.85, 1.05) }); wave();
     tick(2800, () => { if (Math.random() < 0.8) setTimeout(wave, rand(0, 900)); });
     every(8000, t => nz(t, 4, 'bandpass', rand(250, 500), 0.5, 0.05, amb, rand(150, 300))); }
+  if (kind === 'zen') { // soft rain, a breeze in the bamboo, chimes when it gusts, a bird now and then
+    ambLoop('rain', 0.16, 3200); ambLoop('birds', 0.1, 6000); const w = loopNoise('bandpass', 420, 0.5, 0.05);
+    tick(3200, () => { w.frequency.setTargetAtTime(rand(300, 700), now(), 1.6); if (Math.random() < 0.6) chimeGust(); }); }
   rainGain = null;
   if (kind === 'city' && has('rain')) { const b = bufs.rain[0], s = ac.createBufferSource(); s.buffer = b; s.loop = true; s.loopStart = 0.06; s.loopEnd = b.duration - 0.06; rainGain = ac.createGain(); rainGain.gain.value = 0; s.connect(rainGain).connect(amb); s.start(); ambNodes.push(s); }
   if (kind === 'city') { // night street: traffic a block away, a car passing, footsteps, a door
